@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:inspection-context:1",
+  "type": "object",
+  "patternProperties": {
+    "^(?:[a-f0-9]{40}|[a-f0-9]{64})$": {
+      "$ref": "#/$defs/inspectionContext"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "complexFunctions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "line",
+          "complexity"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "complexity": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "inspectionContext": {
+      "type": "object",
+      "required": [
+        "exclusions",
+        "boundary"
+      ],
+      "properties": {
+        "exclusions": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "paths",
+            "directories"
+          ],
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "directories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "boundary": {
+          "enum": [
+            null,
+            "changed",
+            "unavailable"
+          ]
+        },
+        "scanners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "version"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "ignores": {
+          "type": "object",
+          "required": [
+            "rules",
+            "count"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string"
+                  },
+                  "rule": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "security": {
+          "type": "object",
+          "required": [
+            "low",
+            "medium",
+            "high",
+            "unknown"
+          ],
+          "properties": {
+            "low": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "medium": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "high": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

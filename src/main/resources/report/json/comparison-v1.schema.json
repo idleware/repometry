@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:comparison:1",
+  "type": "object",
+  "required": ["schema", "baseline", "current", "metrics"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:comparison:1" },
+    "baseline": { "$ref": "#/$defs/inspection" },
+    "current": { "$ref": "#/$defs/inspection" },
+    "metrics": {
+      "type": "object",
+      "required": ["physicalLines", "functions", "maxCyclomaticComplexity", "lineCoverage"],
+      "properties": {
+        "physicalLines": { "$ref": "#/$defs/metric" },
+        "functions": { "$ref": "#/$defs/metric" },
+        "maxCyclomaticComplexity": { "$ref": "#/$defs/metric" },
+        "lineCoverage": { "$ref": "#/$defs/metric" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "inspection": {
+      "type": "object",
+      "required": ["subject", "generatedAt", "status", "scope"],
+      "properties": {
+        "subject": { "$ref": "urn:repometry:schema:report:1#/$defs/subject" },
+        "generatedAt": { "$ref": "urn:repometry:schema:report:1#/properties/generatedAt" },
+        "status": { "$ref": "urn:repometry:schema:report:1#/properties/status" },
+        "scope": { "$ref": "urn:repometry:schema:report:1#/properties/scope" }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": ["status", "value"],
+      "properties": {
+        "status": { "enum": ["complete", "partial", "not-applicable", "unavailable"] },
+        "value": { "type": ["number", "null"], "minimum": 0 },
+        "covered": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+        "total": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+      },
+      "dependentRequired": { "covered": ["total"], "total": ["covered"] },
+      "additionalProperties": false
+    },
+    "metric": {
+      "type": "object",
+      "required": ["definition", "unit", "baseline", "current", "status", "reason", "delta"],
+      "properties": {
+        "definition": { "type": "string" },
+        "unit": { "enum": ["count", "percent"] },
+        "baseline": { "$ref": "#/$defs/observation" },
+        "current": { "$ref": "#/$defs/observation" },
+        "status": { "enum": ["comparable", "incompatible", "unavailable"] },
+        "reason": { "enum": [null, "observations-unavailable", "source-scope-unknown", "source-scope-changed", "method-unknown", "method-changed"] },
+        "delta": { "type": ["number", "null"] }
+      },
+      "if": { "properties": { "status": { "const": "comparable" } } },
+      "then": { "properties": { "reason": { "const": null }, "delta": { "type": "number" } } },
+      "else": { "properties": { "reason": { "type": "string" }, "delta": { "const": null } } },
+      "additionalProperties": false
+    }
+  }
+}

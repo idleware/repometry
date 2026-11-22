@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:metric-catalog:1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "label", "unit", "scope", "aggregate", "better"],
+    "properties": {
+      "id": { "type": "string", "minLength": 1 },
+      "label": { "type": "string", "minLength": 1 },
+      "short": { "type": "string", "minLength": 1 },
+      "description": { "type": "string", "minLength": 1 },
+      "unit": { "enum": ["count", "ratio", "minutes"] },
+      "scope": { "enum": ["repository", "file", "function"] },
+      "aggregate": { "enum": ["sum", "max", "none"] },
+      "ratio": {
+        "type": "object",
+        "required": ["of", "over"],
+        "properties": {
+          "of": { "type": "string", "minLength": 1 },
+          "over": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "better": { "enum": ["lower", "higher", "none"] },
+      "bands": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } },
+      "group": { "type": "string", "minLength": 1 }
+    },
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:viewer-inspection:1",
+  "type": "object",
+  "required": ["schema", "sha", "inspection"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:viewer-inspection:1" },
+    "sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "context": { "$ref": "urn:repometry:schema:inspection-context:1#/$defs/inspectionContext" },
+    "inspection": { "$ref": "urn:repometry:schema:viewer-details:1#/$defs/inspection" }
+  },
+  "additionalProperties": false
+}

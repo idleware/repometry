@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:repository-summary:1",
+  "type": "object",
+  "required": [
+    "schema",
+    "commits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "urn:repometry:schema:repository-summary:1"
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/commit"
+      }
+    },
+    "metrics": { "$ref": "urn:repometry:schema:metric-catalog:1" },
+    "privateMetrics": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "source": {
+      "type": "object",
+      "properties": { "branch": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "sources": {
+      "type": "object",
+      "required": ["provider", "url"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "web": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "pullReviewCount": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "commit": {
+      "type": "object",
+      "required": [
+        "sha",
+        "generatedAt",
+        "status",
+        "files",
+        "parsed",
+        "lines",
+        "functions",
+        "maxComplexity",
+        "lineCoverage",
+        "quality"
+      ],
+      "properties": {
+        "metrics": { "$ref": "urn:repometry:schema:metric-catalog:1" },
+        "privateMetrics": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "values": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(?:0|[1-9][0-9]*)$" },
+          "additionalProperties": { "type": ["number", "null"] }
+        },
+        "sha": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/sha"
+        },
+        "generatedAt": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/generatedAt"
+        },
+        "status": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/status"
+        },
+        "files": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/files"
+        },
+        "parsed": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/parsed"
+        },
+        "lines": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/lines"
+        },
+        "functions": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/functions"
+        },
+        "maxComplexity": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/maxComplexity"
+        },
+        "lineCoverage": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/lineCoverage"
+        },
+        "committedAt": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/committedAt"
+        },
+        "subject": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/subject"
+        },
+        "author": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/author"
+        },
+        "tags": {
+          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/tags"
+        },
+        "quality": {
+          "$ref": "urn:repometry:schema:quality-history:1#/$defs/quality"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "profileDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "profileBoundary": {
+          "enum": ["changed", "unavailable"]
+        },
+        "detail": {
+          "type": "string",
+          "pattern": "^(details|inspection)/(?:[a-f0-9]{40}|[a-f0-9]{64})-[a-f0-9]{64}\\.json$"
+        },
+        "counts": {
+          "type": "object",
+          "required": [
+            "findingCount",
+            "diagnosticCount",
+            "componentCount",
+            "hasCoverage"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "findingCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "diagnosticCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "componentCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hasCoverage": {
+              "type": "boolean"
+            },
+            "security": {
+              "type": "object",
+              "required": [
+                "low",
+                "medium",
+                "high",
+                "unknown"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "low": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "medium": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "high": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,73 @@
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
+import schemaV1 from '../../../../resources/report/json/report-v1.schema.json' with { type: 'json' };
+import schemaV2 from '../../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
+import { isRecord } from '../../../core/engine/plugin.js';
+import { isMetricDescriptor } from '../../../core/engine/manifest.js';
+import { isFinding } from '../../../core/model/finding.js';
+import { digest } from '../../../core/model/snapshot.js';
+import type { Subject } from '../../../core/model/source.js';
+import { compactJsonSchema, unpackJson } from '../wire/compact-json.js';
+import type { CommitSummary } from '../wire/summary-model.js';
+import { legacyReportSchema, reportSchema } from '../../../core/model/report.js';
+import type { Report } from '../../../core/model/report.js';
+import type { ReportReader as DomainReportReader, ReportWriter } from '../../../core/ports/report.js';
+
+export { legacyReportSchema, reportSchema, validSubjectId } from '../../../core/model/report.js';
+export type { Diagnostic, Report } from '../../../core/model/report.js';
+
+export interface ReportReader extends DomainReportReader {
+  listSummaries?(): Promise<readonly CommitSummary[]>;
+}
+
+export interface ReportStore extends ReportReader, ReportWriter {}
+
+export function readReportText(text: string, subject: Subject): Report {
+  const envelope: unknown = JSON.parse(text);
+  const report = readReport(unpackJson(envelope));
+  if (report.subject.kind !== subject.kind || report.subject.id !== subject.id) throw new Error(`Report subject mismatch: ${subject.id}`);
+  if (isRecord(envelope) && envelope.schema === compactJsonSchema && isRecord(envelope.summary)
+    && envelope.summary.revision !== undefined && envelope.summary.revision !== reportRevision(report)) {
+    throw new Error(`Report revision mismatch: ${subject.id}`);
+  }
+  return report;
+}
+
+export function reportRevision(report: Report): string {
+  return digest(JSON.stringify(report));
+}
+
+export function compareReports(a: Report, b: Report): number {
+  return b.generatedAt.localeCompare(a.generatedAt) || a.subject.id.localeCompare(b.subject.id);
+}
+
+const ajv = new Ajv2020({ schemas: [metricCatalog] });
+const validateV1 = ajv.compile<Report>(schemaV1);
+const validateV2 = ajv.compile<Report>(schemaV2);
+
+export function readReport(value: unknown): Report {
+  if (!isRecord(value) || (value.schema !== reportSchema && value.schema !== legacyReportSchema)) {
+    throw new Error('Unsupported or missing report schema');
+  }
+  const validate = value.schema === reportSchema ? validateV2 : validateV1;
+  if (!validate(value)) throw new Error(`Invalid report: ${ajv.errorsText(validate.errors)}`);
+  if (value.pluginData) {
+    const { metrics, measured, privateMetrics } = value.pluginData;
+    const ids = new Set(metrics.map(metric => metric.id));
+    if (ids.size !== metrics.length || !metrics.every(isMetricDescriptor)
+      || [...measured, ...privateMetrics ?? []].some(id => !ids.has(id))) throw new Error('Invalid report: inconsistent metric catalog');
+  }
+  if (value.scope.parsed > value.scope.files) throw new Error('Invalid report: parsed count exceeds source count');
+  if (value.findings?.some(finding => !isFinding(finding))) throw new Error('Invalid report: inconsistent finding location');
+  const ignore = value.appliedConfig.findingIgnore;
+  if (value.ignoredFindings?.some(({ finding, matchedRule }) => !isFinding(finding)
+    || !Array.isArray(ignore) || matchedRule >= ignore.length)) throw new Error('Invalid report: inconsistent ignored finding');
+  for (const item of value.measurements) {
+    if (!Object.hasOwn(value.definitions, item.definition)) throw new Error(`Unknown measurement definition: ${item.definition}`);
+    if (item.covered === undefined || item.total === undefined) continue;
+    if (item.covered > item.total || item.value !== (item.total === 0 ? null : item.covered / item.total)) {
+      throw new Error('Invalid report: inconsistent coverage counts');
+    }
+  }
+  return value;
+}

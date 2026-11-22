@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:quality-history:1",
+  "type": "object",
+  "required": ["schema", "reports"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:quality-history:1" },
+    "reports": {
+      "type": "object",
+      "patternProperties": { "^(?:[a-f0-9]{40}|[a-f0-9]{64})$": { "$ref": "#/$defs/quality" } },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "count": { "type": ["integer", "null"], "minimum": 0 },
+    "ratio": { "type": ["number", "null"], "minimum": 0 },
+    "quality": {
+      "type": "object",
+      "required": ["codeLines", "comments", "classes", "cognitiveComplexity", "duplication", "maintainability"],
+      "properties": {
+        "codeLines": { "$ref": "#/$defs/count" },
+        "comments": { "$ref": "#/$defs/count" },
+        "classes": { "$ref": "#/$defs/count" },
+        "cognitiveComplexity": { "$ref": "#/$defs/count" },
+        "duplication": {
+          "type": ["object", "null"],
+          "required": ["duplicatedLines", "codeLines", "ratio"],
+          "properties": {
+            "duplicatedLines": { "type": "integer", "minimum": 0 },
+            "codeLines": { "type": "integer", "minimum": 0 },
+            "ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "maintainability": {
+          "type": ["object", "null"],
+          "required": ["smells", "effortMinutes", "debtRatio", "grade"],
+          "properties": {
+            "smells": { "type": "integer", "minimum": 0 },
+            "effortMinutes": { "type": "integer", "minimum": 0 },
+            "debtRatio": { "$ref": "#/$defs/ratio" },
+            "grade": { "enum": ["A", "B", "C", "D", "F", null] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

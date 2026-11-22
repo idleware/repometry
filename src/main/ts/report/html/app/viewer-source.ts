@@ -1,0 +1,323 @@
+// Source text for a file at a commit, and its rendering: line numbers, light highlighting, and the inspection's
+// findings and function complexity laid on the lines they describe.
+import type { SourceLocator } from '../../json/wire/summary-model.js';
+
+/** Where the viewer fetches a file's text, as the export names it: a URL template and the page a person would open. */
+export type { SourceLocator } from '../../json/wire/summary-model.js';
+
+export interface SourcePlace {
+  readonly revision: string;
+  readonly path: string;
+  readonly line?: number | undefined;
+}
+
+/**
+ * Fills a locator's template. A path keeps its slashes under {path} and loses them under {path:component}, as the
+ * GitLab API wants. A fragment that names {line} is dropped when there is no line, so the link opens the file.
+ */
+export function expandLocator(template: string, { revision, path, line }: SourcePlace): string {
+  const hash = template.indexOf('#');
+  const fragment = hash < 0 ? '' : template.slice(hash);
+  const base = hash < 0 ? template : template.slice(0, hash);
+  const kept = line === undefined && fragment.includes('{line}') ? '' : fragment;
+  return (base + kept).replace(/\{(revision|path:component|path|line)\}/g, (_, name: string) => {
+    switch (name) {
+      case 'revision': return encodeURIComponent(revision);
+      case 'path:component': return encodeURIComponent(path);
+      case 'path': return path.split('/').map(encodeURIComponent).join('/');
+      default: return String(line);
+    }
+  });
+}
+
+/** A locator the viewer can use: a fetch URL that is web or site-relative, and a page link only over http(s). */
+export function sourceLocator(value: unknown): SourceLocator | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { provider, url, web } = value as Record<string, unknown>;
+  if (typeof provider !== 'string' || typeof url !== 'string' || !url.includes('{path')) return undefined;
+  if (/^[a-z][a-z\d+.-]*:/i.test(url) && !/^https?:\/\//i.test(url)) return undefined;
+  return { provider, url, ...(typeof web === 'string' && /^https?:\/\//i.test(web) ? { web } : {}) };
+}
+
+const providerNames: Readonly<Record<string, string>> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', gitea: 'Gitea' };
+let locator: SourceLocator | undefined;
+const requests = new Map<string, Promise<string | null>>();
+
+/** The export's locator, from the summary; none means the report has no source navigation. */
+export function useSources(value: SourceLocator | undefined): void {
+  locator = value;
+}
+
+/**
+ * The file's text at the commit, or null when it cannot be had: no locator, a private repository, a commit that was
+ * never pushed, a network failure. Nothing is requested until a file or an excerpt opens; each URL is fetched once.
+ */
+export function loadSource(sha: string, path: string): Promise<string | null> {
+  if (!locator) return Promise.resolve(null);
+  const url = expandLocator(locator.url, { revision: sha, path });
+  let request = requests.get(url);
+  if (!request) {
+    request = fetch(url).then(response => response.ok ? response.text() : null).catch(() => null);
+    requests.set(url, request);
+  }
+  return request;
+}
+
+/** The page that shows the file on its forge, when the export names one. */
+export function sourcePage(sha: string, path: string, line?: number): { readonly href: string; readonly provider: string } | null {
+  if (!locator?.web) return null;
+  const name = providerNames[locator.provider.toLowerCase()] ?? locator.provider.charAt(0).toUpperCase() + locator.provider.slice(1);
+  return { href: expandLocator(locator.web, { revision: sha, path, line }), provider: name };
+}
+
+export interface SourceFunction {
+  readonly line: number;
+  readonly complexity: number;
+  readonly name: string;
+}
+
+export interface SourceNote {
+  readonly line: number;
+  readonly level: string;
+  readonly title: string;
+  readonly message: string;
+}
+
+export interface SourceOptions {
+  readonly path: string;
+  readonly functions: readonly SourceFunction[];
+  readonly notes: readonly SourceNote[];
+  /** The line to bring into view and mark, from the URL. */
+  readonly line?: number | undefined;
+  /** Called when a line number is chosen, so the page can put it in the URL. */
+  readonly choose: (line: number) => void;
+}
+
+/** The source as numbered lines; returns a function that brings a line into view and marks it. */
+export function renderSource(container: HTMLElement, text: string, options: SourceOptions): (line: number) => void {
+  const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+  const highlight = highlighter(options.path);
+  const starts = new Map(options.functions.map(entry => [entry.line, entry]));
+  const notes = new Map<number, SourceNote[]>();
+  for (const note of options.notes) notes.set(note.line, [...notes.get(note.line) ?? [], note]);
+  const code = element('div', 'src');
+  code.setAttribute('role', 'region');
+  code.setAttribute('aria-label', `Source of ${options.path}`);
+  const rows: HTMLElement[] = [];
+  const fragment = document.createDocumentFragment();
+  for (const [index, line] of lines.entries()) {
+    const number = index + 1;
+    const row = element('div', 'src-line');
+    row.id = `L${number}`;
+    const mark = element('span', 'src-mark');
+    const start = starts.get(number);
+    if (start) {
+      const badge = element('span', `src-complexity src-band-${start.complexity >= 20 ? 3 : start.complexity >= 10 ? 2 : start.complexity >= 5 ? 1 : 0}`,
+        String(start.complexity));
+      badge.title = `Cyclomatic complexity ${start.complexity}`;
+      mark.append(badge);
+    }
+    const anchor = element('a', 'src-number', String(number));
+    anchor.href = `#L${number}`;
+    anchor.addEventListener('click', event => {
+      event.preventDefault();
+      reveal(number, false);
+      options.choose(number);
+    });
+    const content = element('code', 'src-code');
+    content.append(...highlight(line));
+    if (notes.has(number)) row.classList.add('src-flagged');
+    row.append(mark, anchor, content);
+    fragment.append(row);
+    rows.push(row);
+    for (const note of notes.get(number) ?? []) {
+      const box = element('div', `src-note src-note-${note.level}`);
+      box.append(element('strong', '', note.title), element('span', '', note.message));
+      fragment.append(box);
+    }
+  }
+  code.append(fragment);
+  container.replaceChildren(code);
+
+  function reveal(line: number, scroll = true): void {
+    for (const row of code.querySelectorAll('.src-target')) row.classList.remove('src-target');
+    const row = rows[line - 1];
+    if (!row) return;
+    row.classList.add('src-target');
+    if (scroll) row.scrollIntoView({ block: 'center' });
+  }
+  if (options.line) requestAnimationFrame(() => reveal(options.line!));
+  return reveal;
+}
+
+export interface ExcerptOptions {
+  readonly path: string;
+  /** The flagged range; the excerpt shows its head with a line of context before it. */
+  readonly line: number;
+  readonly endLine?: number | undefined;
+  /** Where the rest of a long range opens in full. */
+  readonly more?: ((line: number) => string) | undefined;
+  readonly size?: number;
+}
+
+/**
+ * A few lines of source around a finding, bounded so a 160-line function stays a card: one line of context,
+ * the head of the flagged range marked, then a link to the rest.
+ */
+export function renderExcerpt(text: string, options: ExcerptOptions): HTMLElement {
+  const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+  const end = Math.min(lines.length, Math.max(options.line, options.endLine ?? options.line));
+  const from = Math.max(1, options.line - 1);
+  const to = Math.min(end, from + (options.size ?? 6) - 1, lines.length);
+  const highlight = highlighter(options.path);
+  const box = element('div', 'src src-excerpt');
+  for (const [index, line] of lines.entries()) {
+    // Highlighting runs from the top so a comment or template opened above the excerpt keeps its colour.
+    const nodes = highlight(line);
+    const number = index + 1;
+    if (number < from) continue;
+    if (number > to) break;
+    const row = element('div', number >= options.line && number <= end ? 'src-line src-range' : 'src-line');
+    const code = element('code', 'src-code');
+    code.append(...nodes);
+    row.append(element('span', 'src-mark'), element('span', 'src-number', String(number)), code);
+    box.append(row);
+  }
+  if (end > to) {
+    const rest = element(options.more ? 'a' : 'span', 'src-more', `⋯ ${end - to} more ${end - to === 1 ? 'line' : 'lines'}, to line ${end}`);
+    if (options.more && rest instanceof HTMLAnchorElement) rest.href = options.more(to + 1);
+    box.append(rest);
+  }
+  return box;
+}
+
+/** The first code on a line, trimmed: a name for an anonymous function that says which one it is. */
+export function lineSnippet(text: string, line: number, limit = 60): string | null {
+  const found = text.split('\n')[line - 1]?.trim();
+  if (!found) return null;
+  return found.length > limit ? `${found.slice(0, limit - 1)}…` : found;
+}
+
+/** A single line of code, coloured as the source view colours it; for a snippet that stands on its own. */
+export function highlightCode(path: string, line: string): Node[] {
+  return highlighter(path)(line);
+}
+
+const keywords = new Set(('abstract as async await break case catch class const continue debugger declare default delete do else enum export '
+  + 'extends false finally for from function get if implements import in instanceof interface let new null of package private protected '
+  + 'public readonly return satisfies set static super switch this throw true try type typeof undefined var void while with yield').split(' '));
+
+/** Words after which a slash opens a regular expression rather than divides. */
+const beforeRegex = new Set('return typeof instanceof in of new delete void throw case do else yield await'.split(' '));
+
+export type TokenKind = '' | 'c' | 's' | 'n' | 'k';
+
+/**
+ * Splits lines of JavaScript or TypeScript into coloured runs: comments, strings, regular expressions, numbers and
+ * keywords. It is a scanner, not a parser, but it honours escapes and character classes, and it tells a regular
+ * expression from a division by what comes before the slash. State carries across lines, so a block comment or a
+ * template literal stays coloured to its end. Other languages come back as plain text.
+ */
+export function tokenizer(path: string): (line: string) => [TokenKind, string][] {
+  if (!/\.(m|c)?[jt]sx?$/.test(path)) return line => [['', line]];
+  let open: '' | 'comment' | 'template' = '';
+  let regexAllowed = true;
+  return line => {
+    const runs: [TokenKind, string][] = [];
+    let plain = '';
+    const push = (kind: TokenKind, value: string) => {
+      if (!value) return;
+      if (!kind) { plain += value; return; }
+      if (plain) { runs.push(['', plain]); plain = ''; }
+      runs.push([kind, value]);
+    };
+    // Past an escape: the index after the closing quote, or the line's end when it stays open.
+    const close = (from: number, quote: string): [number, boolean] => {
+      let at = from;
+      while (at < line.length && line[at] !== quote) at += line[at] === '\\' ? 2 : 1;
+      return at < line.length ? [at + 1, true] : [line.length, false];
+    };
+    let at = 0;
+    while (at < line.length) {
+      if (open === 'comment') {
+        const end = line.indexOf('*/', at);
+        const stop = end < 0 ? line.length : end + 2;
+        push('c', line.slice(at, stop));
+        at = stop;
+        if (end >= 0) open = '';
+        continue;
+      }
+      if (open === 'template') {
+        const [stop, closed] = close(at, '`');
+        push('s', line.slice(at, stop));
+        at = stop;
+        if (closed) { open = ''; regexAllowed = false; }
+        continue;
+      }
+      const char = line[at]!;
+      const next = line[at + 1];
+      if (char === '/' && next === '/') { push('c', line.slice(at)); break; }
+      if (char === '/' && next === '*') { push('c', '/*'); at += 2; open = 'comment'; continue; }
+      if (char === '`') { push('s', '`'); at += 1; open = 'template'; continue; }
+      if (char === '"' || char === "'") {
+        const [stop] = close(at + 1, char);
+        push('s', line.slice(at, stop));
+        at = stop;
+        regexAllowed = false;
+        continue;
+      }
+      if (char === '/' && regexAllowed) {
+        let end = at + 1;
+        let inClass = false;
+        while (end < line.length) {
+          const current = line[end]!;
+          if (current === '\\') { end += 2; continue; }
+          if (inClass) { if (current === ']') inClass = false; }
+          else if (current === '[') inClass = true;
+          else if (current === '/') break;
+          end += 1;
+        }
+        if (end < line.length) {
+          end += 1;
+          while (end < line.length && /[a-z]/i.test(line[end]!)) end += 1;
+          push('s', line.slice(at, end));
+          at = end;
+          regexAllowed = false;
+          continue;
+        }
+      }
+      const word = /^[A-Za-z_$][\w$]*/.exec(line.slice(at))?.[0];
+      if (word) {
+        push(keywords.has(word) ? 'k' : '', word);
+        regexAllowed = beforeRegex.has(word);
+        at += word.length;
+        continue;
+      }
+      const number = /^(?:0x[\da-f_]+n?|\d[\d_]*(?:\.\d[\d_]*)?(?:e[+-]?\d+)?n?)/i.exec(line.slice(at))?.[0];
+      if (number) {
+        push('n', number);
+        regexAllowed = false;
+        at += number.length;
+        continue;
+      }
+      push('', char);
+      // After a closing bracket a slash divides; after any other punctuation it opens a regular expression.
+      if (!/\s/.test(char)) regexAllowed = char !== ')' && char !== ']';
+      at += 1;
+    }
+    if (plain) runs.push(['', plain]);
+    return runs;
+  };
+}
+
+function highlighter(path: string): (line: string) => Node[] {
+  const tokenize = tokenizer(path);
+  return line => tokenize(line).map(([kind, value]) => kind ? element('span', `tok-${kind}`, value) : document.createTextNode(value));
+}
+
+function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}

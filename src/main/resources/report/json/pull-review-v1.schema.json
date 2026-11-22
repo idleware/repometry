@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:pull-review:1",
+  "type": "object",
+  "required": ["schema", "number", "generatedAt", "base", "mergeBase", "head", "coverage", "diff", "findings"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:pull-review:1" },
+    "number": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 },
+    "generatedAt": { "type": "string" },
+    "base": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/sha" },
+    "mergeBase": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/sha" },
+    "head": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/sha" },
+    "coverage": {
+      "type": "object",
+      "required": ["base", "head", "delta", "reason", "gate"],
+      "properties": {
+        "base": { "$ref": "#/$defs/optionalObservation" },
+        "head": { "$ref": "#/$defs/optionalObservation" },
+        "delta": { "type": ["number", "null"], "minimum": -100, "maximum": 100 },
+        "reason": { "enum": [null, "observations-unavailable", "source-scope-unknown", "source-scope-changed", "method-unknown", "method-changed", "reports-unavailable", "head-coverage-changed"] },
+        "gate": {
+          "type": ["object", "null"],
+          "required": ["status", "maxDrop"],
+          "properties": {
+            "status": { "$ref": "#/$defs/gateStatus" },
+            "maxDrop": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/percent" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "diff": {
+      "type": "object",
+      "required": ["status", "covered", "total", "percent", "files", "gaps", "excludedPaths", "coverageInputDigest", "uncovered", "gate"],
+      "properties": {
+        "status": { "enum": ["complete", "partial", "not-applicable", "unavailable"] },
+        "covered": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+        "total": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+        "percent": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/percent" },
+        "files": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/files" },
+        "gaps": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/gaps" },
+        "excludedPaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "coverageInputDigest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "uncovered": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "lines"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "lines": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "gate": {
+          "type": ["object", "null"],
+          "required": ["status", "minimumPercent", "minimumLines"],
+          "properties": {
+            "status": { "$ref": "#/$defs/gateStatus" },
+            "minimumPercent": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/percent" },
+            "minimumLines": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "object",
+      "required": ["added", "qualityCount", "reason", "gate"],
+      "properties": {
+        "added": { "type": ["array", "null"], "items": { "$ref": "urn:repometry:schema:report:2#/$defs/finding" } },
+        "qualityCount": { "anyOf": [{ "type": "null" }, { "$ref": "urn:repometry:schema:report:1#/$defs/count" }] },
+        "reason": { "enum": [null, "reports-unavailable", "findings-unavailable", "partial-inspection", "analysis-changed"] },
+        "gate": {
+          "type": ["object", "null"],
+          "required": ["status", "maximum"],
+          "properties": {
+            "status": { "$ref": "#/$defs/gateStatus" },
+            "maximum": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "gateStatus": { "enum": ["passed", "failed", "not-applicable", "indeterminate"] },
+    "optionalObservation": {
+      "anyOf": [{ "type": "null" }, { "$ref": "urn:repometry:schema:comparison:1#/$defs/observation" }]
+    }
+  }
+}

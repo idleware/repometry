@@ -1,0 +1,96 @@
+import { isDeepStrictEqual } from 'node:util';
+import { isRecord } from '../../../core/engine/plugin.js';
+import { isSensitiveFinding } from '../../../core/model/finding.js';
+import { findingImportMethods } from '../../../core/model/scanner-import.js';
+import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
+import type { Report } from '../validation/report.js';
+import { comparePaths, digest } from '../../../core/model/snapshot.js';
+
+import type { InspectionContext } from '../wire/inspection-context-model.js';
+export type { InspectionContext, ProfileBoundary, SourceExclusions } from '../wire/inspection-context-model.js';
+
+export function inspectionProfileDigest(report: Report): string | undefined {
+  const profile = readProfile(report.appliedConfig);
+  return profile ? digest(JSON.stringify(profile.settings, (_key, value: unknown) => isRecord(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => comparePaths(a, b))) : value)) : undefined;
+}
+
+/** Reports arrive in the same newest-first order as the public history. */
+export function inspectionHistory(reports: readonly Report[]): Record<string, InspectionContext> {
+  const entries = reports.filter(report => report.subject.kind === 'commit')
+    .map(report => ({ report, profile: readProfile(report.appliedConfig) }));
+  return Object.fromEntries(entries.map(({ report, profile }, index) => {
+    const previous = entries[index + 1];
+    let boundary: InspectionContext['boundary'] = null;
+    if (previous) {
+      if (!profile || !previous.profile) boundary = 'unavailable';
+      else if (!isDeepStrictEqual(profile.settings, previous.profile.settings)) boundary = 'changed';
+    }
+    const context: InspectionContext = {
+      exclusions: profile?.exclusions ?? null,
+      boundary,
+      ...scannerContext(report),
+      ...ignoreContext(report),
+    };
+    return [report.subject.id, context];
+  }));
+}
+
+function ignoreContext(report: Report): Pick<InspectionContext, 'ignores'> {
+  if (report.appliedConfig.findingIgnore === undefined) return {};
+  try {
+    const rules = normalizeFindingIgnore(report.appliedConfig.findingIgnore);
+    return { ignores: { rules, count: report.ignoredFindings?.length ?? 0 } };
+  } catch {
+    return {};
+  }
+}
+
+function scannerContext(report: Report): Pick<InspectionContext, 'security' | 'scanners'> {
+  const methods = findingImportMethods(report.appliedConfig.findingImports);
+  if (!methods.length) return {};
+  const scanners = [...new Map(methods.flatMap(({ tools }) => tools.map(tool => [JSON.stringify(tool), tool] as const))).values()];
+  const security = methods.some(({ category }) => isSensitiveFinding(category))
+    ? { low: 0, medium: 0, high: 0, unknown: 0 } : undefined;
+  if (security) {
+    for (const finding of report.findings ?? []) {
+      if (isSensitiveFinding(finding.category)) security[finding.level]++;
+    }
+  }
+  return security ? { scanners, security } : { scanners };
+}
+
+function readProfile(config: Report['appliedConfig']) {
+  const source = config.source;
+  if (!isRecord(source)) return null;
+  // The original JS/TS profile recorded directory exclusions before path rules existed.
+  const recordedPaths = config.profile === 'js-ts/v1' && source.excludedPaths === undefined ? [] : source.excludedPaths;
+  const paths = stringList(recordedPaths);
+  const directories = stringList(source.excludedDirectories);
+  if (!paths || !directories) return null;
+  const extensions = stringList(source.extensions);
+
+  let coverage = config.coverage;
+  if (isRecord(coverage)) {
+    const { inputDigest, inputDigests, pathBase, ...settings } = coverage;
+    coverage = settings;
+  }
+  const { churnWindow, ...settings } = config;
+  // The policy is stable across commits; its matched paths describe this snapshot alone.
+  const { generatedExcluded, ...sourceSettings } = source;
+  return {
+    exclusions: { paths: [...new Set([...(stringList(source.defaultExclusions) ?? []), ...paths, ...(stringList(generatedExcluded) ?? [])])], directories },
+    settings: { ...settings, coverage, findingImports: findingImportMethods(config.findingImports), source: { ...sourceSettings,
+      extensions: extensions ? ordered(extensions) : source.extensions,
+      excludedPaths: ordered(paths), excludedDirectories: ordered(directories),
+    } },
+  };
+}
+
+function stringList(value: unknown): readonly string[] | null {
+  return Array.isArray(value) && value.every((item: unknown) => typeof item === 'string') ? value : null;
+}
+
+function ordered(values: readonly string[]): readonly string[] {
+  return [...new Set(values)].sort(comparePaths);
+}

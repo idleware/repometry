@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:report:2",
+  "type": "object",
+  "required": [
+    "schema",
+    "subject",
+    "generatedAt",
+    "appliedConfig",
+    "definitions",
+    "scope",
+    "status",
+    "measurements",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:repometry:schema:report:2"
+    },
+    "subject": {
+      "$ref": "urn:repometry:schema:report:1#/properties/subject"
+    },
+    "generatedAt": {
+      "$ref": "urn:repometry:schema:report:1#/properties/generatedAt"
+    },
+    "committedAt": {
+      "type": "string"
+    },
+    "appliedConfig": {
+      "$ref": "urn:repometry:schema:report:1#/properties/appliedConfig"
+    },
+    "definitions": {
+      "$ref": "urn:repometry:schema:report:1#/properties/definitions"
+    },
+    "scope": {
+      "$ref": "urn:repometry:schema:report:1#/properties/scope"
+    },
+    "status": {
+      "$ref": "urn:repometry:schema:report:1#/properties/status"
+    },
+    "measurements": {
+      "$ref": "urn:repometry:schema:report:1#/properties/measurements"
+    },
+    "diagnostics": {
+      "$ref": "urn:repometry:schema:report:1#/properties/diagnostics"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "pluginData": {
+      "type": "object",
+      "required": ["metrics", "measured", "rules", "products"],
+      "properties": {
+        "metrics": { "$ref": "urn:repometry:schema:metric-catalog:1" },
+        "measured": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "privateMetrics": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["plugin", "rules"],
+            "properties": {
+              "plugin": { "type": "string" },
+              "rules": { "type": "array", "items": { "$ref": "#/$defs/pluginRule" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "lines", "language", "analysed"],
+            "properties": {
+              "path": { "type": "string" },
+              "lines": { "type": ["integer", "null"], "minimum": 0 },
+              "language": { "type": "string" },
+              "analysed": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "contracts": {
+          "type": "object",
+          "additionalProperties": { "anyOf": [{ "type": "object" }, { "type": "boolean" }] }
+        },
+        "products": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["operation", "value"],
+              "properties": { "operation": { "type": "string" }, "path": { "type": "string" }, "value": true },
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ignoredFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding", "matchedRule"],
+        "properties": {
+          "finding": { "$ref": "#/$defs/finding" },
+          "matchedRule": { "$ref": "#/$defs/count" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "pluginRule": {
+      "type": "object",
+      "required": ["id", "category"],
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "defaults": {
+          "type": "object",
+          "properties": { "limit": { "type": "number" }, "cost": { "type": "number" } },
+          "additionalProperties": false
+        },
+        "measure": { "type": "string" },
+        "per": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "tool",
+        "rule",
+        "category",
+        "level",
+        "message"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "enum": [
+            "structure",
+            "duplication",
+            "lint",
+            "security",
+            "dependency",
+            "secret",
+            "infrastructure"
+          ]
+        },
+        "level": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "unknown"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effortMinutes": {
+          "$ref": "#/$defs/count"
+        },
+        "related": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "line",
+              "endLine"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "endLine": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "dependentRequired": {
+        "line": [
+          "path"
+        ],
+        "endLine": [
+          "line"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "count": {
+      "$ref": "urn:repometry:schema:report:1#/$defs/count"
+    },
+    "subject": {
+      "$ref": "urn:repometry:schema:report:1#/$defs/subject"
+    }
+  }
+}

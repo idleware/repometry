@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:file-metrics:1",
+  "type": "object",
+  "required": ["schema", "subject", "generatedAt", "status", "scope", "files", "directories", "unassignedDiagnostics", "hotspots"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:file-metrics:1" },
+    "subject": { "$ref": "urn:repometry:schema:report:1#/$defs/subject" },
+    "generatedAt": { "$ref": "urn:repometry:schema:report:1#/properties/generatedAt" },
+    "status": { "$ref": "urn:repometry:schema:report:1#/properties/status" },
+    "scope": { "$ref": "urn:repometry:schema:report:1#/properties/scope" },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } },
+    "directories": { "type": "array", "items": { "$ref": "#/$defs/directory" } },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "analysed"],
+        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "analysed": { "type": "boolean" } },
+        "additionalProperties": false
+      }
+    },
+    "catalog": { "$ref": "urn:repometry:schema:metric-catalog:1" },
+    "unassignedDiagnostics": { "$ref": "#/$defs/count" },
+    "churnWindow": {
+      "type": "object",
+      "required": ["lookbackDays", "maxCommits", "endingAt", "commits", "shallow", "capReached"],
+      "properties": {
+        "lookbackDays": { "type": "integer", "minimum": 1 },
+        "maxCommits": { "type": "integer", "minimum": 1 },
+        "endingAt": { "type": "string" },
+        "commits": { "$ref": "#/$defs/count" },
+        "shallow": { "type": "boolean" },
+        "capReached": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "hotspots": {
+      "type": "object",
+      "required": ["complexity", "missedLines"],
+      "properties": {
+        "complexity": { "type": "array", "items": { "type": "string" } },
+        "missedLines": { "type": "array", "items": { "type": "string" } },
+        "cognitive": { "type": "array", "items": { "type": "string" } },
+        "duplication": { "type": "array", "items": { "type": "string" } },
+        "churn": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "count": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+    "optionalCount": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
+    "observations": {
+      "type": "object",
+      "required": ["path", "lines", "functions", "complexity", "lineCoverage", "diagnosticCount"],
+      "properties": {
+        "language": { "type": "integer", "minimum": 0 },
+        "analysed": { "type": "boolean" },
+        "values": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(?:0|[1-9][0-9]*)$" },
+          "additionalProperties": { "type": ["number", "null"] }
+        },
+        "path": { "type": "string" },
+        "lines": { "$ref": "#/$defs/optionalCount" },
+        "functions": { "$ref": "#/$defs/optionalCount" },
+        "complexity": {
+          "type": ["object", "null"],
+          "required": ["sum", "maximum", "measuredFunctions"],
+          "properties": {
+            "sum": { "$ref": "#/$defs/count" },
+            "maximum": { "$ref": "#/$defs/optionalCount" },
+            "measuredFunctions": { "$ref": "#/$defs/count" }
+          },
+          "additionalProperties": false
+        },
+        "lineCoverage": {
+          "type": ["object", "null"],
+          "required": ["covered", "total"],
+          "properties": {
+            "covered": { "$ref": "#/$defs/count" },
+            "total": { "$ref": "#/$defs/count" }
+          },
+          "additionalProperties": false
+        },
+        "diagnosticCount": { "$ref": "#/$defs/count" },
+        "quality": {
+          "type": "object",
+          "properties": {
+            "codeLines": { "$ref": "#/$defs/count" },
+            "commentLines": { "$ref": "#/$defs/count" },
+            "classes": { "$ref": "#/$defs/count" },
+            "cognitiveComplexity": { "$ref": "#/$defs/count" },
+            "churn": { "$ref": "#/$defs/count" },
+            "duplication": {
+              "type": "object",
+              "required": ["duplicatedLines", "codeLines"],
+              "properties": {
+                "duplicatedLines": { "$ref": "#/$defs/count" },
+                "codeLines": { "$ref": "#/$defs/count" }
+              },
+              "additionalProperties": false
+            },
+            "maintainability": {
+              "type": "object",
+              "required": ["smells", "effortMinutes"],
+              "properties": {
+                "smells": { "$ref": "#/$defs/count" },
+                "effortMinutes": { "$ref": "#/$defs/optionalCount" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "file": { "type": "object", "allOf": [{ "$ref": "#/$defs/observations" }], "unevaluatedProperties": false },
+    "directory": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/observations" }],
+      "required": ["files", "sizeMeasuredFiles", "coverageMeasuredFiles"],
+      "properties": {
+        "files": { "$ref": "#/$defs/count" },
+        "sizeMeasuredFiles": { "$ref": "#/$defs/count" },
+        "coverageMeasuredFiles": { "$ref": "#/$defs/count" }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

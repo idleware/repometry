@@ -1,0 +1,14 @@
+{
+  "public/history.json": "69e7f0b174aeeb1c009d73f536faba75f351763e9efcc406179ca69b4554f2fb",
+  "public/quality-history.json": "3010115369791dcd4a0325afd2a856cebdddd6c7f86ace38cfd788500aff7dac",
+  "public/coverage.svg": "0a74b638cfcf408872b56b881acac6d02442dbabb462f93290aa3a5d977ab7e6",
+  "public/maintainability.svg": "0fa865664b8b47bfeaab88002c3382b03369d078c8652a08e192123608197ed5",
+  "public/summary.json": "672d34692582a2551824d1a2ba87bd0ec54976d90b1129cafd321e974bb7aec5",
+  "private/history.json": "69e7f0b174aeeb1c009d73f536faba75f351763e9efcc406179ca69b4554f2fb",
+  "private/quality-history.json": "3010115369791dcd4a0325afd2a856cebdddd6c7f86ace38cfd788500aff7dac",
+  "private/coverage.svg": "0a74b638cfcf408872b56b881acac6d02442dbabb462f93290aa3a5d977ab7e6",
+  "private/maintainability.svg": "0fa865664b8b47bfeaab88002c3382b03369d078c8652a08e192123608197ed5",
+  "private/pulls.json": "31f43af0eb1a02bc39340aa58fd04b2a9a1b128b3403bbf40f75126b62b00f23",
+  "private/details/4444444444444444444444444444444444444444-70d8525340f36bcbc471233a0c9ee1a1382140b9023c8616572f5be27e04e06f.json": "70d8525340f36bcbc471233a0c9ee1a1382140b9023c8616572f5be27e04e06f",
+  "private/summary.json": "50cde6a7b110bb57c357a030652d78c604be8219e0e04ef9fefe924fbbb93e89"
+}

@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "rootDir": "src/main",
+    "outDir": "target/main",
+    "declaration": true,
+    "noEmitOnError": true
+  },
+  "include": ["src/main/ts/**/*.ts"],
+  "exclude": ["src/main/ts/report/html/app/**/*.ts"]
+}

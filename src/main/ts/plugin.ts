@@ -1,0 +1,14 @@
+export { pluginApi } from './core/engine/plugin.js';
+export type { DataContract, InspectionInputs, Operation, Plugin, PluginConfigSchema, Product, RuleDescriptor } from './core/engine/plugin.js';
+export type { FileClaims, LegacyPlugin, MetricDescriptor, MetricScope, PluginKind, ProductDeclaration } from './core/engine/plugin.js';
+export { codeStructure } from './core/model/code-structure.js';
+export type { CodeStructure, FunctionComplexity, StructuralCheck, StructuralObservation } from './core/model/code-structure.js';
+export type { Candidate, CloneSource } from './core/model/clone-source.js';
+export { sourceFile } from './core/model/snapshot.js';
+export type { InventoryFile, SourceFile, SourceSnapshot } from './core/model/source.js';
+export { measurements } from './core/model/measurement.js';
+export type { Measurement } from './core/model/measurement.js';
+export { findingResult } from './core/model/finding.js';
+export type { Finding, FindingResult } from './core/model/finding.js';
+export type { SourceContext, SourcePlugin, SourceProvider } from './core/ports/source-provider.js';
+export type { SourceLocator } from './core/model/source-locator.js';

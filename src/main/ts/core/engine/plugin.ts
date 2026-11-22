@@ -1,0 +1,71 @@
+import type { MetricDescriptor } from '../model/metric-descriptor.js';
+export type { MetricDescriptor, MetricScope } from '../model/metric-descriptor.js';
+
+export const pluginApi = 'repometry.plugin/v1';
+
+export interface DataContract<T = unknown> {
+  readonly id: string;
+  readonly accepts: (value: unknown) => value is T;
+}
+
+export interface Product {
+  readonly contract: string;
+  readonly value: unknown;
+}
+
+export interface InspectionInputs {
+  read<T>(port: string, contract: DataContract<T>): T;
+}
+
+export interface Operation {
+  readonly id: string;
+  readonly role: 'provider' | 'inspection';
+  readonly inputs: Readonly<Record<string, DataContract>>;
+  readonly output: DataContract;
+  execute(inputs: InspectionInputs): unknown | Promise<unknown>;
+}
+
+export interface RuleDescriptor {
+  readonly id: string;
+  readonly category: string;
+  readonly description?: string;
+  readonly defaults?: { readonly limit?: number; readonly cost?: number };
+  readonly measure?: string;
+  readonly per?: readonly [singular: string, plural: string];
+}
+
+export type PluginConfigSchema = boolean | Readonly<Record<string, unknown>>;
+
+export type PluginKind = 'language' | 'analysis' | 'coverage' | 'security' | 'import' | 'source';
+
+export interface FileClaims {
+  readonly extensions?: readonly string[];
+  readonly globs?: readonly string[];
+  readonly languages?: readonly string[];
+}
+
+export interface ProductDeclaration {
+  readonly contract: string;
+  readonly persistence: 'report' | 'cache' | 'transient';
+  readonly schema?: PluginConfigSchema;
+  readonly metrics?: readonly MetricDescriptor[];
+}
+
+export interface Plugin {
+  readonly id: string;
+  readonly version: string;
+  readonly api: string;
+  readonly tools?: Readonly<Record<string, string>>;
+  readonly operations: readonly Operation[];
+  readonly rules?: readonly RuleDescriptor[];
+  readonly config?: PluginConfigSchema;
+  readonly kinds: readonly PluginKind[];
+  readonly claims?: FileClaims;
+  readonly produces: readonly ProductDeclaration[];
+}
+
+export type LegacyPlugin = Omit<Plugin, 'kinds' | 'claims' | 'produces'>;
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

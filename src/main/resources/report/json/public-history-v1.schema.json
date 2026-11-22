@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:public-history:1",
+  "type": "object",
+  "required": ["schema", "reports"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:public-history:1" },
+    "reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha", "generatedAt", "status", "files", "parsed", "lines", "functions", "maxComplexity", "lineCoverage"],
+        "properties": {
+          "sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+          "generatedAt": { "type": "string" },
+          "committedAt": { "type": "string" },
+          "subject": { "type": "string" },
+          "author": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": { "name": { "type": "string" }, "email": { "type": "string" } }
+          },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "status": { "enum": ["complete", "partial", "not-applicable"] },
+          "files": { "$ref": "#/$defs/count" },
+          "parsed": { "$ref": "#/$defs/count" },
+          "lines": { "$ref": "#/$defs/countOrMissing" },
+          "functions": { "$ref": "#/$defs/countOrMissing" },
+          "maxComplexity": { "$ref": "#/$defs/countOrMissing" },
+          "lineCoverage": {
+            "type": ["object", "null"],
+            "required": ["covered", "total"],
+            "properties": {
+              "covered": { "$ref": "#/$defs/count" },
+              "total": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "countOrMissing": { "type": ["integer", "null"], "minimum": 0 }
+  }
+}

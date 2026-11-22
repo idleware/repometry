@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:config:1",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "exclude": { "$ref": "#/$defs/strings" },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": { "type": "string", "minLength": 1 },
+          "rule": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "anyOf": [{ "required": ["tool"] }, { "required": ["rule"] }, { "required": ["path"] }],
+        "additionalProperties": false
+      }
+    },
+    "imports": { "$ref": "#/$defs/strings" },
+    "reports": { "$ref": "#/$defs/strings" },
+    "mode": { "enum": ["public", "private"] },
+    "sources": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "minCoverage": { "type": "number", "minimum": 0, "maximum": 100 },
+    "minLines": { "type": "integer", "minimum": 0 },
+    "maxCoverageDrop": { "type": "number", "minimum": 0, "maximum": 100 },
+    "maxNewIssues": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false,
+  "$defs": { "strings": { "type": "array", "items": { "type": "string", "minLength": 1 } } }
+}

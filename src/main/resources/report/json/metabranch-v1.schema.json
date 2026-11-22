@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:metabranch:1",
+  "type": "object",
+  "required": ["schema"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:metabranch:1" }
+  }
+}

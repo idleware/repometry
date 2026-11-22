@@ -1,0 +1,29 @@
+{
+  "catalog": [
+    { "id": "fixture.todo-count/v1", "label": "TODO comments",
+      "description": "Comments that start with TODO or FIXME.",
+      "unit": "count", "scope": "file", "aggregate": "sum", "better": "lower" },
+    { "id": "repometry.lcov-covered-lines/v1", "label": "Covered lines",
+      "unit": "count", "scope": "file", "aggregate": "sum", "better": "higher", "group": "Coverage" },
+    { "id": "repometry.lcov-coverable-lines/v1", "label": "Measured lines",
+      "unit": "count", "scope": "file", "aggregate": "sum", "better": "none", "group": "Coverage" },
+    { "id": "repometry.lcov-line-coverage/v1", "label": "Line coverage",
+      "unit": "ratio", "scope": "file", "aggregate": "sum", "better": "higher", "bands": [0.6, 0.7, 0.8, 0.9], "group": "Coverage",
+      "ratio": { "of": "repometry.lcov-covered-lines/v1", "over": "repometry.lcov-coverable-lines/v1" } },
+    { "id": "fixture.file-owners/v1", "label": "Owners",
+      "unit": "count", "scope": "file", "aggregate": "none", "better": "none" }
+  ],
+  "languages": [
+    { "id": "typescript", "analysed": true },
+    { "id": "markdown", "analysed": false }
+  ],
+  "files": [
+    { "path": "src/release.ts", "language": 0, "analysed": true, "lines": 210, "values": { "0": 5, "1": 90, "2": 120, "4": 3 } },
+    { "path": "src/notes.ts", "language": 0, "analysed": true, "lines": 120, "values": { "0": 2, "1": 90, "2": 100, "4": 1 } },
+    { "path": "src/index.ts", "language": 0, "analysed": true, "lines": 60, "values": { "2": 20 } },
+    { "path": "CHANGELOG.md", "language": 1, "analysed": false, "lines": 20 }
+  ],
+  "directories": [
+    { "path": "src", "files": 3, "values": { "0": 7, "1": 180, "2": 240 } }
+  ]
+}

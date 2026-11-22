@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:diff-coverage:1",
+  "type": "object",
+  "required": ["schema", "requestedBase", "base", "head", "generatedAt", "appliedConfig", "status", "covered", "total", "percent", "files", "gaps", "decision"],
+  "properties": {
+    "schema": { "const": "urn:repometry:schema:diff-coverage:1" },
+    "requestedBase": { "$ref": "#/$defs/sha" },
+    "base": { "$ref": "#/$defs/sha" },
+    "head": { "$ref": "#/$defs/sha" },
+    "generatedAt": { "type": "string" },
+    "appliedConfig": { "type": "object", "minProperties": 1 },
+    "status": { "enum": ["complete", "partial", "not-applicable"] },
+    "covered": { "$ref": "#/$defs/count" },
+    "total": { "$ref": "#/$defs/count" },
+    "percent": { "anyOf": [{ "$ref": "#/$defs/percent" }, { "type": "null" }] },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "properties": { "path": { "type": "string" }, "reason": { "type": "string" } },
+        "additionalProperties": false
+      }
+    },
+    "decision": { "anyOf": [{ "$ref": "#/$defs/decision" }, { "type": "null" }] }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "percent": { "type": "number", "minimum": 0, "maximum": 100 },
+    "file": {
+      "type": "object",
+      "required": ["path", "addedLines", "covered", "total"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "addedLines": { "$ref": "#/$defs/count" },
+        "covered": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
+        "total": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["status", "minimumPercent"],
+      "properties": {
+        "status": { "enum": ["passed", "failed", "indeterminate", "not-applicable"] },
+        "minimumPercent": { "$ref": "#/$defs/percent" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
