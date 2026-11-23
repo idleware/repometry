@@ -102,3 +102,11 @@ test('file metrics carry each file size in bytes, and folders sum them', async t
   assert.equal(metrics.files.find(file => file.path === 'src/one.js')?.bytes, Buffer.byteLength(source));
   assert.equal(metrics.directories.find(folder => folder.path === 'src')?.bytes, Buffer.byteLength(source));
 });
+
+test('a revision outside a Git repository is one line, not git output', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-nogit-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [cli, 'analyze', 'HEAD'], { cwd: directory, encoding: 'utf8', env: { ...process.env, REPOMETRY_DEBUG: '' } });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /^repometry: .* is not a Git repository\n$/);
+});

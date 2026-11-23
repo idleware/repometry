@@ -11,7 +11,13 @@ const oidPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const env = { ...process.env, GIT_NO_LAZY_FETCH: '1' };
 
 export async function gitRoot(directory: string): Promise<string> {
-  return (await gitText(directory, ['rev-parse', '--show-toplevel'])).replace(/\r?\n$/, '');
+  try {
+    return (await gitText(directory, ['rev-parse', '--show-toplevel'])).replace(/\r?\n$/, '');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const reason = `${directory} is not a Git repository`;
+    throw new Error(process.env.REPOMETRY_DEBUG === '1' ? `${reason}\n${detail}` : reason, { cause: error });
+  }
 }
 
 export async function physicalGitRoot(directory: string): Promise<string> {
