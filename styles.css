@@ -22,6 +22,7 @@
   --flag-good: #2f9445;
   --flag-bad: #c63d36;
   --bad-bg: #fdecea;
+  --good-bg: #eff8f2;
   --bad-ink: #9f2a21;
   --warn-bg: #fdf3dc;
   --warn-ink: #81580a;
@@ -86,6 +87,7 @@
     --flag-good: #5fd06a;
     --flag-bad: #f0736b;
     --bad-bg: #3a1c1a;
+    --good-bg: #11231a;
     --bad-ink: #ffb1a8;
     --warn-bg: #352812;
     --warn-ink: #f2cd7f;

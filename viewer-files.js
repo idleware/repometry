@@ -1,7 +1,7 @@
 import { formatQuery, ignoredLabel, isLockfile, languageColor, languageOf, languageShares, lockfilesLabel, matches, parseQuery, queryField, sameClause, sized, suggest, usePluginMeasures } from './viewer-filter.js';
 import { bandLabels as pluginBandLabels, bandOf, bandScale, catalogIndex, compareValues, entryValue, firstSortAscending, format, rollUp } from './viewer-metric-registry.js';
 import { extendCatalog, labelOf, pluginMetrics, pluginSpec, securityRisks, size } from './viewer-metrics.js';
-import { highlightCode, lineSnippet, renderExcerpt, renderSource } from './viewer-source.js';
+import { highlightCode, isSourceLayer, lineSnippet, lineStates, renderExcerpt, renderSource, setSourceLayer } from './viewer-source.js';
 /**
  * The finding categories Repometry counts as code smells, mirroring core's quality summary (structure and
  * duplication), so the Overview's smell count links to exactly the findings it counts.
@@ -683,15 +683,31 @@ function fileView(details, navigation, file, load) {
     // The folder is in the breadcrumbs right above; the head names the file alone, with its full path on hover.
     const name = element('code', 'fx-source-path', basename(file.path));
     name.title = file.path;
-    head.append(name, element('span', 'fx-source-meta'));
-    head.lastElementChild.append(dot, `${language} · ${count(file.lines)} lines`);
+    const meta = element('span', 'fx-source-meta');
+    meta.append(dot, `${language} · ${count(file.lines)} lines`);
+    // Lines show the findings, or the tests' coverage where the file has it; without coverage the head stays as it was.
+    const coverage = fileCoverage(details, file.path);
+    let layer = coverage ? sourceLayer(navigation.layer) : 'issues';
+    let line = navigation.line;
+    const place = () => nav.href('metrics', { directory: parentPath(file.path), file: file.path, ...line ? { line } : {},
+        ...layer === 'coverage' ? { layer } : {} });
+    const toggle = coverage ? segmented('Lines show', [['issues', 'Issues'], ['coverage', 'Coverage']], layer, value => {
+        layer = value;
+        rememberLayer(layer);
+        setSourceLayer(body, layer);
+        history.replaceState(history.state, '', place());
+    }) : null;
+    toggle?.classList.add('fx-source-layer');
+    const tools = element('div', 'fx-source-tools');
+    tools.append(...toggle ? [toggle] : [], meta);
+    head.append(name, tools);
     // The forge's page for the file, at the chosen line, whether or not the text opens here.
     const page = navigation.sourcePage?.(file.path, navigation.line);
     const forge = page ? link(page.href, `View on ${page.provider}`, 'fx-source-forge') : null;
     if (forge) {
         forge.target = '_blank';
         forge.rel = 'noopener noreferrer';
-        head.lastElementChild.append(' · ', forge);
+        meta.append(' · ', forge);
     }
     const body = element('div', 'fx-source-body');
     body.append(element('p', 'fx-note fx-source-wait', 'Loading source…'));
@@ -708,11 +724,14 @@ function fileView(details, navigation, file, load) {
         if (text === null) {
             // No locator, a private repository, a commit never pushed: one quiet state, and the forge's page when there is one.
             body.replaceChildren(element('p', 'fx-source-missing', 'Source not available'));
+            // Nothing to shade: the head is the one a file without coverage has.
+            toggle?.remove();
             return;
         }
-        const choose = (line) => {
-            history.replaceState(history.state, '', nav.href('metrics', { directory: parentPath(file.path), file: file.path, line }));
-            const moved = navigation.sourcePage?.(file.path, line);
+        const choose = (chosen) => {
+            line = chosen;
+            history.replaceState(history.state, '', place());
+            const moved = navigation.sourcePage?.(file.path, chosen);
             if (forge && moved)
                 forge.href = moved.href;
         };
@@ -720,12 +739,39 @@ function fileView(details, navigation, file, load) {
             path: file.path,
             functions: functions.flatMap(record => record.line === null ? [] : [{ line: record.line, complexity: record.complexity, name: record.name }]),
             notes, line: navigation.line, choose,
+            coverage: coverage ? lineStates(coverage) : undefined, layer,
         });
         const next = fileDetails(details, file, nav, { text, reveal: line => { reveal(line); choose(line); } });
         aside.replaceWith(next);
         aside = next;
     });
     return view;
+}
+/** A file's line coverage, where the inspection's coverage report names the file. */
+function fileCoverage(details, path) {
+    const coverage = details.lineCoverage;
+    return coverage && Object.hasOwn(coverage, path) ? coverage[path] : undefined;
+}
+const layerKey = 'repometry.source-layer';
+/** The URL's choice of what lines show, else the one made earlier in this session, else the findings. */
+function sourceLayer(requested) {
+    if (isSourceLayer(requested))
+        return requested;
+    try {
+        const stored = sessionStorage.getItem(layerKey);
+        return isSourceLayer(stored) ? stored : 'issues';
+    }
+    catch {
+        return 'issues';
+    }
+}
+function rememberLayer(layer) {
+    try {
+        sessionStorage.setItem(layerKey, layer);
+    }
+    catch {
+        // Blocked storage only forgets the choice; the URL still carries it.
+    }
 }
 /**
  * The top of a relative colour scale, per level: files against files, folders against the folders at their depth. One

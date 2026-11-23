@@ -56,6 +56,34 @@ export function sourcePage(sha, path, line) {
     const name = providerNames[locator.provider.toLowerCase()] ?? locator.provider.charAt(0).toUpperCase() + locator.provider.slice(1);
     return { href: expandLocator(locator.web, { revision: sha, path, line }), provider: name };
 }
+export function isSourceLayer(value) {
+    return value === 'issues' || value === 'coverage';
+}
+/**
+ * Each line's coverage, by line number; a line no range names was not measured. Where ranges overlap, the worse
+ * state wins: a line a test missed is never shown as covered.
+ */
+export function lineStates(coverage) {
+    const states = new Map();
+    const lay = (ranges, state) => {
+        for (const [from, to] of ranges ?? [])
+            for (let line = Math.max(1, from); line <= to; line++)
+                states.set(line, state);
+    };
+    lay(coverage.covered, 'covered');
+    lay(coverage.partial, 'partial');
+    lay(coverage.uncovered, 'uncovered');
+    return states;
+}
+const lineStateNames = {
+    covered: 'Covered', partial: 'Partly covered: some branches missed', uncovered: 'Not covered',
+};
+/** Switches a rendered source between its findings and its coverage, without drawing it again. */
+export function setSourceLayer(container, layer) {
+    const code = container.querySelector(':scope > .src');
+    if (code)
+        code.dataset.layer = layer;
+}
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
 export function renderSource(container, text, options) {
     const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
@@ -65,6 +93,7 @@ export function renderSource(container, text, options) {
     for (const note of options.notes)
         notes.set(note.line, [...notes.get(note.line) ?? [], note]);
     const code = element('div', 'src');
+    code.dataset.layer = options.layer ?? 'issues';
     code.setAttribute('role', 'region');
     code.setAttribute('aria-label', `Source of ${options.path}`);
     const rows = [];
@@ -79,6 +108,16 @@ export function renderSource(container, text, options) {
             const badge = element('span', `src-complexity src-band-${start.complexity >= 20 ? 3 : start.complexity >= 10 ? 2 : start.complexity >= 5 ? 1 : 0}`, String(start.complexity));
             badge.title = `Cyclomatic complexity ${start.complexity}`;
             mark.append(badge);
+        }
+        // The coverage layer marks each measured line in the gutter by shape, full, half or empty, as well as by its tint.
+        const state = options.coverage?.get(number);
+        if (state) {
+            row.classList.add(`src-cov-${state}`);
+            const glyph = element('span', `src-cov src-cov-mark-${state}`);
+            glyph.setAttribute('role', 'img');
+            glyph.setAttribute('aria-label', lineStateNames[state]);
+            glyph.title = lineStateNames[state];
+            mark.append(glyph);
         }
         const anchor = element('a', 'src-number', String(number));
         anchor.href = `#L${number}`;

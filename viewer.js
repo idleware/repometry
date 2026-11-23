@@ -135,6 +135,7 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
             category: params.get('category') ?? undefined,
             level: params.get('level') ?? undefined,
             rank: params.get('rank') ?? undefined,
+            layer: params.get('layer') ?? undefined,
         };
     }
     function loadPulls() {
@@ -261,6 +262,7 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
                     category: current.category,
                     level: current.level,
                     rank: current.rank,
+                    layer: current.layer,
                     source: path => loadSource(report.sha, path),
                     sourcePage: (path, line) => sourcePage(report.sha, path, line),
                     href: (destination, options) => href({ page: destination, sha: report.sha, ...options }),
@@ -310,7 +312,7 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     message.hidden = true;
     render();
 }
-function href({ page, sha, directory, file, view, period, query, group, line, category, level, rank }) {
+function href({ page, sha, directory, file, view, period, query, group, line, category, level, rank, layer }) {
     const params = new URLSearchParams({ sha });
     if (directory)
         params.set('dir', directory);
@@ -332,6 +334,8 @@ function href({ page, sha, directory, file, view, period, query, group, line, ca
         params.set('level', level);
     if (rank)
         params.set('rank', rank);
+    if (layer)
+        params.set('layer', layer);
     // Category lists read as written: category=structure,duplication.
     return `#${page}?${params.toString().replaceAll('%2C', ',')}`;
 }
