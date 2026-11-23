@@ -172,6 +172,8 @@ export function renderSource(container, text, options) {
             fragment.append(box);
         }
     }
+    rows[0]?.classList.add('src-first');
+    rows.at(-1)?.classList.add('src-last');
     code.append(fragment);
     container.replaceChildren(code);
     function reveal(line, scroll = true) {
