@@ -1,3 +1,8 @@
+## [0.4.1](https://github.com/idleware/repometry/compare/v0.4.0...v0.4.1) (2026-11-23)
+
+### Fixes & improvements
+* fix: avoid coverage strip break ([87140c0](https://github.com/idleware/repometry/commit/87140c036d309c60c93b99e83d0e2d94f25c116e))
+
 ## [0.4.0](https://github.com/idleware/repometry/compare/v0.3.1...v0.4.0) (2026-11-23)
 
 ### Features
