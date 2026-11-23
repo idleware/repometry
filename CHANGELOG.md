@@ -1,3 +1,8 @@
+## [0.4.0](https://github.com/idleware/repometry/compare/v0.3.1...v0.4.0) (2026-11-23)
+
+### Features
+* feat: introduce basic security checks ([93fb744](https://github.com/idleware/repometry/commit/93fb744847bdcd38104c7e7f30260eb17d445e4e))
+
 ## [0.3.1](https://github.com/idleware/repometry/compare/v0.3.0...v0.3.1) (2026-11-23)
 
 ### Fixes & improvements
