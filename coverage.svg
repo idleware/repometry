@@ -1,8 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="122" height="26" viewBox="0 0 122 26" role="img" aria-label="coverage: 65.8%">
-  <rect width="122" height="26" rx="5" fill="#ec8a2c"/>
-  <path d="M0 5a5 5 0 0 1 5-5h63v26H5a5 5 0 0 1-5-5Z" fill="#0f1720"/>
-  <g fill="#fff" font-family="system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">
-    <text x="34" y="17">coverage</text>
-    <text x="95" y="17">65.8%</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="101" height="20" viewBox="0 0 101 20" role="img" aria-label="coverage: 69%">
+  <defs>
+    <clipPath id="badge"><rect width="101" height="20" rx="3"/></clipPath>
+    <linearGradient id="shade" x2="0" y2="100%">
+      <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".1"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#badge)">
+    <rect width="68" height="20" fill="#555"/>
+    <rect x="68" width="33" height="20" fill="#ec8a2c"/>
+    <rect width="101" height="20" fill="url(#shade)"/>
+  </g>
+  <g aria-hidden="true" fill="#fff" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-anchor="middle">
+    <text x="34" y="15" fill="#010101" fill-opacity=".3">coverage</text>
+    <text x="84.5" y="15" fill="#010101" fill-opacity=".3">69%</text>
+    <text x="34" y="14">coverage</text>
+    <text x="84.5" y="14">69%</text>
   </g>
 </svg>

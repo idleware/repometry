@@ -77,10 +77,8 @@ export function lineStates(coverage) {
 }
 /** How often tests ran each line, where the report carries the counts; an older report has none. */
 export function lineHits(coverage) {
-    // The wire is getting `hits`; until it lands the field is read off the record as the agreed shape.
-    const runs = coverage.hits;
     const hits = new Map();
-    for (const [from, to, count] of runs ?? [])
+    for (const [from, to, count] of coverage.hits ?? [])
         for (let line = Math.max(1, from); line <= to; line++)
             hits.set(line, count);
     return hits;
@@ -110,7 +108,10 @@ export function setSourceLayer(container, layer) {
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
 export function renderSource(container, text, options) {
     const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+    // Tokenized up front, in order, since a comment's state carries from line to line.
     const tokenize = tokenizer(options.path);
+    const tokens = lines.map(line => tokenize(line));
+    const bridged = options.coverage ? bridgeStates(options.coverage, tokens.map(codeless)) : new Map();
     const starts = new Map(options.functions.map(entry => [entry.line, entry]));
     const notes = new Map();
     for (const note of options.notes)
@@ -133,10 +134,12 @@ export function renderSource(container, text, options) {
             mark.append(badge);
         }
         // The coverage layer tints each measured line's gutter cell and writes in it how often the line ran; a miss's red says it.
-        // Some tools count blank and comment lines as run; nothing runs there, so they keep the strip's tint and say nothing.
-        const runs = tokenize(line);
-        const state = options.coverage?.get(number);
-        if (state && codeless(runs)) {
+        // Nothing runs on a blank or comment line: where a tool counts one anyway, or it sits inside a run of one state, it
+        // keeps the strip's tint and says nothing.
+        const runs = tokens[index];
+        const own = options.coverage?.get(number);
+        const state = own ?? bridged.get(number);
+        if (state && (!own || codeless(runs))) {
             const cell = element('span', `src-cov src-cov-mark-${state}`);
             cell.setAttribute('aria-hidden', 'true');
             mark.append(cell);
@@ -367,6 +370,29 @@ export function tokenizer(path) {
             runs.push(['', plain]);
         return runs;
     };
+}
+/**
+ * The tint a gap of blank and comment lines takes so a run of one state stays one strip: the state of the measured
+ * lines on both sides, where they agree. A gap between different states, or at the file's start or end, stays plain.
+ */
+export function bridgeStates(states, codeless) {
+    const bridged = new Map();
+    let line = 1;
+    while (line <= codeless.length) {
+        if (states.has(line) || !codeless[line - 1]) {
+            line += 1;
+            continue;
+        }
+        let end = line;
+        while (end < codeless.length && !states.has(end + 1) && codeless[end])
+            end += 1;
+        const before = states.get(line - 1);
+        if (before && before === states.get(end + 1))
+            for (let at = line; at <= end; at++)
+                bridged.set(at, before);
+        line = end + 1;
+    }
+    return bridged;
 }
 /** A line with no code: blank, or nothing but comment. */
 export function codeless(runs) {
