@@ -402,8 +402,9 @@ export function tokenizer(path: string): (line: string) => [TokenKind, string][]
 }
 
 /**
- * The tint a gap of blank and comment lines takes so a run of one state stays one strip: the state of the measured
- * lines on both sides, where they agree. A gap between different states, or at the file's start or end, stays plain.
+ * The tint a gap of blank and comment lines takes so the strip has no breaks: the state of the measured line above it,
+ * which the gap closes, or for a gap at the file's start, of the line below. A gap beside a line that was not measured
+ * takes its other neighbour, and one with no measured neighbour stays plain.
  */
 export function bridgeStates(states: ReadonlyMap<number, LineState>, codeless: readonly boolean[]): Map<number, LineState> {
   const bridged = new Map<number, LineState>();
@@ -412,8 +413,8 @@ export function bridgeStates(states: ReadonlyMap<number, LineState>, codeless: r
     if (states.has(line) || !codeless[line - 1]) { line += 1; continue; }
     let end = line;
     while (end < codeless.length && !states.has(end + 1) && codeless[end]) end += 1;
-    const before = states.get(line - 1);
-    if (before && before === states.get(end + 1)) for (let at = line; at <= end; at++) bridged.set(at, before);
+    const state = states.get(line - 1) ?? states.get(end + 1);
+    if (state) for (let at = line; at <= end; at++) bridged.set(at, state);
     line = end + 1;
   }
   return bridged;
