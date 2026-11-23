@@ -362,7 +362,7 @@ function lineChart(svg: SVGSVGElement, layout: Layout, points: readonly ChartPoi
 
   if (secondary && secondHigh > 0) {
     const y2 = (value: number) => layout.top + layout.plotHeight - value / secondHigh * layout.plotHeight;
-    for (const segment of segments(secondary.values, points)) {
+    for (const segment of segments(secondary.values)) {
       const path = svgElement('path', 'tc-line tc-line-secondary');
       path.setAttribute('d', segment.map((index, order) => {
         const value = secondary.values[index]!;
@@ -374,7 +374,7 @@ function lineChart(svg: SVGSVGElement, layout: Layout, points: readonly ChartPoi
     }
   }
 
-  for (const segment of segments(points.map(point => point.value), points)) {
+  for (const segment of segments(points.map(point => point.value))) {
     const path = svgElement('path', 'tc-line');
     // Code keeps its state until the next commit, so the line holds each value and steps at the commit that changed it;
     // a slope would invent values for the days between commits.
@@ -688,12 +688,12 @@ function interact(svg: SVGSVGElement, tip: HTMLDivElement, layout: Layout, point
   });
 }
 
-/** Runs of consecutive measured points, broken where a measurement is missing. */
-function segments(values: readonly (number | null)[], points: readonly ChartPoint[]): number[][] {
+/** Runs of consecutive measured points, broken only where a measurement is missing; a profile change is marked, not cut. */
+function segments(values: readonly (number | null)[]): number[][] {
   const result: number[][] = [];
   let run: number[] = [];
   for (const [index, value] of values.entries()) {
-    if (value === null || points[index]?.boundary === 'changed') {
+    if (value === null) {
       if (run.length) result.push(run);
       run = [];
     }
