@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { gitRoot, resolveGitCommit } from '../api/git/git.js';
+import { lstat, readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { resolveGitBranch } from '../api/git/commit-metadata.js';
 import { clearSourceCache, sourceCacheRoot } from '../api/git/source-cache.js';
 import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
@@ -27,6 +27,8 @@ import type { Command, Invocation } from './arguments.js';
 import { readConfig } from './config.js';
 import { importerIds, readInputs } from './imports.js';
 import { outputReports, reporterIds, viewTarget } from './reporting.js';
+import { parseRange } from './revisions.js';
+import type { RevisionRange } from './revisions.js';
 import { findRepository, selectStore, writableStore } from './store.js';
 
 const configOptions = { config: option('FILE', 'Read a different JSON configuration.'), 'no-config': flag('Skip configuration.') };
@@ -45,8 +47,9 @@ const renderOptions = {
 
 const commands: Readonly<Record<string, Command>> = {
   analyze: {
-    description: 'Analyze and save one revision.', parameters: '[REVISION]', max: 1,
+    description: 'Analyze and save one revision or a range of commits.', parameters: '[REVISION | BASE..[HEAD]]', max: 1,
     options: { ...configOptions, ...renderOptions, 'working-tree': flag('Analyze the working directory.'),
+      'skip-saved': flag('Keep commits that already have a saved inspection.'),
       import: importOption, report: option('FORMAT[=PATH]', 'Generate a report after inspection. Repeatable.', { multiple: true }),
       exclude: excludeOption, 'import-root': option('DIR', 'Resolve scanner locations relative to this directory.'),
       worker: option('URL', 'Run analysis on a Repometry worker.'), ci: ciOption },
@@ -106,10 +109,10 @@ const commands: Readonly<Record<string, Command>> = {
     description: 'Prepare a report for a Git storage branch.', parameters: 'REVISION', min: 1, max: 1,
     options: { worktree: option('DIR', 'Select the storage worktree.'), branch: option('NAME', 'Select the storage branch.') },
     async run(input) {
-      const { root, store } = await context(input);
+      const { directory, root, store } = await context(input);
       const path = input.text('worktree');
       if (!path) throw new Error('prepare requires --worktree');
-      const worktree = resolve(root, path);
+      const worktree = resolve(directory, path);
       const id = await commitId(root, input.args[0]!);
       const report = await store.reader.read({ kind: 'commit', id });
       const files = await prepareMetabranch({ repository: root, worktree, branch: input.text('branch') ?? 'repometry', report });
@@ -144,31 +147,99 @@ const commands: Readonly<Record<string, Command>> = {
 async function context(input: Invocation) {
   const directory = resolve(input.text('repo') ?? '.');
   const root = await findRepository(directory) ?? directory;
-  return { directory, root, store: selectStore(root, input.text('store')) };
+  return { directory, root, store: selectStore(root, input.text('store'), directory) };
 }
 
 async function analyze(input: Invocation): Promise<number> {
+  const range = input.args[0] === undefined ? undefined : parseRange(input.args[0]);
+  if (range) return analyzeRange(input, range);
   const { directory, root, store } = await context(input);
   const output = writableStore(store);
   if (input.flag('working-tree') && input.args.length) throw new Error('Choose a revision or --working-tree');
+  if (input.flag('working-tree') && input.flag('skip-saved')) throw new Error('--skip-saved applies to commits, not --working-tree');
   const github = useGitHub(input);
   const config = await readConfig(root, input);
   const branch = input.text('branch') ?? config.branch;
   const revision = input.args[0] ?? (!input.flag('working-tree') && branch !== undefined ? await resolveGitBranch(root, branch) : 'HEAD');
   const imports = input.many('import');
-  const { lcov, findings } = readInputs(root, imports.length ? imports : config.imports);
+  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
   const worker = input.text('worker');
-  const report = await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-    lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore,
-    findingInputs: findings, findingRoot: importRoot ? resolve(root, importRoot) : undefined },
-  worker === undefined ? undefined : remoteExecutor(worker, workerToken()));
+  const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
+  const skipped = savedId !== undefined && await isSaved(output, savedId);
+  const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
+    : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
+      lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore,
+      findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined },
+    worker === undefined ? undefined : remoteExecutor(worker, workerToken()));
   if (github) await writeGitHubResult(report);
   const requested = input.many('report');
   const reports = await outputReports(root, store, requested.length ? requested : config.reports, input, config);
-  print({ schema: 'urn:repometry:schema:analysis-result:1', ...inspectionSummary(report), store: output, reports });
+  print({ schema: 'urn:repometry:schema:analysis-result:1', ...inspectionSummary(report), ...(skipped ? { skipped: true } : {}),
+    store: output, reports });
   return report.status === 'partial' ? 2 : 0;
+}
+
+async function analyzeRange(input: Invocation, range: RevisionRange): Promise<number> {
+  const { directory, root, store } = await context(input);
+  const output = writableStore(store);
+  if (input.flag('working-tree')) throw new Error('Choose a range or --working-tree');
+  if (input.many('import').length) throw new Error('--import describes one checkout and cannot be used with a range');
+  if (input.text('import-root')) throw new Error('--import-root requires a scanner report');
+  if (useGitHub(input)) throw new Error('--ci github needs a single revision');
+  const config = await readConfig(root, input);
+  if (config.imports.length) process.stderr.write('Imports from the config describe one checkout and are skipped for a range.\n');
+  const { base, head, commits } = await firstParentRange(root, range.base, range.head);
+  if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
+  const worker = input.text('worker');
+  const executor = worker === undefined ? undefined : remoteExecutor(worker, workerToken());
+  const exclude = [...config.exclude, ...input.many('exclude')];
+  const analyzed: string[] = [], partial: string[] = [], skipped: string[] = [];
+  const failed: { commit: string; error: string }[] = [];
+  let interrupted = false;
+  const stop = () => { interrupted = true; process.stderr.write('Stopping after the current commit.\n'); };
+  process.once('SIGINT', stop);
+  const width = String(commits.length).length;
+  const progress = (index: number, id: string, state: string) =>
+    process.stderr.write(`[${String(index + 1).padStart(width)}/${commits.length}] ${id.slice(0, 7)} ${state}\n`);
+  try {
+    for (const [index, id] of commits.entries()) {
+      if (interrupted) break;
+      if (input.flag('skip-saved') && await isSaved(output, id)) {
+        skipped.push(id);
+        progress(index, id, 'skipped');
+        continue;
+      }
+      try {
+        const report = await inspect({ directory, output, source: { revision: id }, exclude, ignore: config.ignore }, executor);
+        analyzed.push(id);
+        if (report.status === 'partial') partial.push(id);
+        progress(index, id, report.status === 'partial' ? 'partial' : 'analyzed');
+      } catch (error) {
+        if (interrupted) break;
+        const message = error instanceof Error ? error.message : String(error);
+        failed.push({ commit: id, error: message });
+        progress(index, id, `failed: ${message}`);
+      }
+    }
+  } finally {
+    process.removeListener('SIGINT', stop);
+  }
+  const requested = input.many('report');
+  const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
+  print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
+    analyzed, partial, skipped, failed, store: output, reports });
+  return interrupted ? 130 : failed.length || partial.length ? 2 : 0;
+}
+
+async function isSaved(store: string, id: string): Promise<boolean> {
+  try {
+    return (await lstat(join(store, 'commits', id, 'report.json'))).isFile();
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return false;
+    throw error;
+  }
 }
 
 async function show(input: Invocation) {
@@ -187,9 +258,9 @@ async function show(input: Invocation) {
 }
 
 async function compare(input: Invocation) {
-  const { root, store } = await context(input);
+  const { directory, root, store } = await context(input);
   const baselinePath = input.text('baseline-store');
-  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath);
+  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath, directory);
   const [base, head] = await Promise.all([commitId(root, input.args[0]!), commitId(root, input.args[1] ?? 'HEAD')]);
   const current = store.reader.read({ kind: 'commit', id: head });
   const before = base === head && baseline === store ? current : baseline.reader.read({ kind: 'commit', id: base });
@@ -197,10 +268,10 @@ async function compare(input: Invocation) {
 }
 
 async function diffCoverage(input: Invocation): Promise<number> {
-  const { root } = await context(input);
+  const { directory, root } = await context(input);
   const config = await readConfig(root, input);
   const imports = input.many('import');
-  const { lcov, findings } = readInputs(root, imports.length ? imports : config.imports);
+  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   if (!lcov || (imports.length && findings.length)) throw new Error('diff-coverage requires --import lcov=PATH');
   const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov,
     exclude: [...config.exclude, ...input.many('exclude')], minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage') });
@@ -210,14 +281,14 @@ async function diffCoverage(input: Invocation): Promise<number> {
 }
 
 async function review(input: Invocation): Promise<number> {
-  const { root, store } = await context(input);
+  const { directory, root, store } = await context(input);
   const github = useGitHub(input);
   if (input.flag('annotations') && !github) throw new Error('--annotations requires --ci github');
   const config = await readConfig(root, input);
   const imports = input.many('import');
-  const { lcov, findings } = readInputs(root, imports.length ? imports : config.imports);
+  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const baselinePath = input.text('baseline-store');
-  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath);
+  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath, directory);
   const exclude = [...config.exclude, ...input.many('exclude')];
   const current: ReportReader = imports.length && findings.length ? {
     list: () => store.reader.list(),

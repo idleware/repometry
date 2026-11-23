@@ -29,9 +29,26 @@ export async function gitUtf8(directory: string, args: readonly string[], timeou
 }
 
 export async function resolveGitCommit(directory: string, revision: string): Promise<string> {
-  const id = (await gitText(directory, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`])).trim();
+  let output: string;
+  try {
+    output = await gitText(directory, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const reason = /not a git repository/i.test(detail) ? `${directory} is not a Git repository` : `${revision} is not a commit in ${directory}`;
+    throw new Error(process.env.REPOMETRY_DEBUG === '1' ? `${reason}\n${detail}` : reason, { cause: error });
+  }
+  const id = output.trim();
   if (!oidPattern.test(id)) throw new Error('Git returned an invalid commit ID');
   return id;
+}
+
+/** Commits on the first-parent line of `head` after `base`, oldest first. */
+export async function firstParentRange(directory: string, base: string, head: string)
+  : Promise<{ readonly base: string; readonly head: string; readonly commits: readonly string[] }> {
+  const [from, to] = await Promise.all([resolveGitCommit(directory, base), resolveGitCommit(directory, head)]);
+  const commits = (await gitText(directory, ['rev-list', '--first-parent', '--reverse', `${from}..${to}`])).split('\n').filter(Boolean);
+  if (!commits.every(id => oidPattern.test(id))) throw new Error('Git returned an invalid commit ID');
+  return { base: from, head: to, commits };
 }
 
 interface GitFile { readonly path: string; readonly oid: string; readonly size?: number }
@@ -79,7 +96,7 @@ export async function readGitCommit(directory: string, revision: string, exclude
   });
   files.sort((left, right) => comparePaths(left.path, right.path));
   const counts = inventoryLineCounts(directory, tracked, blobs);
-  const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid }) => ({ path, lines: counts.get(oid) ?? null }));
+  const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid, size }) => ({ path, lines: counts.get(oid) ?? null, ...(size === undefined ? {} : { bytes: size }) }));
   return { subject: { kind: 'commit', id }, files, inventory, generatedExcluded: [...generated].sort(comparePaths) };
 }
 

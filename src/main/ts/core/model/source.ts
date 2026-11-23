@@ -10,6 +10,8 @@ export interface SourceFile {
 export interface InventoryFile {
   readonly path: string;
   readonly lines: number | null;
+  /** Size in bytes, from Git or the file system; independent of formatting, unlike lines. */
+  readonly bytes?: number;
 }
 
 export interface SourceSnapshot {

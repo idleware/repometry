@@ -5,7 +5,7 @@ import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js
 import { loadViewerData, ViewerSummaryChanged } from './viewer-data.js';
 import type { ViewerData } from './viewer-data.js';
 import { band, bandLimits, codeSmellCategories, renderFileView, mapStub, renderSunburst, securityCategories } from './viewer-files.js';
-import { count, difference, formatMetric, labelOf, metricValue, useCatalog } from './viewer-metrics.js';
+import { count, difference, formatMetric, labelOf, metricValue, securityGrades, securityRisks, useCatalog } from './viewer-metrics.js';
 import type { BuiltinMetric, Metric } from './viewer-metrics.js';
 import { charted, commitTime, isPeriod, stableWindow, isTrendView, renderSeries, renderTrendsPage, seriesPoints, trendLegend } from './viewer-trends.js';
 import type { Period, TrendData, TrendView } from './viewer-trends.js';
@@ -13,6 +13,7 @@ import { createCommitPicker } from './viewer-commits.js';
 import { renderProfile } from './viewer-profile.js';
 import { loadSource, sourcePage, useSources } from './viewer-source.js';
 import { renderDiffCoverageTrend, renderPulls } from './viewer-pulls.js';
+import { isDetailed, pageAccess, publicNotice, unavailableTabs } from './viewer-access.js';
 import type { PullReview, PullReviews } from '../../json/wire/pull-review-model.js';
 
 const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 });
@@ -50,7 +51,7 @@ interface Navigation {
 }
 
 const mode = document.querySelector<HTMLMetaElement>('meta[name="repometry-view"]')?.content;
-const detailed = mode === 'local' || mode === 'private';
+const detailed = isDetailed(mode);
 const title = document.querySelector<HTMLMetaElement>('meta[name="repometry-project"]')?.content.trim();
 if (title) {
   document.title = `${title} · Repometry`;
@@ -136,6 +137,20 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
   commit.hidden = false;
   if (detailed) {
     for (const item of document.querySelectorAll<HTMLElement>('[data-private]')) item.hidden = false;
+  } else {
+    // A public report keeps the sections of the full one in view: picking one says how to see it.
+    for (const page of unavailableTabs) {
+      const tab = document.querySelector<HTMLAnchorElement>(`#navigation a[data-page="${page}"]`);
+      if (!tab) continue;
+      tab.hidden = false;
+      tab.dataset.unavailable = '';
+      const note = document.createElement('span');
+      note.className = 'visually-hidden';
+      note.textContent = ', not in the public report';
+      tab.append(note);
+    }
+    fillPanel(element('overview-public-content'));
+    element('overview-public').hidden = false;
   }
 
   function route(): Navigation {
@@ -143,10 +158,10 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     if (bySha.has(rawPage)) return { page: 'overview', sha: rawPage };
     const params = new URLSearchParams(query);
     // Components became a grouping of Metrics; old links land there.
-    if (rawPage === 'components') return { page: detailed ? 'metrics' : 'overview', sha: bySha.get(params.get('sha') ?? '')?.sha ?? first.sha, group: 'components' };
+    if (rawPage === 'components') return { page: 'metrics', sha: bySha.get(params.get('sha') ?? '')?.sha ?? first.sha, group: 'components' };
     const page = pages.find(candidate => candidate === rawPage);
     return {
-      page: page && (detailed || page === 'overview' || page === 'trends') ? page : 'overview',
+      page: page ?? 'overview',
       sha: bySha.get(params.get('sha') ?? '')?.sha ?? first.sha,
       directory: params.get('dir') ?? undefined,
       file: params.get('file') ?? undefined,
@@ -172,16 +187,19 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     const version = ++revision;
     const report = bySha.get(current.sha)!;
     const inspection = context?.[current.sha];
-    const previousPage = pages.find(page => !element(page).hidden);
+    const locked = pageAccess(current.page, detailed) === 'notice';
+    const previousPage = [...pages, 'unavailable'].find(page => !element(page).hidden);
     const focusWasInPage = previousPage && element(previousPage).contains(document.activeElement);
     commit.set(report.sha);
     commit.hidden = current.page === 'pulls';
     element('inspection-meta').hidden = current.page === 'pulls';
-    for (const page of pages) element(page).hidden = page !== current.page;
-    if (previousPage && previousPage !== current.page) {
+    for (const page of pages) element(page).hidden = locked || page !== current.page;
+    element('unavailable').hidden = !locked;
+    const shown = locked ? 'unavailable' : current.page;
+    if (previousPage && previousPage !== shown) {
       window.scrollTo({ top: 0 });
       if (focusWasInPage) {
-        const section = element(current.page);
+        const section = element(shown);
         section.tabIndex = -1;
         section.focus({ preventScroll: true });
       }
@@ -195,6 +213,12 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     document.querySelector<HTMLAnchorElement>('.brand')!.href = href({ page: 'overview', sha: current.sha });
     renderInspection(report);
     renderQuality(report, quality[report.sha]);
+    if (locked) {
+      const tab = document.querySelector<HTMLAnchorElement>(`#navigation a[data-page="${current.page}"]`);
+      element('unavailable-title').textContent = tab?.firstChild?.textContent ?? 'Not in this report';
+      fillNotice(element('unavailable-content'));
+      return;
+    }
     if (current.page === 'overview') renderLead(reports, report, quality, context, chartMetric, cached.get(report.sha));
     renderScannerContext(inspection, report.sha);
     const needsDetail = isFilePage(current.page) || ['overview', 'settings'].includes(current.page) || !counts;
@@ -489,8 +513,10 @@ function renderScannerContext(context: InspectionContext | undefined, sha: strin
   const mark = element('security-mark');
   const critical = security?.critical ?? 0;
   const total = security ? critical + security.high + security.medium + security.low + security.unknown : null;
-  // The mark names the level, as the maintainability mark names the grade; the line beside it gives the counts.
-  mark.textContent = !security ? '–' : critical ? 'C' : security.high ? 'H' : security.medium ? 'M' : total ? 'L' : 'N';
+  // A grade like maintainability's, by the worst finding: the line beside it gives the counts per risk level.
+  const step = !security ? null : critical ? 4 : security.high ? 3 : security.medium ? 2 : total ? 1 : 0;
+  mark.textContent = step === null ? '–' : securityGrades[step];
+  mark.title = step === null ? '' : `Security ${securityGrades[step]}: ${securityRisks[step].toLowerCase()}`;
   // The same five steps as every grade: clear A, low B, medium C, high D, critical F.
   mark.dataset.severity = !security ? 'none' : critical ? 'critical' : security.high ? 'high' : security.medium ? 'medium' : total ? 'low' : 'clear';
   // The mark carries the level; the text gives the counts by severity.
@@ -637,8 +663,8 @@ function renderSecurityHotspots(details: InspectionDetails, sha: string, scanned
     const score = document.createElement('span');
     score.className = 'chip chip-level';
     score.dataset.level = String(level);
-    score.textContent = 'NLMHC'[level]!;
-    score.title = `${['No', 'Low', 'Medium', 'High', 'Critical'][level]} · ${quantity(counts.get(path)!, 'finding')}`;
+    score.textContent = securityGrades[level as 0]!;
+    score.title = `${securityRisks[level as 0]} · ${quantity(counts.get(path)!, 'finding')}`;
     link.append(label, score);
     const row = document.createElement('li');
     row.append(link);
@@ -706,6 +732,48 @@ function overviewStub(sha: string): void {
     list.append(item);
   }
   output.replaceChildren(list);
+}
+
+/** The public report notice in a page's place: what this report holds and the command that shows all of it. */
+function fillNotice(container: HTMLElement): void {
+  const text = document.createElement('p');
+  text.className = 'report-notice-text';
+  const lead = document.createElement('strong');
+  lead.textContent = publicNotice.lead;
+  text.append(lead, ` ${publicNotice.text} `, commandChip(), ` ${publicNotice.tail}`);
+  container.replaceChildren(text);
+}
+
+/** The same notice in the Overview's side panel, where the hotspots sit in a detailed report. */
+function fillPanel(container: HTMLElement): void {
+  const text = document.createElement('p');
+  text.textContent = publicNotice.panel;
+  const command = commandChip();
+  command.classList.add('public-panel-command');
+  container.replaceChildren(text, command);
+}
+
+/** The command as code, copied with one click; where the browser refuses the clipboard, it is selected instead. */
+function commandChip(): HTMLElement {
+  const code = document.createElement('code');
+  code.textContent = publicNotice.command;
+  if (!navigator.clipboard) return code;
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'report-notice-command';
+  copy.title = 'Copy the command';
+  const status = document.createElement('span');
+  status.className = 'visually-hidden';
+  status.setAttribute('role', 'status');
+  copy.append(code, status);
+  copy.addEventListener('click', () => {
+    void navigator.clipboard.writeText(publicNotice.command).then(() => {
+      copy.dataset.copied = '';
+      status.textContent = 'Copied';
+      setTimeout(() => { delete copy.dataset.copied; status.textContent = ''; }, 1600);
+    }, () => window.getSelection()?.selectAllChildren(code));
+  });
+  return copy;
 }
 
 function notice(container: HTMLElement, text: string): void {

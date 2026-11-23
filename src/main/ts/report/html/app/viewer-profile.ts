@@ -5,7 +5,7 @@ import type { InspectionDetails, ProfileSettings } from '../../json/wire/inspect
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 import type { QualitySummary } from '../../json/wire/domain-types.js';
 import { copyIcon, multiChoice, navigationButtons, searchField, splitter } from './viewer-files.js';
-import { count, duration } from './viewer-metrics.js';
+import { count, duration, securityGrades, securityRisks } from './viewer-metrics.js';
 
 export interface ProfileData {
   readonly report: PublicHistoryEntry;
@@ -328,7 +328,7 @@ function badges(data: ProfileData): HTMLElement {
       ratio === null ? null : [.05, .1, .2, .5, Infinity].findIndex(limit => ratio < limit), true],
     ['coverage', 'Coverage', [['A', '90%+'], ['B', '80%+'], ['C', '70%+'], ['D', '60%+'], ['F', '<60%']],
       coverage === null ? null : [.9, .8, .7, .6, -Infinity].findIndex(limit => coverage >= limit), true],
-    ['security', 'Security', [['A', 'None', 'N'], ['B', 'Low', 'L'], ['C', 'Medium', 'M'], ['D', 'High', 'H'], ['F', 'Critical', 'C']], worst, security !== undefined],
+    ['security', 'Security', securityGrades.map((grade, index) => [grade, securityRisks[index]!] as const), worst, security !== undefined],
   ];
   for (const [name, label, steps, current, published] of areas) {
     const section = element('section', 'fx-aside-section profile-badge-area');

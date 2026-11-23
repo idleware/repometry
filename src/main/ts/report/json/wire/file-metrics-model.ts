@@ -38,6 +38,8 @@ export interface Quality {
 export interface Metrics {
   readonly path: string;
   lines: number | null;
+  /** Size in bytes; absent in reports made before sizes were recorded. */
+  bytes?: number;
   functions: number | null;
   complexity: Complexity | null;
   lineCoverage: LineCoverage | null;

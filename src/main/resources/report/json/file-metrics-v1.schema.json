@@ -65,6 +65,7 @@
         },
         "path": { "type": "string" },
         "lines": { "$ref": "#/$defs/optionalCount" },
+        "bytes": { "$ref": "#/$defs/count" },
         "functions": { "$ref": "#/$defs/optionalCount" },
         "complexity": {
           "type": ["object", "null"],

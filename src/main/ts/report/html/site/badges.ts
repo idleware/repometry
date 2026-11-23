@@ -1,4 +1,4 @@
-import { coverageGrade } from '../../../core/model/quality-summary.js';
+import { coverageGrade, securityGrade } from '../../../core/model/quality-summary.js';
 import type { Grade, QualitySummary } from '../../../core/model/quality-summary.js';
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 
@@ -26,10 +26,8 @@ export function badges(report: PublicHistoryEntry | undefined, quality: QualityS
     ['maintainability.svg', badge('maintainability', grade ?? '—', grade, 112)],
   ]);
   if (security) {
-    // A level, not a count: the worst severity found, as one letter on the five-step grade colours.
-    const [letter, worst] = security.critical ? ['C', 'F'] as const : security.high ? ['H', 'D'] as const
-      : security.medium ? ['M', 'C'] as const : security.low || security.unknown ? ['L', 'B'] as const : ['N', 'A'] as const;
-    files.set('security.svg', badge('security', letter, worst, 64));
+    const grade = securityGrade(security);
+    files.set('security.svg', badge('security', grade, grade, 64));
   }
   return files;
 }

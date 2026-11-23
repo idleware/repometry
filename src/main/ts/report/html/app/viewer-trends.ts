@@ -133,19 +133,27 @@ export function seriesPoints(data: TrendData, shown: readonly PublicHistoryEntry
 /**
  * Where the green and the red flag stand: the best and the worst value of the series, each at the inspection that
  * first reached it, the way a flag is planted where a summit was reached. Neutral metrics get no flags, and neither
- * does a series with fewer than three measurements or no movement at all.
+ * does a series with fewer than three measurements or one that reads as unchanged from its best to its worst.
+ *
+ * The extremes are the raw minimum and maximum, as the line draws them: a tolerant "beats" is not transitive, and a
+ * first value within rounding of both ends used to hide them. A value reaches an extreme when it equals it up to
+ * floating-point noise, so a flag never stands beside a point the line shows lower or higher.
  */
 export function plantFlags(values: readonly (number | null)[], metric: Metric): { best: number | null; worst: number | null } {
   const none = { best: null, worst: null };
-  if (betterOf(metric) === 'none') return none;
+  const better = betterOf(metric);
+  if (better === 'none') return none;
   const measured = values.flatMap((entry, index) => entry === null ? [] : [index]);
   if (measured.length < 3) return none;
-  const extreme = (direction: 'better' | 'worse') => measured.find(index =>
-    !measured.some(other => difference(values[other]!, values[index]!, metric).direction === direction))!;
-  const best = extreme('better');
-  const worst = extreme('worse');
-  if (difference(values[best]!, values[worst]!, metric).direction === 'same') return none;
-  return { best, worst };
+  const raw = measured.map(index => values[index]!);
+  const lowest = Math.min(...raw);
+  const highest = Math.max(...raw);
+  const [bestValue, worstValue] = better === 'lower' ? [lowest, highest] : [highest, lowest];
+  if (difference(bestValue, worstValue, metric).direction === 'same') return none;
+  const reached = (target: number) => measured.find(index => Math.abs(values[index]! - target) <= 1e-9 * Math.max(1, Math.abs(target)))!;
+  const best = reached(bestValue);
+  const worst = reached(worstValue);
+  return best === worst ? none : { best, worst };
 }
 
 function point(report: PublicHistoryEntry, shownValue: string, change: { text: string; direction: string } | null,
@@ -274,7 +282,8 @@ function viewNavigation(data: TrendData, views: readonly TrendView[], current: T
       // Each series carries its value at the selected commit, in the tabs' counter.
       const metric = view === 'debt-changes' || view === 'diff-coverage' ? null : view;
       const reading = metric === null ? null : value(data, selected, metric);
-      if (metric !== null && reading !== null) link.append(element('span', 'tab-count', formatMetric(reading, metric)));
+      // The group's own label carries the signal (the grade, the coverage); a row reads like a summary table.
+      if (metric !== null && reading !== null) link.append(element('span', 'trend-value', formatMetric(reading, metric)));
       if (view === current) link.setAttribute('aria-current', 'page');
       item.append(link);
       list.append(item);
@@ -292,8 +301,8 @@ function viewNavigation(data: TrendData, views: readonly TrendView[], current: T
 }
 
 /**
- * What a group comes to at the selected commit, in the label the Overview uses for it: the maintainability grade in its
- * colour, line coverage (green from 95%), and the size as a plain count of code lines.
+ * What a quality group comes to at the selected commit, in the label the Overview uses for it: the maintainability
+ * grade in its colour and line coverage (green from 95%). Other groups carry no total: it would repeat a row.
  */
 function groupReading(data: TrendData, selected: PublicHistoryEntry, group: string): HTMLElement | null {
   if (group === 'Maintainability') {
@@ -309,10 +318,6 @@ function groupReading(data: TrendData, selected: PublicHistoryEntry, group: stri
     const label = element('span', 'trend-reading', formatMetric(ratio, 'coverage'));
     if (ratio >= .95) label.classList.add('trend-reading-good');
     return label;
-  }
-  if (group === 'Size') {
-    const lines = value(data, selected, 'code-lines');
-    return lines === null ? null : element('span', 'trend-reading', formatMetric(lines, 'code-lines'));
   }
   return null;
 }

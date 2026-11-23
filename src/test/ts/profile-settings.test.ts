@@ -25,15 +25,19 @@ test('the applied profile is projected field by field, and malformed parts are l
   assert.equal(profileSettings(null), undefined);
 });
 
-test('a security badge is made only when scanner counts are given, naming the worst level as one letter', () => {
+test('a security badge is made only when scanner counts are given, grading the worst finding A to F', () => {
   assert.equal(badges(undefined, undefined).has('security.svg'), false);
   const clear = badges(undefined, undefined, { high: 0, medium: 0, low: 0, unknown: 0 }).get('security.svg')!.toString();
-  assert.match(clear, /security: N/);
+  assert.match(clear, /security: A/);
   const high = badges(undefined, undefined, { high: 2, medium: 5, low: 1, unknown: 0 }).get('security.svg')!.toString();
-  assert.match(high, /security: H/);
+  assert.match(high, /security: D/);
   assert.match(high, /#ec8a2c/);
   const critical = badges(undefined, undefined, { critical: 1, high: 2, medium: 0, low: 0, unknown: 0 }).get('security.svg')!.toString();
-  assert.match(critical, /security: C/);
+  assert.match(critical, /security: F/);
   assert.match(critical, /#db4a3f/);
+  const low = badges(undefined, undefined, { high: 0, medium: 0, low: 0, unknown: 3 }).get('security.svg')!.toString();
+  assert.match(low, /security: B/);
+  const medium = badges(undefined, undefined, { high: 0, medium: 1, low: 4, unknown: 0 }).get('security.svg')!.toString();
+  assert.match(medium, /security: C/);
   assert.match(badges(undefined, undefined).get('coverage.svg')!.toString(), /coverage: —/);
 });

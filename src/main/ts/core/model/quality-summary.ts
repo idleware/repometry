@@ -72,6 +72,15 @@ export function coverageGrade(ratio: number): Grade {
   return ratio >= 0.9 ? 'A' : ratio >= 0.8 ? 'B' : ratio >= 0.7 ? 'C' : ratio >= 0.6 ? 'D' : 'F';
 }
 
+/**
+ * Security as a grade, not a risk level: A with no findings, then B, C, D and F by the worst severity found
+ * (low or unclassified, medium, high, critical). A high risk is a low grade.
+ */
+export function securityGrade(counts: { readonly critical?: number; readonly high: number; readonly medium: number;
+  readonly low: number; readonly unknown: number }): Grade {
+  return counts.critical ? 'F' : counts.high ? 'D' : counts.medium ? 'C' : counts.low || counts.unknown ? 'B' : 'A';
+}
+
 function readDebtModel(model: unknown): DebtModel | null {
   if (!isRecord(model) || model.name !== 'basic-cocomo-organic' || !positiveNumber(model.scale)
     || !positiveNumber(model.exponent) || !positiveNumber(model.minutesPerPersonMonth)) return null;

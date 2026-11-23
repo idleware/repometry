@@ -402,6 +402,7 @@
 .fx-language-segment { min-width: 2px; transition: opacity .15s; }
 .fx-language-segment.fx-off { opacity: .2; }
 .fx-language-legend { display: flex; flex-wrap: wrap; gap: .125rem .25rem; margin-left: -.375rem; }
+.fx-language-measure { display: inline-flex; align-items: center; min-height: 1.75rem; margin-left: auto; font-size: .75rem; color: var(--muted); }
 .fx-view .fx-language { display: inline-flex; align-items: center; gap: .375rem; min-height: 1.75rem; padding: 0 .375rem; font-size: .8125rem; color: var(--ink); background: transparent; border: 0; border-radius: 6px; }
 .fx-view .fx-language:hover { background: var(--surface-2); }
 .fx-view .fx-language[aria-pressed="true"] { background: var(--accent-soft); }
@@ -416,6 +417,7 @@
 .fx-view .fx-entry-button:hover { text-decoration: underline; }
 .fx-entry-muted { display: inline-flex; align-items: center; gap: .5rem; color: var(--secondary); }
 .fx-entry-count { margin-left: .5rem; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-entry-tag { flex: none; margin-left: .5rem; padding: 0 .375rem; font-size: .6875rem; font-weight: 500; line-height: 1.125rem; color: var(--secondary); border: 1px solid var(--rule-strong); border-radius: 4px; }
 @media (max-width: 42rem) {
   .fx-metrics-tools .qf { flex-basis: 100%; }
   .fx-segmented button { padding: 0 .625rem; }
@@ -560,7 +562,7 @@ code.fx-function-name { font-size: .75rem; color: var(--secondary); }
 .profile-aside > .profile-footnote { margin-top: .5rem; }
 
 /* Files no plugin read: a grey share at the end of the language bar, and one fold at the end of the Metrics list. */
-.fx-view .fx-language-unread .fx-language-name { font-weight: 500; color: var(--secondary); }
+.fx-view :is(.fx-language-unread, .fx-language-lockfile) .fx-language-name { font-weight: 500; color: var(--secondary); }
 .fx-table .fx-unread td { padding-block: .25rem; background: var(--band); }
 .fx-table tbody .fx-unread:hover { background: var(--band); }
 .fx-view .fx-unread-toggle { display: inline-flex; align-items: center; gap: .5rem; min-height: 2rem; padding: 0; font: inherit; font-size: .8125rem; color: var(--secondary); background: none; border: 0; cursor: pointer; }

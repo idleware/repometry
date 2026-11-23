@@ -78,10 +78,11 @@ function readInventory(value: unknown, excludes: (path: string) => boolean): rea
   const inventory = new Map<string, InventoryFile>();
   for (const item of value as unknown[]) {
     if (!isRecord(item) || typeof item.path !== 'string' || !safePath(item.path) || excludes(item.path) || inventory.has(item.path)
-      || (item.lines !== null && (typeof item.lines !== 'number' || !Number.isSafeInteger(item.lines) || item.lines < 0))) {
+      || (item.lines !== null && (typeof item.lines !== 'number' || !Number.isSafeInteger(item.lines) || item.lines < 0))
+      || (item.bytes !== undefined && (typeof item.bytes !== 'number' || !Number.isSafeInteger(item.bytes) || item.bytes < 0))) {
       throw new Error('Invalid worker inventory file');
     }
-    inventory.set(item.path, { path: item.path, lines: item.lines });
+    inventory.set(item.path, { path: item.path, lines: item.lines, ...(item.bytes === undefined ? {} : { bytes: item.bytes as number }) });
   }
   return [...inventory.values()];
 }

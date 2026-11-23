@@ -97,8 +97,10 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
   }
 
   const pluginData = reportProducts.result();
-  const inventory = new Map((snapshot.inventory ?? []).map(({ path, lines }) => [path, lines]));
-  for (const { path, bytes } of snapshot.files) if (!inventory.has(path)) inventory.set(path, textLineCount(bytes));
+  const inventory = new Map((snapshot.inventory ?? []).map(({ path, lines, bytes }) => [path, { lines, bytes }]));
+  for (const { path, bytes } of snapshot.files) {
+    if (!inventory.has(path)) inventory.set(path, { lines: textLineCount(bytes), bytes: bytes.length });
+  }
   return {
     schema: reportSchema,
     subject: snapshot.subject,
@@ -123,8 +125,8 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
     diagnostics,
     findings,
     ...(pluginData === undefined ? {} : { pluginData: { ...pluginData,
-      inventory: [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, lines]) =>
-        ({ path, lines, language: languageId(path), analysed: parsed.has(path) })) } }),
+      inventory: [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, { lines, bytes }]) =>
+        ({ path, lines, ...(bytes === undefined ? {} : { bytes }), language: languageId(path), analysed: parsed.has(path) })) } }),
   };
 
   function record(task: PlannedOperation, outcome: Outcome, path?: string): void {

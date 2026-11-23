@@ -2,10 +2,11 @@ import type { Finding } from '../../json/wire/domain-types.js';
 import type { FileMetricsReport } from '../../json/wire/file-metrics-model.js';
 import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
 import type { MetricDescriptor } from '../../json/wire/summary-model.js';
-import { formatQuery, languageColor, languageOf, matches, parseQuery, queryField, suggest, usePluginMeasures } from './viewer-filter.js';
+import { formatQuery, ignoredLabel, isLockfile, languageColor, languageOf, languageShares, lockfilesLabel, matches, parseQuery, queryField, sameClause, sized,
+  suggest, usePluginMeasures } from './viewer-filter.js';
 import type { Clause, FileFacts } from './viewer-filter.js';
 import { bandLabels as pluginBandLabels, bandOf, bandScale, catalogIndex, compareValues, entryValue, firstSortAscending, format, rollUp } from './viewer-metric-registry.js';
-import { extendCatalog, pluginMetrics, pluginSpec } from './viewer-metrics.js';
+import { extendCatalog, labelOf, pluginMetrics, pluginSpec, securityRisks, size } from './viewer-metrics.js';
 import type { PluginMetric } from './viewer-metrics.js';
 import { highlightCode, lineSnippet, renderExcerpt, renderSource } from './viewer-source.js';
 
@@ -60,8 +61,8 @@ const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFrac
 const collator = new Intl.Collator(undefined, { numeric: true });
 const pageSize = 50;
 const hotspotChoices = [
-  ['complexity', 'Cyclomatic complexity'],
-  ['cognitive', 'Cognitive complexity'],
+  ['complexity', labelOf('complexity')],
+  ['cognitive', labelOf('cognitive')],
   ['missedLines', 'Uncovered lines'],
   ['duplication', 'Duplicated lines'],
   ['churn', 'Git churn'],
@@ -126,30 +127,41 @@ export function renderFileView(container: HTMLElement, view: View, details: Insp
   }
 }
 
+/** What a scope holds that decides which columns open by default. */
+interface ColumnScope {
+  readonly ignored: boolean;
+  readonly sized: boolean;
+}
+
 interface MetricColumn {
   readonly label: string;
   value(entry: Metrics): string | number | null;
   display(entry: Metrics): string;
   available?(directory?: Directory): boolean;
-  defaultVisible?(directory?: Directory): boolean;
+  /** On unless it says otherwise, given what the scope holds: files no plugin read, and whether every file has a size. */
+  defaultVisible?(directory: Directory | undefined, scope: ColumnScope): boolean;
   /** The first click sorts this way: worst first. Repometry's own columns open descending. */
   readonly ascending?: boolean;
 }
 
 const builtinColumns: readonly [MetricColumn, ...MetricColumn[]] = [
   { label: 'Path', value: entry => entry.path, display: entry => entry.path },
-  { label: 'Code lines', value: entry => entry.quality?.codeLines ?? null, display: entry => count(entry.quality?.codeLines),
+  { label: labelOf('code-lines'), value: entry => entry.quality?.codeLines ?? null, display: entry => count(entry.quality?.codeLines),
     available: directory => directory?.quality?.codeLines !== undefined },
-  { label: 'Physical lines', value: entry => entry.lines, display: entry => count(entry.lines),
-    defaultVisible: directory => directory?.quality?.codeLines === undefined },
+  // Ignored files have physical lines only: where there are some and no sizes, the language bar weighs in physical
+  // lines, and this column shows the numbers behind it. With sizes, the Size column does.
+  { label: labelOf('lines'), value: entry => entry.lines, display: entry => count(entry.lines),
+    defaultVisible: (directory, scope) => (scope.ignored && !scope.sized) || directory?.quality?.codeLines === undefined },
+  { label: 'Size', value: entry => entry.bytes ?? null, display: entry => size(entry.bytes),
+    available: directory => directory?.bytes !== undefined, defaultVisible: (_, scope) => scope.sized },
   { label: 'Functions', value: entry => entry.functions, display: entry => count(entry.functions), defaultVisible: () => false },
-  { label: 'Peak cyclomatic', value: entry => entry.complexity?.maximum ?? null, display: entry => count(entry.complexity?.maximum) },
-  { label: 'Cognitive', value: entry => entry.quality?.cognitiveComplexity ?? null, display: entry => count(entry.quality?.cognitiveComplexity),
+  { label: labelOf('complexity'), value: entry => entry.complexity?.maximum ?? null, display: entry => count(entry.complexity?.maximum) },
+  { label: labelOf('cognitive'), value: entry => entry.quality?.cognitiveComplexity ?? null, display: entry => count(entry.quality?.cognitiveComplexity),
     available: directory => directory?.quality?.cognitiveComplexity !== undefined },
   { label: 'Line coverage', value: coverageRatio, display: coverageText, available: directory => directory ? coverageRatio(directory) !== null : true },
   { label: 'Duplication', value: duplicationRatio, display: duplicationText,
     available: directory => directory?.quality?.duplication !== undefined },
-  { label: 'Remediation', value: entry => entry.quality?.maintainability?.effortMinutes ?? null,
+  { label: labelOf('effort'), value: entry => entry.quality?.maintainability?.effortMinutes ?? null,
     display: entry => duration(entry.quality?.maintainability?.effortMinutes),
     available: directory => directory?.quality?.maintainability !== undefined },
   { label: 'Git changes', value: entry => entry.quality?.churn ?? null,
@@ -172,6 +184,7 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
   const columns: readonly [MetricColumn, ...MetricColumn[]] = [...builtinColumns, ...pluginColumns()];
   const scopeFiles = metrics.files.filter(entry => inside(entry.path, directory));
   const scopeTotals = aggregate(directory, scopeFiles);
+  const scopeIgnored = scopeFiles.some(entry => entry.analysed === false);
   const components = details.components ?? [];
   const facts: FileFacts = {
     components: componentIndex(components),
@@ -228,7 +241,7 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
     const toggle = element('input');
     toggle.type = 'checkbox';
     toggle.value = String(index);
-    toggle.checked = settings.columns.get(index) ?? column.defaultVisible?.(scopeTotals) ?? true;
+    toggle.checked = settings.columns.get(index) ?? column.defaultVisible?.(scopeTotals, { ignored: scopeIgnored, sized: sized(scopeFiles) }) ?? true;
     toggle.addEventListener('change', () => {
       settings.columns.set(index, toggle.checked);
       if (!isVisible(settings.sort)) { settings.sort = 0; settings.ascending = true; }
@@ -341,7 +354,7 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
     const unreadPaths = unreadFolders(scopeFiles);
     const unread = (row: { entry: Metrics; kind: RowKind }) => row.kind === 'file' ? row.entry.analysed === false
       : row.kind === 'folder' && unreadPaths.has(row.entry.path);
-    const folded = clauses.some(clause => clause.kind === 'analysed') ? [] : rows.filter(unread);
+    const folded = clauses.some(clause => clause.kind === 'analysed' || clause.kind === 'lockfile') ? [] : rows.filter(unread);
     const read = folded.length ? rows.filter(row => !folded.includes(row)) : rows;
     const display: ({ entry: Metrics; kind: RowKind } | { kind: 'unread' })[] = !folded.length || !read.length ? rows
       : [...read, { kind: 'unread' }, ...settings.unanalysed ? folded : []];
@@ -372,9 +385,10 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
     navigationState.update(page, Math.ceil(display.length / pageSize));
     note.hidden = rows.length === 0;
     note.textContent = 'A dash marks an unavailable measurement. Totals include measured files.'
-      + (visibleColumns.some(column => column.label === 'Remediation') ? ' Remediation is assigned to each finding’s primary file.' : '');
+      + (visibleColumns.some(column => column.label === labelOf('effort')) ? ` ${labelOf('effort')} is assigned to each finding’s primary file.` : '');
     const aside = selectedFile ? fileDetails(details, selectedFile, { ...navigation, href: (target, options) => target === 'metrics' ? linkTo(options) : navigation.href(target, options) })
-      : directorySummary(aggregate(directory, files), filtering ? `${count(files.length)} of ${count(scopeFiles.length)} files selected` : undefined);
+      : directorySummary(aggregate(directory, files), files.filter(entry => entry.analysed !== false).length,
+        files.filter(entry => isLockfile(entry.path)).length, filtering ? `${count(files.length)} of ${count(scopeFiles.length)} files selected` : undefined);
     // Only the side panel is swapped: moving the list column would take focus out of the query field.
     if (current) current.replaceWith(aside);
     else split.append(aside);
@@ -383,55 +397,49 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
 
   /** The languages of the selection as one bar; each name toggles its chip. */
   function renderLanguages(files: readonly Metrics[]): void {
-    // Where some files are only counted, every share is in physical lines, the one measure all files have, and the
-    // files no plugin read stand together at the end in grey: no data, not a language of their own.
-    const counted = files.some(entry => entry.analysed === false);
-    const weights = new Map<string, number>();
-    let unread = 0;
-    for (const entry of files) {
-      if (entry.analysed === false) {
-        unread += entry.lines ?? 0;
-        continue;
-      }
-      const language = languageOf(entry.path);
-      weights.set(language, (weights.get(language) ?? 0) + ((counted ? entry.lines : entry.quality?.codeLines ?? entry.lines) ?? 0));
-    }
-    const total = [...weights.values()].reduce((sum, value) => sum + value, unread);
-    const ranked = [...weights].filter(([, weight]) => weight > 0).sort((a, b) => b[1] - a[1]);
-    if (unread > 0) ranked.push([notAnalysed, unread]);
-    languages.hidden = ranked.length < 2 || total === 0;
+    // Lockfiles and the files no plugin read stand at the end in muted tones: categories, not languages.
+    const { measure, shares } = languageShares(files);
+    const total = shares.reduce((sum, [, weight]) => sum + weight, 0);
+    languages.hidden = shares.length < 2 || total === 0;
     if (languages.hidden) return;
     const picked = new Set(clauses.flatMap(clause => clause.kind === 'lang' ? [clause.value.toLowerCase()] : []));
+    const categories: Readonly<Record<string, { readonly clause: Clause; readonly color: string; readonly className: string }>> = {
+      [lockfilesLabel]: { clause: { kind: 'lockfile', value: 'yes' }, color: 'var(--lockfile)', className: 'fx-language-lockfile' },
+      [ignoredLabel]: { clause: { kind: 'analysed', value: 'no' }, color: 'var(--grade-none)', className: 'fx-language-unread' },
+    };
+    const chosen = (clause: Clause) => clauses.some(other => sameClause(other, clause));
+    const anyPicked = picked.size > 0 || Object.values(categories).some(category => chosen(category.clause));
     const bar = element('div', 'fx-language-bar');
     bar.setAttribute('aria-hidden', 'true');
     const legend = element('div', 'fx-language-legend');
     legend.setAttribute('role', 'group');
-    legend.setAttribute('aria-label', counted ? 'Languages by lines' : 'Languages by code lines');
-    const unreadPicked = clauses.some(clause => clause.kind === 'analysed' && clause.value === 'no');
-    for (const [language, weight] of ranked) {
-      const share = weight / total;
-      const grey = language === notAnalysed;
-      const pressed = grey ? unreadPicked : picked.has(language.toLowerCase());
-      const on = grey ? !picked.size || unreadPicked : (picked.size === 0 && !unreadPicked) || picked.has(language.toLowerCase());
-      const segment = element('span', on ? 'fx-language-segment' : 'fx-language-segment fx-off');
+    const measured = measure === 'bytes' ? 'size' : labelOf(measure).toLowerCase();
+    legend.setAttribute('aria-label', `Languages by ${measured}`);
+    for (const [language, weight] of shares) {
+      const category = categories[language];
+      const pressed = category ? chosen(category.clause) : picked.has(language.toLowerCase());
+      const color = category?.color ?? languageColor(language);
+      const segment = element('span', !anyPicked || pressed ? 'fx-language-segment' : 'fx-language-segment fx-off');
       segment.style.flexGrow = String(weight);
-      segment.style.background = grey ? 'var(--grade-none)' : languageColor(language);
+      segment.style.background = color;
       bar.append(segment);
-      const toggle = element('button', grey ? 'fx-language fx-language-unread' : 'fx-language');
+      const toggle = element('button', category ? `fx-language ${category.className}` : 'fx-language');
       toggle.type = 'button';
       toggle.setAttribute('aria-pressed', String(pressed));
       const dot = element('span', 'fx-language-dot');
-      dot.style.background = grey ? 'var(--grade-none)' : languageColor(language);
-      toggle.append(dot, element('span', 'fx-language-name', language), element('span', 'fx-language-share', percent.format(share)));
+      dot.style.background = color;
+      toggle.append(dot, element('span', 'fx-language-name', language), element('span', 'fx-language-share', percent.format(weight / total)));
       toggle.addEventListener('click', () => {
-        const clause: Clause = grey ? { kind: 'analysed', value: 'no' } : { kind: 'lang', value: language };
+        const clause: Clause = category?.clause ?? { kind: 'lang', value: language };
         field.set(pressed
-          ? clauses.filter(other => grey ? other.kind !== 'analysed'
+          ? clauses.filter(other => category ? other.kind !== clause.kind
             : !(other.kind === 'lang' && other.value.toLowerCase() === language.toLowerCase()))
           : [...clauses, clause]);
       });
       legend.append(toggle);
     }
+    // The bar says what it weighs, so its shares can be checked against a column of the table.
+    legend.append(element('span', 'fx-language-measure', `Share of ${measured}`));
     languages.replaceChildren(bar, legend);
   }
 
@@ -481,6 +489,8 @@ function aggregate(path: string, files: readonly Metrics[]): Directory {
     sizeMeasuredFiles: files.filter(entry => entry.lines !== null).length, coverageMeasuredFiles: covered.length,
     ...(Object.keys(quality).length ? { quality } : {}),
     ...(values ? { values } : {}),
+    // A partial sum would understate the size: only a scope where every file has one gets a total.
+    ...(sized(files) ? { bytes: sum(entry => entry.bytes) ?? 0 } : {}),
   };
 }
 
@@ -523,7 +533,8 @@ function metricsRow(entry: Metrics, kind: RowKind, group: Group, visibleColumns:
   }
   const icon = element('span', kind === 'file' ? 'fx-file-icon' : kind === 'folder' ? 'fx-folder-icon' : 'fx-component-icon');
   icon.setAttribute('aria-hidden', 'true');
-  if (kind === 'file') icon.style.color = languageColor(languageOf(entry.path));
+  const lockfile = kind === 'file' && isLockfile(entry.path);
+  if (kind === 'file') icon.style.color = lockfile ? 'var(--lockfile)' : languageColor(languageOf(entry.path));
   anchor.prepend(icon);
   if (kind !== 'component') anchor.setAttribute('title', entry.path);
   if (entry.path === selectedFile) {
@@ -531,6 +542,7 @@ function metricsRow(entry: Metrics, kind: RowKind, group: Group, visibleColumns:
     row.dataset.selected = '';
   }
   name.append(anchor);
+  if (lockfile) name.append(element('span', 'fx-entry-tag', 'Lockfile'));
   if (kind !== 'file' && 'files' in entry) name.append(element('span', 'fx-entry-count', count((entry as Directory).files)));
   row.append(name, ...visibleColumns.map(column => {
     const cell = element('td', 'numeric', column.display(entry));
@@ -541,8 +553,6 @@ function metricsRow(entry: Metrics, kind: RowKind, group: Group, visibleColumns:
   return row;
 }
 
-/** The name the language bar gives the files no plugin read. */
-const notAnalysed = 'Not analysed';
 
 /** The folders all of whose files are only counted, found in one pass over the files. */
 export function unreadFolders(files: readonly Pick<Metrics, 'path' | 'analysed'>[]): Set<string> {
@@ -559,14 +569,18 @@ export function unreadFolders(files: readonly Pick<Metrics, 'path' | 'analysed'>
 
 /** The fold at the end of the list: how many entries no plugin read, opening and closing in place. */
 function unreadRow(entries: readonly { entry: Metrics; kind: RowKind }[], span: number, expanded: boolean, toggle: () => void): HTMLTableRowElement {
-  const files = entries.filter(row => row.kind === 'file').length;
-  const folders = entries.length - files;
-  const parts = [files ? `${count(files)} ${files === 1 ? 'file' : 'files'}` : '', folders ? `${count(folders)} ${folders === 1 ? 'folder' : 'folders'}` : '']
-    .filter(Boolean);
+  const lockfiles = entries.filter(row => row.kind === 'file' && isLockfile(row.entry.path)).length;
+  const files = entries.filter(row => row.kind === 'file').length - lockfiles;
+  const folders = entries.length - files - lockfiles;
+  const parts = [
+    lockfiles ? `${count(lockfiles)} ${lockfiles === 1 ? 'lockfile' : 'lockfiles'}` : '',
+    files ? `${count(files)} ${files === 1 ? 'file' : 'files'}` : '',
+    folders ? `${count(folders)} ${folders === 1 ? 'folder' : 'folders'}` : '',
+  ].filter(Boolean);
   const row = element('tr', 'fx-unread');
   const cell = element('td');
   cell.colSpan = span;
-  const button = element('button', 'fx-unread-toggle', `${parts.join(' and ')} not analysed`);
+  const button = element('button', 'fx-unread-toggle', `${[parts.slice(0, -1).join(', '), parts.at(-1)].filter(Boolean).join(' and ')} ignored`);
   button.type = 'button';
   button.setAttribute('aria-expanded', String(expanded));
   button.addEventListener('click', toggle);
@@ -575,7 +589,7 @@ function unreadRow(entries: readonly { entry: Metrics; kind: RowKind }[], span: 
   return row;
 }
 
-function directorySummary(entry: Directory, selection?: string): HTMLElement {
+function directorySummary(entry: Directory, analysed: number, lockfiles: number, selection?: string): HTMLElement {
   const panel = element('aside', 'fx-aside');
   panel.setAttribute('aria-label', selection ? 'Selection totals' : 'Folder totals');
   const heading = element('div', 'fx-aside-heading');
@@ -586,14 +600,20 @@ function directorySummary(entry: Directory, selection?: string): HTMLElement {
   // A measurement the inspection did not take leaves no row behind.
   const quality = entry.quality;
   facts.append(...[
-    fact('Files', count(entry.files)),
-    quality?.codeLines !== undefined ? fact('Code lines', count(quality.codeLines)) : fact('Physical lines', count(entry.lines)),
-    entry.functions === null ? null : fact('Functions', count(entry.functions)),
-    fact('Peak cyclomatic', count(entry.complexity?.maximum)),
-    quality?.cognitiveComplexity === undefined ? null : fact('Cognitive', count(quality.cognitiveComplexity)),
-    quality?.duplication === undefined ? null : fact('Duplication', duplicationText(entry)),
-    quality?.maintainability === undefined ? null : fact('Remediation', duration(quality.maintainability.effortMinutes)),
-    coverageRatio(entry) === null ? null : fact('Line coverage', coverageText(entry)),
+    // Every tracked file counts here; Trends counts the analysed ones, so both say which they are.
+    fact('Tracked files', count(entry.files)),
+    analysed === entry.files ? null : fact(labelOf('files'), count(analysed)),
+    lockfiles ? fact(lockfilesLabel, count(lockfiles)) : null,
+    quality?.codeLines !== undefined ? fact(labelOf('code-lines'), count(quality.codeLines)) : null,
+    // Physical lines are what the language bar weighs once some files are ignored, so its total stands here too.
+    quality?.codeLines === undefined || analysed !== entry.files ? fact(labelOf('lines'), count(entry.lines)) : null,
+    entry.bytes === undefined ? null : fact('Size', size(entry.bytes)),
+    entry.functions === null ? null : fact(labelOf('functions'), count(entry.functions)),
+    fact(labelOf('complexity'), count(entry.complexity?.maximum)),
+    quality?.cognitiveComplexity === undefined ? null : fact(labelOf('cognitive'), count(quality.cognitiveComplexity)),
+    quality?.duplication === undefined ? null : fact(labelOf('duplication'), duplicationText(entry)),
+    quality?.maintainability === undefined ? null : fact(labelOf('effort'), duration(quality.maintainability.effortMinutes)),
+    coverageRatio(entry) === null ? null : fact(labelOf('coverage'), coverageText(entry)),
     // Other plugins' totals follow Repometry's own, where this inspection ran them and they roll up.
     ...pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && spec.descriptor.aggregate !== 'none' && measured(spec.descriptor))
       .map(spec => fact(spec.short, format(spec, entryValue(local.index, entry, spec)))),
@@ -621,16 +641,17 @@ function fileDetails(details: InspectionDetails, entry: Metrics, navigation: Nav
   if (entry.path.includes('/')) heading.append(element('p', 'fx-aside-path', parentPath(entry.path) + '/'));
   const facts = element('dl', 'fx-kv');
   const quality = entry.quality;
-  if (quality?.codeLines !== undefined) facts.append(fact('Code lines', count(quality.codeLines)));
-  facts.append(fact('Physical lines', count(entry.lines)));
-  if (quality?.commentLines !== undefined) facts.append(fact('Comment lines', count(quality.commentLines)));
-  facts.append(fact('Functions', count(entry.functions)));
-  if (quality?.classes) facts.append(fact('Classes', count(quality.classes)));
-  facts.append(fact('Peak cyclomatic', count(entry.complexity?.maximum)));
-  if (quality?.cognitiveComplexity !== undefined) facts.append(fact('Cognitive', count(quality.cognitiveComplexity)));
-  facts.append(fact('Line coverage', coverageText(entry), coverageContext(entry)));
-  if (quality?.duplication) facts.append(fact('Duplication', duplicationText(entry), duplicationContext(entry)));
-  if (quality?.maintainability) facts.append(fact('Remediation', duration(quality.maintainability.effortMinutes)));
+  if (quality?.codeLines !== undefined) facts.append(fact(labelOf('code-lines'), count(quality.codeLines)));
+  facts.append(fact(labelOf('lines'), count(entry.lines)));
+  if (entry.bytes !== undefined) facts.append(fact('Size', size(entry.bytes)));
+  if (quality?.commentLines !== undefined) facts.append(fact(labelOf('comments'), count(quality.commentLines)));
+  facts.append(fact(labelOf('functions'), count(entry.functions)));
+  if (quality?.classes) facts.append(fact(labelOf('classes'), count(quality.classes)));
+  facts.append(fact(labelOf('complexity'), count(entry.complexity?.maximum)));
+  if (quality?.cognitiveComplexity !== undefined) facts.append(fact(labelOf('cognitive'), count(quality.cognitiveComplexity)));
+  facts.append(fact(labelOf('coverage'), coverageText(entry), coverageContext(entry)));
+  if (quality?.duplication) facts.append(fact(labelOf('duplication'), duplicationText(entry), duplicationContext(entry)));
+  if (quality?.maintainability) facts.append(fact(labelOf('effort'), duration(quality.maintainability.effortMinutes)));
   if (quality?.churn !== undefined) {
     const window = details.metrics.churnWindow;
     facts.append(fact('Git changes', count(quality.churn), window ? `${count(window.lookbackDays)}-day window` : undefined));
@@ -775,6 +796,18 @@ interface Branch {
   readonly score: number;
 }
 
+/**
+ * The top of a relative colour scale, per level: files against files, folders against the folders at their depth. One
+ * scale for both would let a folder's sum outshine every file in it, and the map would read hot folders over pale files.
+ */
+export function relativePeaks(entries: readonly { readonly path: string; readonly folder: boolean; readonly score: number }[]):
+  (path: string, folder: boolean) => number {
+  const level = (path: string, folder: boolean) => folder ? `folder:${path.split('/').length}` : 'file';
+  const peaks = new Map<string, number>();
+  for (const { path, folder, score } of entries) peaks.set(level(path, folder), Math.max(peaks.get(level(path, folder)) ?? 1, score));
+  return (path, folder) => peaks.get(level(path, folder)) ?? 1;
+}
+
 const maxRanked = 10;
 const chartCenter = 200;
 const innerRadius = 47;
@@ -883,15 +916,12 @@ export function renderSunburst(details: InspectionDetails, options: SunburstOpti
 
   const units = useCodeLines ? 'code lines' : 'physical lines';
   let depth = 1;
-  let highest = 1;
   const originalDepth = directory ? directory.split('/').length : 0;
   for (const group of byParent.values()) {
     group.sort((a, b) => collator.compare(a.entry.path, b.entry.path));
-    for (const entry of group) {
-      highest = Math.max(highest, entry.score);
-      depth = Math.max(depth, entry.entry.path.split('/').length - originalDepth);
-    }
+    for (const entry of group) depth = Math.max(depth, entry.entry.path.split('/').length - originalDepth);
   }
+  const peakOf = relativePeaks([...byParent.values()].flat().map(branch => ({ path: branch.entry.path, folder: branch.folder, score: branch.score })));
   const chartDepth = Math.min(depth, compact ? 4 : 5);
   const ring = (outerRadius - innerRadius) / chartDepth;
   const plugin = pluginSpec(metric);
@@ -903,7 +933,7 @@ export function renderSunburst(details: InspectionDetails, options: SunburstOpti
   // security map colours them all.
   const unread = unreadFolders(metrics.files);
   const shadeOf = (branch: Branch): number | 'none' => levels ? branch.score
-    : branch.entry.analysed === false || unread.has(branch.entry.path) ? 'none' : band(branch.entry, metric, branch.score, highest, limits);
+    : branch.entry.analysed === false || unread.has(branch.entry.path) ? 'none' : band(branch.entry, metric, branch.score, peakOf(branch.entry.path, branch.folder), limits);
   const reading = (branch: Branch) => levels ? securityLevels[branch.score]! : `${count(branch.score)} ${scoreLabel(metric)}`;
   // What the map encodes is said to assistive technology; on screen the legend's scale carries it.
   const description = `${shape === 'tiles' ? 'Tile' : 'Wedge'} size shows ${units}. ${levels ? 'Colour shows the worst security finding.' : meaningOf(metric)}`;
@@ -1192,8 +1222,16 @@ function liftToTitle(split: HTMLElement, headingSelector: string): void {
       split.style.removeProperty('--lift');
       return;
     }
+    // The column may be sticky, and once the page scrolls its box no longer sits where the layout put it. So the
+    // heading is measured inside its column, and the column's place is taken from the grid, which never sticks:
+    // unlifted, a first-row column starts at the top of the grid's content box.
+    let column: Element = heading;
+    while (column.parentElement && column.parentElement !== split) column = column.parentElement;
+    const style = getComputedStyle(split);
+    const top = split.getBoundingClientRect().top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+    const offset = baseline(heading) - column.getBoundingClientRect().top;
     const current = parseFloat(split.style.getPropertyValue('--lift')) || 0;
-    const next = Math.max(0, Math.round(current + baseline(heading) - baseline(title)));
+    const next = Math.max(0, Math.round(top + offset - baseline(title)));
     if (next !== current) split.style.setProperty('--lift', `${next}px`);
   };
   const observer = new ResizeObserver(() => {
@@ -1264,10 +1302,10 @@ function rememberMapShape(shape: MapShape): void {
 
 const bandMeaning: Record<BuiltinHotspot, string> = {
   complexity: 'Colour shows the most complex function.',
-  cognitive: 'Colour shows cognitive complexity relative to the highest file.',
+  cognitive: 'Colour shows cognitive complexity relative to the highest file, or folder at the same depth.',
   missedLines: 'Colour shows the share of uncovered lines.',
   duplication: 'Colour shows the share of duplicated code lines.',
-  churn: 'Colour shows Git changes relative to the busiest file.',
+  churn: 'Colour shows Git changes relative to the busiest file, or folder at the same depth.',
 };
 /** The band limits used when the profile sets none. */
 const defaultLimits = { complexity: [5, 10, 20, 50], missedLines: [.05, .15, .3, .5], duplication: [.03, .1, .25] } as const;
@@ -1299,7 +1337,7 @@ function bandLabels(metric: ScaledMetric, limits: readonly number[]): string[] {
 function meaningOf(metric: HotspotMetric): string {
   const plugin = pluginSpec(metric);
   if (!plugin) return bandMeaning[metric as BuiltinHotspot];
-  return `Colour shows ${plugin.label.toLowerCase()}${plugin.descriptor.bands ? '' : ' relative to the highest file'}.`;
+  return `Colour shows ${plugin.label.toLowerCase()}${plugin.descriptor.bands ? '' : ' relative to the highest file, or folder at the same depth'}.`;
 }
 
 export function band(entry: Metrics, metric: HotspotMetric, score: number, highest: number,
@@ -1322,8 +1360,8 @@ export function band(entry: Metrics, metric: HotspotMetric, score: number, highe
   return Math.min(4, Math.floor(score / highest * 5));
 }
 
-/** Security levels on the map, as the security mark names them: none, low, medium, high, critical. */
-const securityLevels = ['No security findings', 'Low', 'Medium', 'High', 'Critical'] as const;
+/** What a place on the security map reads as: the risk of its worst finding, the words the security grade uses. */
+const securityLevels = securityRisks;
 
 /** Each file's worst level spread to the folders above it. */
 export function spreadLevels(files: ReadonlyMap<string, number>): Map<string, number> {
@@ -1403,8 +1441,8 @@ function pluginRanking(files: readonly Metrics[], spec: NonNullable<ReturnType<t
 }
 
 const rankTitles: Record<BuiltinHotspot, string> = {
-  complexity: 'Peak cyclomatic complexity',
-  cognitive: 'Cognitive complexity',
+  complexity: labelOf('complexity'),
+  cognitive: labelOf('cognitive'),
   missedLines: 'Uncovered lines',
   duplication: 'Duplicated lines',
   churn: 'Git changes',
@@ -1591,7 +1629,7 @@ function issueSummary(findings: readonly Finding[], rules: number, navigation: N
   const facts = element('dl', 'fx-kv');
   facts.append(fact('Findings', count(findings.length)), fact('Rules', count(rules)));
   const effort = findings.reduce((sum, item) => sum + (item.effortMinutes ?? 0), 0);
-  if (findings.some(item => item.effortMinutes !== undefined)) facts.append(fact('Estimated effort', duration(effort)));
+  if (findings.some(item => item.effortMinutes !== undefined)) facts.append(fact(labelOf('effort'), duration(effort)));
   // One severity would only repeat the total.
   const levels = (['high', 'medium', 'low', 'unknown'] as const).map(value => [value, findings.filter(item => item.level === value).length] as const)
     .filter(([, total]) => total > 0);

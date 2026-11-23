@@ -12,7 +12,7 @@ import { readComponents } from '../report/json/store/components.js';
 import { listPullReviews } from '../report/json/store/pull-review-store.js';
 import { readConfig } from './config.js';
 import type { Invocation } from './arguments.js';
-import { findRepository, isDirectory, selectStore } from './store.js';
+import { findRepository, invocationDirectory, isDirectory, selectStore } from './store.js';
 import type { Store } from './store.js';
 
 const reporters = { html: '.repometry/report/html', json: '.repometry/report/history.json' } as const;
@@ -31,7 +31,8 @@ export async function outputReports(root: string, store: Store, requested: reado
     const path = equal < 0 ? undefined : spec.slice(equal + 1);
     if (!Object.hasOwn(reporters, format)) throw new Error(`Unknown reporter: ${format}. Choose ${reporterIds.join(', ')}.`);
     if (path === '' || (output !== undefined && path !== undefined)) throw new Error('Specify one output per report with FORMAT=PATH or --output');
-    return { format: format as keyof typeof reporters, path: resolve(root, output ?? path ?? reporters[format as keyof typeof reporters]) };
+    return { format: format as keyof typeof reporters, path: output ?? path
+      ? resolve(invocationDirectory(input), (output ?? path)!) : resolve(root, reporters[format as keyof typeof reporters]) };
   });
   if (new Set(requests.map(request => request.path)).size !== requests.length) throw new Error('Each report requires a separate output');
   if (requests.length === 0) return requests;
@@ -40,7 +41,7 @@ export async function outputReports(root: string, store: Store, requested: reado
   const sourceOption = input.text('sources') ?? config.sources;
   const sources = mode === 'private' ? resolveSourceLocator(sourceOption, { remotes: await sourceRemotes(root), env: process.env }) : undefined;
   const [components, pulls] = mode === 'private' ? await Promise.all([
-    readComponents(resolve(root, input.text('components') ?? '.repometry/components.json'), input.text('components') === undefined),
+    readComponents(componentsPath(root, input), input.text('components') === undefined),
     store.path ? listPullReviews(store.path) : [],
   ]) : [undefined, undefined];
   const options = { mode, sources, components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
@@ -84,10 +85,10 @@ export async function viewTarget(input: Invocation, port: number) {
     throw new Error(`No report at ${target}: expected a repository, a .repometry folder or an exported report`);
   }
   const root = repository ?? target;
-  const store = selectStore(root, input.text('store') ?? (dataStore ? data : directStore ? target : undefined));
-  if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error('No saved inspections. Run repometry analyze first.');
+  const store = selectStore(root, input.text('store') ?? (dataStore ? data : directStore ? target : undefined), resolve('.'));
+  if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error(`No saved inspections in ${store.path ?? input.text('store')}. Run repometry analyze first.`);
   const [components, pulls, config] = await Promise.all([
-    readComponents(resolve(root, input.text('components') ?? '.repometry/components.json'), input.text('components') === undefined),
+    readComponents(componentsPath(root, input), input.text('components') === undefined),
     store.path ? listPullReviews(store.path) : [],
     readConfig(root, input),
   ]);
@@ -96,4 +97,9 @@ export async function viewTarget(input: Invocation, port: number) {
     branch: input.text('branch') ?? config.branch, readCommitMetadata: repository ? commitMetadataReader(repository) : undefined,
     sources: local ? resolveSourceLocator('local', { remotes: [], env: {} }) : undefined, footer: !input.flag('no-footer') }, local);
   return { ...server, label: `${basename(root)} (live from ${store.path ?? input.text('store')})` };
+}
+
+function componentsPath(root: string, input: Invocation): string {
+  const explicit = input.text('components');
+  return explicit === undefined ? resolve(root, '.repometry/components.json') : resolve(invocationDirectory(input), explicit);
 }

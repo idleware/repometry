@@ -47,6 +47,15 @@ test('flags stand on the best and the worst value, where each was first reached'
   assert.deepEqual(plantFlags([0.4, 0.4, 0.4], 'debt'), { best: null, worst: null });
 });
 
+test('a first value within rounding of both extremes still leaves both flags, each where the line first reaches it', () => {
+  // zurk's debt ratio over all inspections: 0.144% first, 0.114% at best and 0.188% at worst, a range shown as 0.1 pp.
+  // A tolerant "beats" let the first value stand for both ends, and the flags vanished.
+  assert.deepEqual(plantFlags([0.00144, 0.0013, 0.00114, 0.00114, null, 0.00188, 0.00188], 'debt'), { best: 2, worst: 5 });
+  assert.deepEqual(plantFlags([0.00188, 0.00144, 0.00114], 'debt'), { best: 2, worst: 0 });
+  assert.deepEqual(plantFlags([0.1 + 0.2, 0.5, 0.3], 'coverage'), { best: 1, worst: 0 });
+  assert.deepEqual(plantFlags([0.00144, 0.00114, 0.00135], 'debt'), { best: null, worst: null });
+});
+
 test('commits within an hour get minute ticks', () => {
   const ticks = timeTicks(Date.parse('2026-11-19T22:00:00Z'), Date.parse('2026-11-19T22:55:00Z'), 640);
   assert.ok(ticks.length >= 3, `${ticks.length} ticks`);

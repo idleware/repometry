@@ -1,6 +1,7 @@
 // The Metrics query: one field of chips over files. Languages, components, measurements and paths share one grammar,
 // so a selection reads as text, travels in the URL and comes back as chips.
 import type { FileMetricsReport } from '../../json/wire/file-metrics-model.js';
+import { labelOf } from './viewer-metrics.js';
 
 type FileEntry = FileMetricsReport['files'][number];
 
@@ -15,8 +16,10 @@ export type Clause =
   | { readonly kind: 'path'; readonly value: string }
   | { readonly kind: 'measure'; readonly measure: Measure; readonly operator: Operator; readonly value: number }
   | { readonly kind: 'has'; readonly value: 'findings' | 'diagnostics' }
-  /** Whether a plugin read the file: `analysed:no` lists what is only counted. */
-  | { readonly kind: 'analysed'; readonly value: 'yes' | 'no' };
+  /** Whether a plugin read the file: `ignored:yes` lists what is only counted, lockfiles aside. */
+  | { readonly kind: 'analysed'; readonly value: 'yes' | 'no' }
+  /** Generated dependency lockfiles: `lockfile:yes`. */
+  | { readonly kind: 'lockfile'; readonly value: 'yes' | 'no' };
 
 /** What a file brings to the query beyond its metrics: the components it belongs to and its open findings. */
 export interface FileFacts {
@@ -32,17 +35,17 @@ export interface MeasureSpec {
 }
 
 const measures: Record<BuiltinMeasure, MeasureSpec> = {
-  complexity: { label: 'Peak cyclomatic', read: entry => entry.complexity?.maximum ?? null },
-  cognitive: { label: 'Cognitive', read: entry => entry.quality?.cognitiveComplexity ?? null },
-  lines: { label: 'Code lines', read: entry => entry.quality?.codeLines ?? entry.lines },
+  complexity: { label: labelOf('complexity'), read: entry => entry.complexity?.maximum ?? null },
+  cognitive: { label: labelOf('cognitive'), read: entry => entry.quality?.cognitiveComplexity ?? null },
+  lines: { label: labelOf('code-lines'), read: entry => entry.quality?.codeLines ?? entry.lines },
   functions: { label: 'Functions', read: entry => entry.functions },
-  coverage: { label: 'Line coverage', percent: true,
+  coverage: { label: labelOf('coverage'), percent: true,
     read: entry => entry.lineCoverage && entry.lineCoverage.total > 0 ? entry.lineCoverage.covered / entry.lineCoverage.total : null },
   duplication: { label: 'Duplication', percent: true, read: entry => {
     const duplication = entry.quality?.duplication;
     return duplication && duplication.codeLines > 0 ? duplication.duplicatedLines / duplication.codeLines : null;
   } },
-  remediation: { label: 'Remediation', minutes: true, read: entry => entry.quality?.maintainability?.effortMinutes ?? null },
+  remediation: { label: labelOf('effort'), minutes: true, read: entry => entry.quality?.maintainability?.effortMinutes ?? null },
   changes: { label: 'Git changes', read: entry => entry.quality?.churn ?? null },
 };
 
@@ -55,6 +58,66 @@ export function usePluginMeasures(entries: Iterable<readonly [string, MeasureSpe
 
 function measureOf(name: string): MeasureSpec | undefined {
   return name in measures ? measures[name as BuiltinMeasure] : pluginMeasures.get(name);
+}
+
+/**
+ * Dependency lockfiles, by exact file name. They are generated, often the largest files in a repository, and no
+ * plugin reads them: the language bar and the Metrics list give them a category of their own beside the ignored files.
+ */
+export const lockfileNames: ReadonlySet<string> = new Set([
+  'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', 'deno.lock',
+  'Cargo.lock', 'Gemfile.lock', 'composer.lock', 'poetry.lock', 'Pipfile.lock', 'uv.lock', 'go.sum', 'flake.lock',
+  'mix.lock', 'pubspec.lock', 'packages.lock.json', 'gradle.lockfile',
+]);
+
+/** Whether a path names a lockfile: its file name, at any depth, exactly as the tools write it. */
+export function isLockfile(path: string): boolean {
+  return lockfileNames.has(path.slice(path.lastIndexOf('/') + 1));
+}
+
+/** Whether no plugin read a file and it is not a lockfile: what the interface calls ignored. */
+export function isIgnored(entry: Pick<FileEntry, 'path' | 'analysed'>): boolean {
+  return entry.analysed === false && !isLockfile(entry.path);
+}
+
+/** The language bar's names for the two categories that are not languages. */
+export const lockfilesLabel = 'Lockfiles';
+export const ignoredLabel = 'Ignored';
+
+/** What the language bar weighs: size in bytes, physical lines, or code lines. */
+export type ShareMeasure = 'bytes' | 'lines' | 'code-lines';
+
+/** Whether every file carries its size: inspections made before sizes were recorded carry none. */
+export function sized(files: readonly Pick<FileEntry, 'bytes'>[]): boolean {
+  return files.length > 0 && files.every(entry => entry.bytes !== undefined);
+}
+
+/**
+ * What the language bar weighs, largest language first, then lockfiles, then the ignored files. Size in bytes when
+ * every file has it: one measure for code, lockfiles and ignored files alike, untouched by formatting. Without sizes,
+ * physical lines where any file is only counted (the one line measure all files have), otherwise code lines.
+ */
+export function languageShares(files: readonly Pick<FileEntry, 'path' | 'analysed' | 'lines' | 'quality' | 'bytes'>[]):
+  { readonly measure: ShareMeasure; readonly shares: readonly (readonly [string, number])[] } {
+  const measure: ShareMeasure = sized(files) ? 'bytes'
+    : files.some(entry => entry.analysed === false || isLockfile(entry.path)) ? 'lines' : 'code-lines';
+  const weightOf = (entry: (typeof files)[number]) => (measure === 'bytes' ? entry.bytes
+    : measure === 'lines' ? entry.lines : entry.quality?.codeLines ?? entry.lines) ?? 0;
+  const weights = new Map<string, number>();
+  let lockfiles = 0;
+  let ignored = 0;
+  for (const entry of files) {
+    if (isLockfile(entry.path)) lockfiles += weightOf(entry);
+    else if (entry.analysed === false) ignored += weightOf(entry);
+    else {
+      const language = languageOf(entry.path);
+      weights.set(language, (weights.get(language) ?? 0) + weightOf(entry));
+    }
+  }
+  const shares: (readonly [string, number])[] = [...weights].filter(([, weight]) => weight > 0).sort((a, b) => b[1] - a[1]);
+  if (lockfiles > 0) shares.push([lockfilesLabel, lockfiles]);
+  if (ignored > 0) shares.push([ignoredLabel, ignored]);
+  return { measure, shares };
 }
 
 /** Ready-made conditions offered before anything is typed: the questions people ask of a codebase most. */
@@ -126,7 +189,10 @@ function keyed(key: string, value: string): Clause | null {
     case 'component': return { kind: 'component', value };
     case 'path': case 'in': return { kind: 'path', value };
     case 'has': return value === 'findings' || value === 'diagnostics' ? { kind: 'has', value } : null;
+    // The interface and the query call the files no plugin read "ignored"; `analysed:` stays as a silent alias.
     case 'analysed': case 'analyzed': return value === 'yes' || value === 'no' ? { kind: 'analysed', value } : null;
+    case 'ignored': return value === 'yes' || value === 'no' ? { kind: 'analysed', value: value === 'yes' ? 'no' : 'yes' } : null;
+    case 'lockfile': case 'lockfiles': return value === 'yes' || value === 'no' ? { kind: 'lockfile', value } : null;
     default: return null;
   }
 }
@@ -142,7 +208,8 @@ export function clauseText(clause: Clause): string {
     case 'component': return `component:${quoted(clause.value)}`;
     case 'path': return /^\w+:|[<>=]/.test(clause.value) || /\s/.test(clause.value) ? `path:${quoted(clause.value)}` : clause.value;
     case 'has': return `has:${clause.value}`;
-    case 'analysed': return `analysed:${clause.value}`;
+    case 'analysed': return `ignored:${clause.value === 'no' ? 'yes' : 'no'}`;
+    case 'lockfile': return `lockfile:${clause.value}`;
     case 'measure': {
       const percent = measureOf(clause.measure)?.percent;
       const value = percent ? `${Math.round(clause.value * 1000) / 10}%` : String(clause.value);
@@ -158,7 +225,8 @@ export function clauseLabel(clause: Clause): { key: string; value: string } {
     case 'component': return { key: 'Component', value: clause.value };
     case 'path': return { key: 'Path', value: clause.value };
     case 'has': return { key: 'Has', value: clause.value };
-    case 'analysed': return { key: 'Analysed', value: clause.value === 'no' ? 'No' : 'Yes' };
+    case 'analysed': return { key: 'Ignored', value: clause.value === 'no' ? 'Yes' : 'No' };
+    case 'lockfile': return { key: 'Lockfile', value: clause.value === 'yes' ? 'Yes' : 'No' };
     case 'measure': {
       const { label, percent, minutes } = measureOf(clause.measure) ?? { label: clause.measure };
       const value = percent ? `${Math.round(clause.value * 1000) / 10}%` : minutes ? `${clause.value} min` : String(clause.value);
@@ -187,7 +255,8 @@ export function matches(entry: FileEntry, clauses: readonly Clause[], facts: Fil
   if (!any('path', value => path.includes(value.toLowerCase()))) return false;
   return clauses.every(clause => {
     if (clause.kind === 'has') return clause.value === 'findings' ? (facts.findings.get(entry.path) ?? 0) > 0 : entry.diagnosticCount > 0;
-    if (clause.kind === 'analysed') return (entry.analysed !== false) === (clause.value === 'yes');
+    if (clause.kind === 'analysed') return isIgnored(entry) === (clause.value === 'no');
+    if (clause.kind === 'lockfile') return isLockfile(entry.path) === (clause.value === 'yes');
     if (clause.kind !== 'measure') return true;
     const value = measureOf(clause.measure)?.read(entry) ?? null;
     if (value === null) return false;
@@ -231,13 +300,20 @@ export function suggest(text: string, files: readonly FileEntry[], facts: FileFa
     }
   }
   // Files only counted, never read by a plugin, are one condition away once the text names them.
-  const unread = files.filter(file => file.analysed === false).length;
+  const named = (words: readonly string[]) => query.length >= 3
+    && words.some(phrase => phrase.startsWith(query) || (phrase.includes(' ') && phrase.includes(query)));
+  const unread = files.filter(isIgnored).length;
   const notAnalysed: Clause = { kind: 'analysed', value: 'no' };
-  if (unread && query.length >= 3 && !taken(notAnalysed) && ('not analysed'.includes(query) || 'analysed:no'.startsWith(query))) {
-    result.push({ group: 'Conditions', label: 'Not analysed', detail: quantity(unread), clause: notAnalysed });
+  if (unread && !taken(notAnalysed) && named(['ignored files', 'ignored:yes', 'not analysed', 'analysed:no'])) {
+    result.push({ group: 'Conditions', label: 'Ignored files', detail: quantity(unread), clause: notAnalysed });
+  }
+  const lockfiles = files.filter(file => isLockfile(file.path)).length;
+  const lockfile: Clause = { kind: 'lockfile', value: 'yes' };
+  if (lockfiles && !taken(lockfile) && named(['lockfiles', 'lockfile:yes'])) {
+    result.push({ group: 'Conditions', label: lockfilesLabel, detail: quantity(lockfiles), clause: lockfile });
   }
   const typed = query ? parseWord(text.trim()) : null;
-  if (typed && (typed.kind === 'measure' || typed.kind === 'has' || typed.kind === 'analysed') && !taken(typed)) {
+  if (typed && (typed.kind === 'measure' || typed.kind === 'has' || typed.kind === 'analysed' || typed.kind === 'lockfile') && !taken(typed)) {
     const { key, value } = clauseLabel(typed);
     result.push({ group: 'Conditions', label: `${key} ${value}`, clause: typed });
   } else {

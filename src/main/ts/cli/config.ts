@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { isRecord } from '../core/engine/plugin.js';
 import { normalizeProfile } from '../core/profile/profile.js';
 import type { Invocation } from './arguments.js';
+import { invocationDirectory } from './store.js';
 
 const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'mode', 'sources', 'branch',
   'minCoverage', 'minLines', 'maxCoverageDrop', 'maxNewIssues']);
@@ -25,7 +26,7 @@ export async function readConfig(root: string, input: Invocation) {
     if (explicit !== undefined) throw new Error('Choose --config or --no-config');
     return parseConfig({});
   }
-  const file = resolve(root, explicit ?? 'repometry.config.json');
+  const file = explicit === undefined ? resolve(root, 'repometry.config.json') : resolve(invocationDirectory(input), explicit);
   let json: string;
   try {
     json = await readFile(file, 'utf8');

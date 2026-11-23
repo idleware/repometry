@@ -40,7 +40,7 @@ const builtinKeys: Readonly<Record<string, string>> = {
   'repometry.git-change-frequency/v1': 'changes',
 };
 /** Words that already mean something: query keys, Trends views and the series the viewer draws by hand. */
-const reserved = new Set(['lang', 'language', 'component', 'path', 'in', 'has', 'analysed', 'remediation', 'missedlines', 'churn',
+const reserved = new Set(['lang', 'language', 'component', 'path', 'in', 'has', 'analysed', 'ignored', 'lockfile', 'lockfiles', 'remediation', 'missedlines', 'churn',
   'debt', 'debt-changes', 'diff-coverage', 'effort', 'smells', 'files', 'classes', 'comments', 'code-lines', 'security',
   'coverable-lines', 'covered-lines', 'uncovered-lines', 'security-high', 'security-medium', 'security-low',
   ...Object.values(builtinKeys)]);

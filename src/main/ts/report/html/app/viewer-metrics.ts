@@ -13,19 +13,28 @@ export type BuiltinMetric = 'coverage' | 'lines' | 'files' | 'functions' | 'comp
 export type PluginMetric = string & { readonly plugin: unique symbol };
 export type Metric = BuiltinMetric | PluginMetric;
 
+/** One name per metric, for every page: Trends, the Overview figures, the Metrics and Issues summaries and columns. */
 export const metricLabels: Record<BuiltinMetric, string> = {
-  coverage: 'Line coverage', lines: 'Physical lines', files: 'Source files', functions: 'Functions',
-  complexity: 'Most complex function', cognitive: 'Cognitive complexity', duplication: 'Duplication',
-  debt: 'Technical debt ratio', effort: 'Remediation time', smells: 'Code smells', 'code-lines': 'Lines of code',
+  coverage: 'Line coverage', lines: 'Physical lines', files: 'Analysed files', functions: 'Functions',
+  complexity: 'Peak cyclomatic', cognitive: 'Cognitive complexity', duplication: 'Duplication',
+  debt: 'Technical debt ratio', effort: 'Remediation time', smells: 'Code smells', 'code-lines': 'Code lines',
   classes: 'Classes', comments: 'Comment lines', security: 'Security findings',
   'coverable-lines': 'Measured lines', 'covered-lines': 'Covered lines', 'uncovered-lines': 'Uncovered lines',
   'security-high': 'High severity', 'security-medium': 'Medium severity', 'security-low': 'Low severity',
 };
 
+/**
+ * Security is graded like the other areas, by the worst finding's risk: none A, low or unclassified B, medium C,
+ * high D, critical F. The letter grades the repository; the words name the risk the findings carry, never a level of
+ * security ("high risk" is not "high security").
+ */
+export const securityGrades = ['A', 'B', 'C', 'D', 'F'] as const;
+export const securityRisks = ['No findings', 'Low risk', 'Medium risk', 'High risk', 'Critical risk'] as const;
+
 export const metricDefinitions: Record<BuiltinMetric, string> = {
   coverage: 'Share of measured lines executed by tests, read from LCOV.',
   lines: 'All lines in inspected source files, including blanks and comments.',
-  files: 'Source files in the inspection scope.',
+  files: 'Files in the inspection scope that a plugin analysed.',
   functions: 'Functions and methods found in inspected source files.',
   complexity: 'Highest cyclomatic complexity of any single function.',
   cognitive: 'Sum of cognitive complexity over all functions.',
@@ -142,6 +151,19 @@ export function formatMetric(value: number, metric: Metric): string {
   if (spec) return registry.format(spec, value);
   if (isPercent(metric)) return percent.format(value);
   return metric === 'effort' ? duration(value) : count(value);
+}
+
+/** A size in bytes, in binary units named the way code hosts name them: 512 B, 4.8 KB, 340 KB, 1.2 MB. */
+export function size(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  // Below ten of a unit one decimal tells sizes apart; above it, whole units read faster.
+  const shown = unit === 0 ? Math.round(value) : value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+  if (shown >= 1024 && unit < units.length - 1) return `1 ${units[unit + 1]}`;
+  return `${shown.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${units[unit]}`;
 }
 
 export function count(value: number | null): string {

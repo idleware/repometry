@@ -24,7 +24,7 @@ export function fileMetrics(report: Report): FileMetricsReport {
     return metrics;
   }
 
-  for (const { path, lines, language, analysed } of report.pluginData?.inventory ?? []) {
+  for (const { path, lines, bytes, language, analysed } of report.pluginData?.inventory ?? []) {
     let index = languageIndexes.get(language);
     if (index === undefined) {
       index = languages.length;
@@ -35,6 +35,7 @@ export function fileMetrics(report: Report): FileMetricsReport {
     }
     const entry = file(path);
     entry.lines = lines;
+    if (bytes !== undefined) entry.bytes = bytes;
     entry.language = index;
     entry.analysed = analysed;
   }
@@ -153,6 +154,7 @@ function addFile(directory: DirectoryMetrics, file: Metrics): void {
   directory.files++;
   if (file.lines !== null) directory.sizeMeasuredFiles++;
   directory.lines = sumKnown(directory.lines, file.lines);
+  if (file.bytes !== undefined) directory.bytes = (directory.bytes ?? 0) + file.bytes;
   directory.functions = sumKnown(directory.functions, file.functions);
   directory.complexity = addComplexity(directory.complexity, file.complexity);
   if (file.lineCoverage) {
