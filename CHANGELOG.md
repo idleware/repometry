@@ -1,3 +1,8 @@
+## [0.2.1](https://github.com/idleware/repometry/compare/v0.2.0...v0.2.1) (2026-11-23)
+
+### Fixes & improvements
+* fix: join chart points across profile changes ([6f962b7](https://github.com/idleware/repometry/commit/6f962b7dcaaa937491a1d7e3f339d2a9522fcc72))
+
 ## [0.2.0](https://github.com/idleware/repometry/compare/v0.1.0...v0.2.0) (2026-11-23)
 
 ### Features
