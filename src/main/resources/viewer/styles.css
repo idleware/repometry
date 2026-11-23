@@ -22,7 +22,13 @@
   --flag-good: #2f9445;
   --flag-bad: #c63d36;
   --bad-bg: #fdecea;
-  --good-bg: #eff8f2;
+  /* Line coverage cells in the source gutter: a quiet green, coral for what tests missed, amber for missed branches. */
+  --cov-hit-bg: #e2f2e8;
+  --cov-hit-ink: #2f6e49;
+  --cov-miss-bg: #fbe2df;
+  --cov-miss-ink: #a8382e;
+  --cov-part-bg: #fbedcd;
+  --cov-part-ink: #7d5a10;
   --bad-ink: #9f2a21;
   --warn-bg: #fdf3dc;
   --warn-ink: #81580a;
@@ -87,7 +93,12 @@
     --flag-good: #5fd06a;
     --flag-bad: #f0736b;
     --bad-bg: #3a1c1a;
-    --good-bg: #11231a;
+    --cov-hit-bg: #15301f;
+    --cov-hit-ink: #8fd0a9;
+    --cov-miss-bg: #3b1d1a;
+    --cov-miss-ink: #f0958c;
+    --cov-part-bg: #372a10;
+    --cov-part-ink: #e6c272;
     --bad-ink: #ffb1a8;
     --warn-bg: #352812;
     --warn-ink: #f2cd7f;

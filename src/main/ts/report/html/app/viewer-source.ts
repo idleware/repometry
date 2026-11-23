@@ -111,6 +111,33 @@ export function lineStates(coverage: FileLineCoverage): Map<number, LineState> {
   return states;
 }
 
+/** Runs of equal hit counts: first and last line, 1-based and inclusive, and how often tests ran them; 0 is a miss. */
+export type HitRun = readonly [first: number, last: number, count: number];
+
+/** How often tests ran each line, where the report carries the counts; an older report has none. */
+export function lineHits(coverage: FileLineCoverage): Map<number, number> {
+  // The wire is getting `hits`; until it lands the field is read off the record as the agreed shape.
+  const runs = (coverage as FileLineCoverage & { readonly hits?: readonly HitRun[] | undefined }).hits;
+  const hits = new Map<number, number>();
+  for (const [from, to, count] of runs ?? []) for (let line = Math.max(1, from); line <= to; line++) hits.set(line, count);
+  return hits;
+}
+
+// Two figures are enough for a glance; the tooltip has the whole count.
+const compactCount = new Intl.NumberFormat('en', { notation: 'compact', maximumSignificantDigits: 2 });
+const fullCount = new Intl.NumberFormat();
+
+/** A count short enough for the gutter: 3×, 980×, 1.2K×, 45K×, 270K×, 3.4M×. */
+export function hitLabel(count: number): string {
+  return `${count < 1000 ? count : compactCount.format(count)}×`;
+}
+
+/** What a measured line says to a pointer and a screen reader: its state, and how often it ran where that is known. */
+export function lineCoverageText(state: LineState, count?: number): string {
+  if (count === undefined || state === 'uncovered') return lineStateNames[state];
+  return `${lineStateNames[state]}. Ran ${fullCount.format(count)} ${count === 1 ? 'time' : 'times'}`;
+}
+
 const lineStateNames: Readonly<Record<LineState, string>> = {
   covered: 'Covered', partial: 'Partly covered: some branches missed', uncovered: 'Not covered',
 };
@@ -121,6 +148,8 @@ export interface SourceOptions {
   readonly notes: readonly SourceNote[];
   /** Each line's coverage, where the file has a coverage report. */
   readonly coverage?: ReadonlyMap<number, LineState> | undefined;
+  /** How often tests ran each line, where the report counts it. */
+  readonly hits?: ReadonlyMap<number, number> | undefined;
   /** What the lines show first; the view switches it with setSourceLayer. */
   readonly layer?: SourceLayer | undefined;
   /** The line to bring into view and mark, from the URL. */
@@ -138,7 +167,7 @@ export function setSourceLayer(container: HTMLElement, layer: SourceLayer): void
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
 export function renderSource(container: HTMLElement, text: string, options: SourceOptions): (line: number) => void {
   const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
-  const highlight = highlighter(options.path);
+  const tokenize = tokenizer(options.path);
   const starts = new Map(options.functions.map(entry => [entry.line, entry]));
   const notes = new Map<number, SourceNote[]>();
   for (const note of options.notes) notes.set(note.line, [...notes.get(note.line) ?? [], note]);
@@ -160,15 +189,21 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
       badge.title = `Cyclomatic complexity ${start.complexity}`;
       mark.append(badge);
     }
-    // The coverage layer marks each measured line in the gutter by shape, full, half or empty, as well as by its tint.
+    // The coverage layer tints each measured line's gutter cell and writes in it how often the line ran; a miss's red says it.
+    // Some tools count blank and comment lines as run; nothing runs there, so they keep the strip's tint and say nothing.
+    const runs = tokenize(line);
     const state = options.coverage?.get(number);
-    if (state) {
-      row.classList.add(`src-cov-${state}`);
-      const glyph = element('span', `src-cov src-cov-mark-${state}`);
-      glyph.setAttribute('role', 'img');
-      glyph.setAttribute('aria-label', lineStateNames[state]);
-      glyph.title = lineStateNames[state];
-      mark.append(glyph);
+    if (state && codeless(runs)) {
+      const cell = element('span', `src-cov src-cov-mark-${state}`);
+      cell.setAttribute('aria-hidden', 'true');
+      mark.append(cell);
+    } else if (state) {
+      const count = options.hits?.get(number);
+      const cell = element('span', `src-cov src-cov-mark-${state}`, count === undefined || state === 'uncovered' ? '' : hitLabel(count));
+      cell.setAttribute('role', 'img');
+      cell.setAttribute('aria-label', lineCoverageText(state, count));
+      cell.title = lineCoverageText(state, count);
+      mark.append(cell);
     }
     const anchor = element('a', 'src-number', String(number));
     anchor.href = `#L${number}`;
@@ -178,7 +213,7 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
       options.choose(number);
     });
     const content = element('code', 'src-code');
-    content.append(...highlight(line));
+    content.append(...runs.map(([kind, value]) => kind ? element('span', `tok-${kind}`, value) : document.createTextNode(value)));
     if (notes.has(number)) row.classList.add('src-flagged');
     row.append(mark, anchor, content);
     fragment.append(row);
@@ -361,6 +396,11 @@ export function tokenizer(path: string): (line: string) => [TokenKind, string][]
     if (plain) runs.push(['', plain]);
     return runs;
   };
+}
+
+/** A line with no code: blank, or nothing but comment. */
+export function codeless(runs: readonly (readonly [TokenKind, string])[]): boolean {
+  return runs.every(([kind, value]) => kind === 'c' || !value.trim());
 }
 
 function highlighter(path: string): (line: string) => Node[] {
