@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="142" height="26" viewBox="0 0 142 26" role="img" aria-label="maintainability: A">
+  <rect width="142" height="26" rx="5" fill="#1f9d5a"/>
+  <path d="M0 5a5 5 0 0 1 5-5h107v26H5a5 5 0 0 1-5-5Z" fill="#0f1720"/>
+  <g fill="#fff" font-family="system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">
+    <text x="56" y="17">maintainability</text>
+    <text x="127" y="17">A</text>
+  </g>
+</svg>
