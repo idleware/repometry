@@ -1,3 +1,8 @@
+## [0.3.0](https://github.com/idleware/repometry/compare/v0.2.1...v0.3.0) (2026-11-23)
+
+### Features
+* feat: show line coverage in the source view ([9633c72](https://github.com/idleware/repometry/commit/9633c720c29678cc507cb55feafe8089f6097608))
+
 ## [0.2.1](https://github.com/idleware/repometry/compare/v0.2.0...v0.2.1) (2026-11-23)
 
 ### Fixes & improvements
