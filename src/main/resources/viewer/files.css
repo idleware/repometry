@@ -429,6 +429,13 @@
 .fx-source-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem 1rem; padding: .625rem 1rem; background: var(--band); border-bottom: 1px solid var(--rule); }
 .fx-source-path { min-width: 0; font-size: .8125rem; color: var(--ink); overflow-wrap: anywhere; }
 .fx-source-meta { display: inline-flex; align-items: center; gap: .375rem; font-size: .75rem; color: var(--secondary); }
+/* The switch between findings and coverage leads the head's right side; a narrow head wraps it under the name whole. */
+.fx-source-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .375rem .875rem; min-width: 0; }
+.fx-source-head:has(.fx-source-layer) { padding-block: .375rem; }
+.fx-source-layer { height: 1.75rem; }
+.fx-source-layer button { padding: 0 .625rem; font-size: .75rem; }
+/* Under the file name, on a phone, the switch and the meta line up on the left, as the name does. */
+@media (max-width: 42rem) { .fx-source-tools { justify-content: flex-start; } }
 .fx-source-wait, .fx-source-missing { margin: 0; padding: 1.25rem 1rem; }
 .fx-source-missing { color: var(--secondary); font-size: .875rem; }
 .src { overflow-x: auto; padding: .375rem 0 .75rem; font-family: var(--mono); font-size: .8125rem; line-height: 1.6; tab-size: 2; }
@@ -439,6 +446,18 @@
 .src-number:hover { color: var(--ink); }
 .src-code { padding-right: 1.5rem; font: inherit; white-space: pre; color: var(--ink); }
 .src-flagged { background: var(--warn-bg); }
+/* Coverage replaces the findings on the lines: covered green, partly covered amber, missed red, unmeasured plain. The
+   gutter says the same by shape, a full, half or empty dot, for readers who do not tell the tints apart. */
+.src-cov { display: none; }
+.src[data-layer="coverage"] .src-complexity, .src[data-layer="coverage"] .src-note { display: none; }
+.src[data-layer="coverage"] .src-flagged { background: none; }
+.src[data-layer="coverage"] .src-cov-covered { background: var(--good-bg); }
+.src[data-layer="coverage"] .src-cov-partial { background: var(--warn-bg); }
+.src[data-layer="coverage"] .src-cov-uncovered { background: var(--bad-bg); }
+.src[data-layer="coverage"] .src-cov { display: block; width: .5rem; height: .5rem; border: 1.5px solid currentColor; border-radius: 50%; }
+.src-cov-mark-covered { color: var(--good); background: currentColor; }
+.src-cov-mark-partial { color: var(--grade-c); background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.src-cov-mark-uncovered { color: var(--bad); }
 .src-target, .src-target:hover { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .src-complexity { min-width: 1.375rem; padding: 0 .25rem; font-family: var(--sans); font-size: .6875rem; font-weight: 650; line-height: 1.125rem; text-align: center; border-radius: 4px; color: var(--secondary); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--rule); }
 .src-band-1 { color: var(--heat-ink); background: var(--heat-1); box-shadow: none; }

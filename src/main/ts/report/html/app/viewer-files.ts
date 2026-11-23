@@ -9,7 +9,8 @@ import { bandLabels as pluginBandLabels, bandOf, bandScale, catalogIndex, compar
 import type { MetricSpec } from './viewer-metric-registry.js';
 import { extendCatalog, labelOf, pluginMetrics, pluginSpec, securityRisks, size } from './viewer-metrics.js';
 import type { PluginMetric } from './viewer-metrics.js';
-import { highlightCode, lineSnippet, renderExcerpt, renderSource } from './viewer-source.js';
+import { highlightCode, isSourceLayer, lineSnippet, lineStates, renderExcerpt, renderSource, setSourceLayer } from './viewer-source.js';
+import type { FileLineCoverage, SourceLayer } from './viewer-source.js';
 
 type View = 'metrics' | 'hotspots' | 'diagnostics' | 'issues';
 type Metrics = FileMetricsReport['files'][number];
@@ -31,6 +32,8 @@ interface Navigation {
   readonly level?: string | undefined;
   /** What Hotspots ranks by. */
   readonly rank?: string | undefined;
+  /** What an open file's lines show: its findings (the default) or its coverage. */
+  readonly layer?: string | undefined;
   /** Source text of a file at this commit; absent where the view cannot load source. */
   readonly source?: ((path: string) => Promise<string | null>) | undefined;
   /** The file's page on its forge, when the export names one. */
@@ -47,6 +50,7 @@ export interface LinkOptions {
   readonly category?: string;
   readonly level?: string;
   readonly rank?: string;
+  readonly layer?: string;
 }
 
 /**
@@ -740,15 +744,31 @@ function fileView(details: InspectionDetails, navigation: Navigation, file: Metr
   // The folder is in the breadcrumbs right above; the head names the file alone, with its full path on hover.
   const name = element('code', 'fx-source-path', basename(file.path));
   name.title = file.path;
-  head.append(name, element('span', 'fx-source-meta'));
-  head.lastElementChild!.append(dot, `${language} · ${count(file.lines)} lines`);
+  const meta = element('span', 'fx-source-meta');
+  meta.append(dot, `${language} · ${count(file.lines)} lines`);
+  // Lines show the findings, or the tests' coverage where the file has it; without coverage the head stays as it was.
+  const coverage = fileCoverage(details, file.path);
+  let layer: SourceLayer = coverage ? sourceLayer(navigation.layer) : 'issues';
+  let line = navigation.line;
+  const place = () => nav.href('metrics', { directory: parentPath(file.path), file: file.path, ...line ? { line } : {},
+    ...layer === 'coverage' ? { layer } : {} });
+  const toggle = coverage ? segmented('Lines show', [['issues', 'Issues'], ['coverage', 'Coverage']], layer, value => {
+    layer = value as SourceLayer;
+    rememberLayer(layer);
+    setSourceLayer(body, layer);
+    history.replaceState(history.state, '', place());
+  }) : null;
+  toggle?.classList.add('fx-source-layer');
+  const tools = element('div', 'fx-source-tools');
+  tools.append(...toggle ? [toggle] : [], meta);
+  head.append(name, tools);
   // The forge's page for the file, at the chosen line, whether or not the text opens here.
   const page = navigation.sourcePage?.(file.path, navigation.line);
   const forge = page ? link(page.href, `View on ${page.provider}`, 'fx-source-forge') : null;
   if (forge) {
     forge.target = '_blank';
     forge.rel = 'noopener noreferrer';
-    head.lastElementChild!.append(' · ', forge);
+    meta.append(' · ', forge);
   }
   const body = element('div', 'fx-source-body');
   body.append(element('p', 'fx-note fx-source-wait', 'Loading source…'));
@@ -766,23 +786,54 @@ function fileView(details: InspectionDetails, navigation: Navigation, file: Metr
     if (text === null) {
       // No locator, a private repository, a commit never pushed: one quiet state, and the forge's page when there is one.
       body.replaceChildren(element('p', 'fx-source-missing', 'Source not available'));
+      // Nothing to shade: the head is the one a file without coverage has.
+      toggle?.remove();
       return;
     }
-    const choose = (line: number) => {
-      history.replaceState(history.state, '', nav.href('metrics', { directory: parentPath(file.path), file: file.path, line }));
-      const moved = navigation.sourcePage?.(file.path, line);
+    const choose = (chosen: number) => {
+      line = chosen;
+      history.replaceState(history.state, '', place());
+      const moved = navigation.sourcePage?.(file.path, chosen);
       if (forge && moved) forge.href = moved.href;
     };
     const reveal = renderSource(body, text, {
       path: file.path,
       functions: functions.flatMap(record => record.line === null ? [] : [{ line: record.line, complexity: record.complexity, name: record.name }]),
       notes, line: navigation.line, choose,
+      coverage: coverage ? lineStates(coverage) : undefined, layer,
     });
     const next = fileDetails(details, file, nav, { text, reveal: line => { reveal(line); choose(line); } });
     aside.replaceWith(next);
     aside = next;
   });
   return view;
+}
+
+/** A file's line coverage, where the inspection's coverage report names the file. */
+function fileCoverage(details: InspectionDetails, path: string): FileLineCoverage | undefined {
+  const coverage = details.lineCoverage;
+  return coverage && Object.hasOwn(coverage, path) ? coverage[path] : undefined;
+}
+
+const layerKey = 'repometry.source-layer';
+
+/** The URL's choice of what lines show, else the one made earlier in this session, else the findings. */
+function sourceLayer(requested: string | undefined): SourceLayer {
+  if (isSourceLayer(requested)) return requested;
+  try {
+    const stored = sessionStorage.getItem(layerKey);
+    return isSourceLayer(stored) ? stored : 'issues';
+  } catch {
+    return 'issues';
+  }
+}
+
+function rememberLayer(layer: SourceLayer): void {
+  try {
+    sessionStorage.setItem(layerKey, layer);
+  } catch {
+    // Blocked storage only forgets the choice; the URL still carries it.
+  }
 }
 
 type MapShape = 'rings' | 'tiles';

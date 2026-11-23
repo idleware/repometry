@@ -1,6 +1,7 @@
 // Source text for a file at a commit, and its rendering: line numbers, light highlighting, and the inspection's
 // findings and function complexity laid on the lines they describe.
 import type { SourceLocator } from '../../json/wire/summary-model.js';
+import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
 
 /** Where the viewer fetches a file's text, as the export names it: a URL template and the page a person would open. */
 export type { SourceLocator } from '../../json/wire/summary-model.js';
@@ -83,14 +84,55 @@ export interface SourceNote {
   readonly message: string;
 }
 
+/** Line ranges of one file's coverage: 1-based, inclusive and merged. Partial lines ran with some branches missed. */
+export type FileLineCoverage = NonNullable<InspectionDetails['lineCoverage']>[string];
+
+export type LineState = 'covered' | 'partial' | 'uncovered';
+
+/** What the source view's lines show: the inspection's findings and complexity, or the tests' coverage. */
+export type SourceLayer = 'issues' | 'coverage';
+
+export function isSourceLayer(value: string | null | undefined): value is SourceLayer {
+  return value === 'issues' || value === 'coverage';
+}
+
+/**
+ * Each line's coverage, by line number; a line no range names was not measured. Where ranges overlap, the worse
+ * state wins: a line a test missed is never shown as covered.
+ */
+export function lineStates(coverage: FileLineCoverage): Map<number, LineState> {
+  const states = new Map<number, LineState>();
+  const lay = (ranges: readonly (readonly [number, number])[] | undefined, state: LineState) => {
+    for (const [from, to] of ranges ?? []) for (let line = Math.max(1, from); line <= to; line++) states.set(line, state);
+  };
+  lay(coverage.covered, 'covered');
+  lay(coverage.partial, 'partial');
+  lay(coverage.uncovered, 'uncovered');
+  return states;
+}
+
+const lineStateNames: Readonly<Record<LineState, string>> = {
+  covered: 'Covered', partial: 'Partly covered: some branches missed', uncovered: 'Not covered',
+};
+
 export interface SourceOptions {
   readonly path: string;
   readonly functions: readonly SourceFunction[];
   readonly notes: readonly SourceNote[];
+  /** Each line's coverage, where the file has a coverage report. */
+  readonly coverage?: ReadonlyMap<number, LineState> | undefined;
+  /** What the lines show first; the view switches it with setSourceLayer. */
+  readonly layer?: SourceLayer | undefined;
   /** The line to bring into view and mark, from the URL. */
   readonly line?: number | undefined;
   /** Called when a line number is chosen, so the page can put it in the URL. */
   readonly choose: (line: number) => void;
+}
+
+/** Switches a rendered source between its findings and its coverage, without drawing it again. */
+export function setSourceLayer(container: HTMLElement, layer: SourceLayer): void {
+  const code = container.querySelector<HTMLElement>(':scope > .src');
+  if (code) code.dataset.layer = layer;
 }
 
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
@@ -101,6 +143,7 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
   const notes = new Map<number, SourceNote[]>();
   for (const note of options.notes) notes.set(note.line, [...notes.get(note.line) ?? [], note]);
   const code = element('div', 'src');
+  code.dataset.layer = options.layer ?? 'issues';
   code.setAttribute('role', 'region');
   code.setAttribute('aria-label', `Source of ${options.path}`);
   const rows: HTMLElement[] = [];
@@ -116,6 +159,16 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
         String(start.complexity));
       badge.title = `Cyclomatic complexity ${start.complexity}`;
       mark.append(badge);
+    }
+    // The coverage layer marks each measured line in the gutter by shape, full, half or empty, as well as by its tint.
+    const state = options.coverage?.get(number);
+    if (state) {
+      row.classList.add(`src-cov-${state}`);
+      const glyph = element('span', `src-cov src-cov-mark-${state}`);
+      glyph.setAttribute('role', 'img');
+      glyph.setAttribute('aria-label', lineStateNames[state]);
+      glyph.title = lineStateNames[state];
+      mark.append(glyph);
     }
     const anchor = element('a', 'src-number', String(number));
     anchor.href = `#L${number}`;

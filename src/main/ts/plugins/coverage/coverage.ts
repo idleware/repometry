@@ -1,9 +1,12 @@
 import { posix, win32 } from 'node:path';
+import reportSchema from '../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { isRecord, pluginApi } from '../../core/engine/plugin.js';
 import type { DataContract, Plugin } from '../../core/engine/plugin.js';
 import { comparePaths } from '../../core/model/snapshot.js';
 import { definitions, measurements } from '../../core/model/measurement.js';
 import type { Measurement } from '../../core/model/measurement.js';
+import { lcovLines } from '../../core/model/line-coverage.js';
+import type { FileLineCoverage, LineCoverage } from '../../core/model/line-coverage.js';
 
 export interface CoverageInput {
   readonly text: string;
@@ -15,6 +18,7 @@ export interface CoverageInput {
 interface CoverageResult {
   readonly measurements: readonly Measurement[];
   readonly gaps: readonly { readonly path: string; readonly reason: string }[];
+  readonly lineCoverage: LineCoverage;
 }
 
 export const lcovInput: DataContract<CoverageInput> = {
@@ -27,7 +31,8 @@ export const lcovInput: DataContract<CoverageInput> = {
 export const coverageResult: DataContract<CoverageResult> = {
   id: 'repometry.coverage-result/v1',
   accepts: (value): value is CoverageResult => isRecord(value) && measurements.accepts(value.measurements)
-    && Array.isArray(value.gaps) && value.gaps.every(gap => isRecord(gap) && typeof gap.path === 'string' && typeof gap.reason === 'string'),
+    && Array.isArray(value.gaps) && value.gaps.every(gap => isRecord(gap) && typeof gap.path === 'string' && typeof gap.reason === 'string')
+    && lcovLines.accepts(value.lineCoverage),
 };
 
 export const coverage: Plugin = {
@@ -48,13 +53,20 @@ export const coverage: Plugin = {
       ratio: { of: definitions.coveredFunctions, over: definitions.coverableFunctions }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
     { id: definitions.coveredFunctions, label: 'Covered functions', unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
     { id: definitions.coverableFunctions, label: 'Measured functions', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
-  ] }],
+  ] }, { contract: lcovLines.id, persistence: 'report',
+    schema: { ...reportSchema.$defs.lcovLines, $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges } } }],
   operations: [{
     id: 'import',
     role: 'inspection',
     inputs: { report: lcovInput },
     output: coverageResult,
     execute: inputs => importCoverage(inputs.read('report', lcovInput)),
+  }, {
+    id: 'lines',
+    role: 'inspection',
+    inputs: { coverage: coverageResult },
+    output: lcovLines,
+    execute: inputs => inputs.read('coverage', coverageResult).lineCoverage,
   }],
 };
 
@@ -135,12 +147,18 @@ export function mapCoverage({ text, root, sourceLines, excludes }: CoverageInput
 function importCoverage(input: CoverageInput): CoverageResult {
   const { files, branches, functions, gaps } = mapCoverage(input);
   const rows: Measurement[] = [];
+  const lineCoverage: [string, FileLineCoverage][] = [];
   let totalCovered = 0;
   let totalLines = 0;
   for (const [path, hits] of [...files].sort(([left], [right]) => comparePaths(left, right))) {
     if (gaps.has(path)) continue;
-    let covered = 0;
-    for (const hit of hits.values()) if (hit) covered++;
+    const hitLines: number[] = [], missedLines: number[] = [];
+    for (const [line, hit] of hits) (hit ? hitLines : missedLines).push(line);
+    const partial = mergedRanges(partiallyCoveredLines(branches.get(path), input.sourceLines.get(path)!));
+    if (hits.size || partial.length) lineCoverage.push([path, {
+      covered: mergedRanges(hitLines), uncovered: mergedRanges(missedLines), ...(partial.length ? { partial } : {}),
+    }]);
+    const covered = hitLines.length;
     totalCovered += covered;
     totalLines += hits.size;
     rows.push({ definition: definitions.coverage, target: 'file', path, covered, total: hits.size, value: ratio(covered, hits.size) });
@@ -154,8 +172,27 @@ function importCoverage(input: CoverageInput): CoverageResult {
     ...hitRows(branches, gaps, definitions.branchCoverage, definitions.coveredBranches, definitions.coverableBranches),
     ...hitRows(functions, gaps, definitions.functionCoverage, definitions.coveredFunctions, definitions.coverableFunctions),
   ];
-  return { measurements: [...rows, ...counts, ...extra],
+  return { measurements: [...rows, ...counts, ...extra], lineCoverage: Object.fromEntries(lineCoverage),
     gaps: [...gaps].sort(([left], [right]) => comparePaths(left, right)).map(([path, reason]) => ({ path, reason })) };
+}
+
+function partiallyCoveredLines(branches: ReadonlyMap<string, boolean> | undefined, lastLine: number): number[] {
+  const taken = new Set<number>(), missed = new Set<number>();
+  for (const [branch, hit] of branches ?? []) {
+    const line = Number(branch.slice(0, branch.indexOf(',')));
+    if (line <= lastLine) (hit ? taken : missed).add(line);
+  }
+  return [...taken].filter(line => missed.has(line));
+}
+
+function mergedRanges(lines: number[]): readonly (readonly [number, number])[] {
+  const ranges: [number, number][] = [];
+  for (const line of lines.sort((left, right) => left - right)) {
+    const previous = ranges.at(-1);
+    if (previous && previous[1] + 1 === line) previous[1] = line;
+    else ranges.push([line, line]);
+  }
+  return ranges;
 }
 
 /** Per-file and repository ratios with their counts, for a kind the LCOV reports; nothing when it reports none. */

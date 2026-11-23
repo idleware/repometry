@@ -49,6 +49,9 @@
         "findings": {
           "$ref": "urn:repometry:schema:report:2#/properties/findings"
         },
+        "lineCoverage": {
+          "$ref": "urn:repometry:schema:report:2#/$defs/lcovLines"
+        },
         "components": {
           "type": "array",
           "items": {

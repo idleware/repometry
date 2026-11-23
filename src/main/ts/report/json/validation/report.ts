@@ -5,6 +5,7 @@ import schemaV2 from '../../../../resources/report/json/report-v2.schema.json' w
 import { isRecord } from '../../../core/engine/plugin.js';
 import { isMetricDescriptor } from '../../../core/engine/manifest.js';
 import { isFinding } from '../../../core/model/finding.js';
+import { lcovLines } from '../../../core/model/line-coverage.js';
 import { digest } from '../../../core/model/snapshot.js';
 import type { Subject } from '../../../core/model/source.js';
 import { compactJsonSchema, unpackJson } from '../wire/compact-json.js';
@@ -56,6 +57,8 @@ export function readReport(value: unknown): Report {
     const ids = new Set(metrics.map(metric => metric.id));
     if (ids.size !== metrics.length || !metrics.every(isMetricDescriptor)
       || [...measured, ...privateMetrics ?? []].some(id => !ids.has(id))) throw new Error('Invalid report: inconsistent metric catalog');
+    const lines = value.pluginData.products[lcovLines.id];
+    if (lines && !lcovLines.accepts(lines[0]?.value)) throw new Error('Invalid report: LCOV line ranges must be sorted and merged');
   }
   if (value.scope.parsed > value.scope.files) throw new Error('Invalid report: parsed count exceeds source count');
   if (value.findings?.some(finding => !isFinding(finding))) throw new Error('Invalid report: inconsistent finding location');

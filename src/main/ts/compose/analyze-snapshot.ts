@@ -27,7 +27,7 @@ const selected = ['structure/size', 'structure/complexity', 'maintainability/fil
 const bindings = new Map(selected.map(operation => [operation, { syntax: { operation: 'babel-syntax/parse' } }]));
 const sourcePlan = plan({ plugins: sourcePlugins, select: selected, inputs: new Map([['file', sourceFile.id]]), bindings });
 const duplicationPlan = plan({ plugins: [duplication], select: ['duplication/detect'], inputs: new Map([['sources', duplicationInput.id]]) });
-const coveragePlan = plan({ plugins: [coverage], select: ['lcov/import'], inputs: new Map([['lcov', lcovInput.id]]) });
+const coveragePlan = plan({ plugins: [coverage], select: ['lcov/import', 'lcov/lines'], inputs: new Map([['lcov', lcovInput.id]]) });
 
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
@@ -87,8 +87,9 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
   if (inputCoverage !== undefined) {
     const value = { text: inputCoverage.text, root: inputCoverage.sourceRoot, sourceLines: sourceLineCounts(snapshot.files),
       excludes: sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded) };
-    const result = (await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]))).get('lcov/import')!;
-    record(coveragePlan[0]!, result);
+    const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]));
+    for (const task of coveragePlan) record(task, outcomes.get(task.key)!);
+    const result = outcomes.get('lcov/import')!;
     if (result.state === 'completed' && coverageResult.accepts(result.product.value)) {
       for (const { path, reason } of result.product.value.gaps) {
         diagnostics.push({ operation: 'lcov/import', state: 'partial', path, message: reason });

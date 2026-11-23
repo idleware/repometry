@@ -104,14 +104,21 @@
         },
         "products": {
           "type": "object",
+          "properties": {
+            "repometry.lcov-lines/v1": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "$ref": "#/$defs/reportProduct",
+                "type": "object",
+                "properties": { "value": { "$ref": "#/$defs/lcovLines" } }
+              }
+            }
+          },
           "additionalProperties": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["operation", "value"],
-              "properties": { "operation": { "type": "string" }, "path": { "type": "string" }, "value": true },
-              "additionalProperties": false
-            }
+            "items": { "$ref": "#/$defs/reportProduct" }
           }
         }
       },
@@ -132,6 +139,35 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "reportProduct": {
+      "type": "object",
+      "required": ["operation", "value"],
+      "properties": { "operation": { "type": "string" }, "path": { "type": "string" }, "value": true },
+      "additionalProperties": false
+    },
+    "lcovLines": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["covered", "uncovered"],
+        "additionalProperties": false,
+        "properties": {
+          "covered": { "$ref": "#/$defs/lcovLineRanges" },
+          "uncovered": { "$ref": "#/$defs/lcovLineRanges" },
+          "partial": { "$ref": "#/$defs/lcovLineRanges" }
+        }
+      }
+    },
+    "lcovLineRanges": {
+      "type": "array",
+      "description": "Sorted, merged 1-based inclusive line ranges.",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "prefixItems": [{ "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 1 }],
+        "items": false
+      }
+    },
     "pluginRule": {
       "type": "object",
       "required": ["id", "category"],

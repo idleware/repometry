@@ -1,4 +1,5 @@
 import { definitions } from '../../../core/model/measurement.js';
+import { lcovLines } from '../../../core/model/line-coverage.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
 import { fileMetrics } from './file-metrics.js';
@@ -19,6 +20,7 @@ export function inspectionAsset(report: Report, components: readonly Component[]
 
 export function inspectionDetails(report: Report, components: readonly Component[] = []): InspectionDetails {
   const metrics = fileMetrics(report);
+  const lineCoverage = report.pluginData?.products[lcovLines.id]?.[0]?.value;
   const profile = profileSettings(report.appliedConfig);
   const ruleCatalog = report.pluginData?.rules.flatMap(({ plugin, rules }) => rules.map(rule => ({
     source: plugin, kind: 'check' as const, rule: rule.id, category: rule.category,
@@ -28,6 +30,7 @@ export function inspectionDetails(report: Report, components: readonly Component
   })));
   return { metrics, functions: complexFunctions(report), diagnostics: report.diagnostics, findings: report.findings,
     components: components.length ? componentFiles(components, metrics) : undefined,
+    ...(lcovLines.accepts(lineCoverage) ? { lineCoverage } : {}),
     ...(profile ? { profile: { ...profile, ...(ruleCatalog?.length ? { ruleCatalog } : {}) } } : {}) };
 }
 

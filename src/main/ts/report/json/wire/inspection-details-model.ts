@@ -3,6 +3,7 @@ import type { FileMetricsReport } from './file-metrics-model.js';
 import type { InspectionContext } from './inspection-context-model.js';
 import type { ComplexFunction } from './public-history-model.js';
 import type { ComponentMetrics } from './component-model.js';
+import type { LineCoverage } from '../../../core/model/line-coverage.js';
 
 export interface InspectionDetails {
   readonly metrics: FileMetricsReport;
@@ -10,6 +11,7 @@ export interface InspectionDetails {
   readonly diagnostics: Report['diagnostics'];
   readonly findings?: Report['findings'];
   readonly components?: readonly ComponentMetrics[];
+  readonly lineCoverage?: LineCoverage;
   /**
    * The colour band limits the profile sets for the metrics with a meaningful scale: four ascending upper bounds
    * (three for duplication, whose first band is zero). Absent, the viewer uses its defaults.
