@@ -75,6 +75,29 @@ export function lineStates(coverage) {
     lay(coverage.uncovered, 'uncovered');
     return states;
 }
+/** How often tests ran each line, where the report carries the counts; an older report has none. */
+export function lineHits(coverage) {
+    // The wire is getting `hits`; until it lands the field is read off the record as the agreed shape.
+    const runs = coverage.hits;
+    const hits = new Map();
+    for (const [from, to, count] of runs ?? [])
+        for (let line = Math.max(1, from); line <= to; line++)
+            hits.set(line, count);
+    return hits;
+}
+// Two figures are enough for a glance; the tooltip has the whole count.
+const compactCount = new Intl.NumberFormat('en', { notation: 'compact', maximumSignificantDigits: 2 });
+const fullCount = new Intl.NumberFormat();
+/** A count short enough for the gutter: 3×, 980×, 1.2K×, 45K×, 270K×, 3.4M×. */
+export function hitLabel(count) {
+    return `${count < 1000 ? count : compactCount.format(count)}×`;
+}
+/** What a measured line says to a pointer and a screen reader: its state, and how often it ran where that is known. */
+export function lineCoverageText(state, count) {
+    if (count === undefined || state === 'uncovered')
+        return lineStateNames[state];
+    return `${lineStateNames[state]}. Ran ${fullCount.format(count)} ${count === 1 ? 'time' : 'times'}`;
+}
 const lineStateNames = {
     covered: 'Covered', partial: 'Partly covered: some branches missed', uncovered: 'Not covered',
 };
@@ -87,7 +110,7 @@ export function setSourceLayer(container, layer) {
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
 export function renderSource(container, text, options) {
     const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
-    const highlight = highlighter(options.path);
+    const tokenize = tokenizer(options.path);
     const starts = new Map(options.functions.map(entry => [entry.line, entry]));
     const notes = new Map();
     for (const note of options.notes)
@@ -109,15 +132,22 @@ export function renderSource(container, text, options) {
             badge.title = `Cyclomatic complexity ${start.complexity}`;
             mark.append(badge);
         }
-        // The coverage layer marks each measured line in the gutter by shape, full, half or empty, as well as by its tint.
+        // The coverage layer tints each measured line's gutter cell and writes in it how often the line ran; a miss's red says it.
+        // Some tools count blank and comment lines as run; nothing runs there, so they keep the strip's tint and say nothing.
+        const runs = tokenize(line);
         const state = options.coverage?.get(number);
-        if (state) {
-            row.classList.add(`src-cov-${state}`);
-            const glyph = element('span', `src-cov src-cov-mark-${state}`);
-            glyph.setAttribute('role', 'img');
-            glyph.setAttribute('aria-label', lineStateNames[state]);
-            glyph.title = lineStateNames[state];
-            mark.append(glyph);
+        if (state && codeless(runs)) {
+            const cell = element('span', `src-cov src-cov-mark-${state}`);
+            cell.setAttribute('aria-hidden', 'true');
+            mark.append(cell);
+        }
+        else if (state) {
+            const count = options.hits?.get(number);
+            const cell = element('span', `src-cov src-cov-mark-${state}`, count === undefined || state === 'uncovered' ? '' : hitLabel(count));
+            cell.setAttribute('role', 'img');
+            cell.setAttribute('aria-label', lineCoverageText(state, count));
+            cell.title = lineCoverageText(state, count);
+            mark.append(cell);
         }
         const anchor = element('a', 'src-number', String(number));
         anchor.href = `#L${number}`;
@@ -127,7 +157,7 @@ export function renderSource(container, text, options) {
             options.choose(number);
         });
         const content = element('code', 'src-code');
-        content.append(...highlight(line));
+        content.append(...runs.map(([kind, value]) => kind ? element('span', `tok-${kind}`, value) : document.createTextNode(value)));
         if (notes.has(number))
             row.classList.add('src-flagged');
         row.append(mark, anchor, content);
@@ -337,6 +367,10 @@ export function tokenizer(path) {
             runs.push(['', plain]);
         return runs;
     };
+}
+/** A line with no code: blank, or nothing but comment. */
+export function codeless(runs) {
+    return runs.every(([kind, value]) => kind === 'c' || !value.trim());
 }
 function highlighter(path) {
     const tokenize = tokenizer(path);

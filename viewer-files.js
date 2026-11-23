@@ -1,7 +1,7 @@
 import { formatQuery, ignoredLabel, isLockfile, languageColor, languageOf, languageShares, lockfilesLabel, matches, parseQuery, queryField, sameClause, sized, suggest, usePluginMeasures } from './viewer-filter.js';
 import { bandLabels as pluginBandLabels, bandOf, bandScale, catalogIndex, compareValues, entryValue, firstSortAscending, format, rollUp } from './viewer-metric-registry.js';
 import { extendCatalog, labelOf, pluginMetrics, pluginSpec, securityRisks, size } from './viewer-metrics.js';
-import { highlightCode, isSourceLayer, lineSnippet, lineStates, renderExcerpt, renderSource, setSourceLayer } from './viewer-source.js';
+import { highlightCode, isSourceLayer, lineHits, lineSnippet, lineStates, renderExcerpt, renderSource, setSourceLayer } from './viewer-source.js';
 /**
  * The finding categories Repometry counts as code smells, mirroring core's quality summary (structure and
  * duplication), so the Overview's smell count links to exactly the findings it counts.
@@ -544,10 +544,9 @@ function directorySummary(entry, analysed, lockfiles, selection) {
     panel.setAttribute('aria-label', selection ? 'Selection totals' : 'Folder totals');
     const heading = element('div', 'fx-aside-heading');
     heading.append(element('h2', '', selection ? 'Selection' : entry.path ? basename(entry.path) : 'All files'));
+    // The breadcrumbs above name the folder; only a selection needs its words here.
     if (selection)
         heading.append(element('p', 'fx-aside-path fx-aside-selection', selection));
-    else if (entry.path.includes('/'))
-        heading.append(element('p', 'fx-aside-path', parentPath(entry.path) + '/'));
     const facts = element('dl', 'fx-kv');
     // A measurement the inspection did not take leaves no row behind.
     const quality = entry.quality;
@@ -578,13 +577,12 @@ function fileDetails(details, entry, navigation, hooks = {}) {
     const panel = element('aside', 'fx-aside fx-file');
     panel.setAttribute('aria-label', 'File details');
     const heading = element('div', 'fx-aside-heading');
+    // The breadcrumbs above name the folder, so the title is the file alone.
     const title = element('h2', '', basename(entry.path));
     const close = link(navigation.href('metrics', { directory: parentPath(entry.path) }), '', 'fx-close');
     close.setAttribute('aria-label', 'Close file details');
     close.title = 'Close file details';
     heading.append(title, close);
-    if (entry.path.includes('/'))
-        heading.append(element('p', 'fx-aside-path', parentPath(entry.path) + '/'));
     const facts = element('dl', 'fx-kv');
     const quality = entry.quality;
     if (quality?.codeLines !== undefined)
@@ -683,6 +681,12 @@ function fileView(details, navigation, file, load) {
     // The folder is in the breadcrumbs right above; the head names the file alone, with its full path on hover.
     const name = element('code', 'fx-source-path', basename(file.path));
     name.title = file.path;
+    // The whole path from the repository root is a click away; a refused clipboard shows it in the name's place, selected.
+    const named = element('span', 'fx-source-name');
+    named.append(name, copyPathButton(file.path, () => {
+        name.textContent = file.path;
+        return name;
+    }));
     const meta = element('span', 'fx-source-meta');
     meta.append(dot, `${language} · ${count(file.lines)} lines`);
     // Lines show the findings, or the tests' coverage where the file has it; without coverage the head stays as it was.
@@ -700,7 +704,7 @@ function fileView(details, navigation, file, load) {
     toggle?.classList.add('fx-source-layer');
     const tools = element('div', 'fx-source-tools');
     tools.append(...toggle ? [toggle] : [], meta);
-    head.append(name, tools);
+    head.append(named, tools);
     // The forge's page for the file, at the chosen line, whether or not the text opens here.
     const page = navigation.sourcePage?.(file.path, navigation.line);
     const forge = page ? link(page.href, `View on ${page.provider}`, 'fx-source-forge') : null;
@@ -739,7 +743,7 @@ function fileView(details, navigation, file, load) {
             path: file.path,
             functions: functions.flatMap(record => record.line === null ? [] : [{ line: record.line, complexity: record.complexity, name: record.name }]),
             notes, line: navigation.line, choose,
-            coverage: coverage ? lineStates(coverage) : undefined, layer,
+            coverage: coverage ? lineStates(coverage) : undefined, hits: coverage ? lineHits(coverage) : undefined, layer,
         });
         const next = fileDetails(details, file, nav, { text, reveal: line => { reveal(line); choose(line); } });
         aside.replaceWith(next);
@@ -1792,6 +1796,38 @@ function ignoreSnippet(finding) {
     code.append(input, copy);
     details.append(title, hint, code, feedback);
     return details;
+}
+/**
+ * Copies a file's path from the repository root. Where the browser refuses the clipboard, `show` puts the path on the
+ * page and it is selected, for the reader's own copy shortcut.
+ */
+function copyPathButton(path, show) {
+    const label = 'Copy path';
+    const copy = element('button', 'fx-copy fx-copy-inline');
+    copy.type = 'button';
+    copy.title = `${label}: ${path}`;
+    copy.setAttribute('aria-label', label);
+    copy.append(copyIcon());
+    const status = element('span', 'visually-hidden');
+    status.setAttribute('role', 'status');
+    copy.append(status);
+    let reset;
+    copy.addEventListener('click', async () => {
+        clearTimeout(reset);
+        try {
+            if (!navigator.clipboard)
+                throw new Error('Clipboard unavailable');
+            await navigator.clipboard.writeText(path);
+            copy.classList.add('fx-copied');
+            status.textContent = 'Path copied';
+            reset = setTimeout(() => { copy.classList.remove('fx-copied'); status.textContent = ''; }, 1500);
+        }
+        catch {
+            window.getSelection()?.selectAllChildren(show());
+            status.textContent = 'Path selected. Press your copy shortcut.';
+        }
+    });
+    return copy;
 }
 /** The common copy glyph, two offset sheets, with the check it turns into once copied. */
 export function copyIcon() {
