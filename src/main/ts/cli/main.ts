@@ -39,8 +39,8 @@ const outputOption = option('PATH', 'Set the report output path.', { short: 'o' 
 const baselineOption = option('PATH|git:REF', 'Select the baseline report store.');
 const branchOption = option('NAME', 'Name the branch represented by the report.');
 const renderOptions = {
-  output: outputOption, mode: option('public|private', 'Select the report data to expose.'),
-  sources: option('auto|none|ID[:SPEC]', 'Select source navigation for a private report.'),
+  output: outputOption,
+  sources: option('auto|none|ID[:SPEC]', 'Select where the report reads source files.'),
   title: option('NAME', 'Set the report title.'), components: option('FILE', 'Read component definitions.'),
   'no-footer': flag('Omit the footer.'), branch: branchOption,
 };

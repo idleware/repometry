@@ -1,9 +1,4 @@
 {
-  "public/history.json": "69e7f0b174aeeb1c009d73f536faba75f351763e9efcc406179ca69b4554f2fb",
-  "public/quality-history.json": "3010115369791dcd4a0325afd2a856cebdddd6c7f86ace38cfd788500aff7dac",
-  "public/coverage.svg": "0a74b638cfcf408872b56b881acac6d02442dbabb462f93290aa3a5d977ab7e6",
-  "public/maintainability.svg": "0fa865664b8b47bfeaab88002c3382b03369d078c8652a08e192123608197ed5",
-  "public/summary.json": "672d34692582a2551824d1a2ba87bd0ec54976d90b1129cafd321e974bb7aec5",
   "private/history.json": "69e7f0b174aeeb1c009d73f536faba75f351763e9efcc406179ca69b4554f2fb",
   "private/quality-history.json": "3010115369791dcd4a0325afd2a856cebdddd6c7f86ace38cfd788500aff7dac",
   "private/coverage.svg": "0a74b638cfcf408872b56b881acac6d02442dbabb462f93290aa3a5d977ab7e6",

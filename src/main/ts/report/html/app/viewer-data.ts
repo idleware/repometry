@@ -18,7 +18,7 @@ export interface ViewerData {
   readonly branch?: string;
   /** The metrics the history's plugins declare; each commit's values are indexed by it. */
   readonly metrics?: readonly MetricDescriptor[];
-  /** Where file sources come from, in a detailed export that names a place. */
+  /** Where file sources come from, when the export names a place. */
   readonly sources?: SourceLocator;
   loadDetails(sha: string): Promise<InspectionAsset | null>;
 }
@@ -43,17 +43,17 @@ export async function loadViewerData(mode: string | undefined): Promise<ViewerDa
     context: Object.fromEntries(summary.commits.map(commit => [commit.sha, {
       exclusions: null, boundary: commit.profileBoundary ?? null, security: commit.counts?.security,
     }])),
-    counts: mode === 'public' ? undefined : counts,
+    counts,
     pullReviewCount: summary.pullReviewCount,
     ...(Array.isArray(summary.metrics) ? { metrics: summary.metrics } : {}),
     ...(() => {
-      const sources = mode === 'public' ? undefined : sourceLocator(summary.sources);
+      const sources = sourceLocator(summary.sources);
       return sources ? { sources } : {};
     })(),
     ...(typeof summary.source?.branch === 'string' && summary.source.branch.trim() ? { branch: summary.source.branch.trim() } : {}),
     async loadDetails(sha) {
       const path = details.get(sha);
-      if (path === undefined || (mode !== 'local' && mode !== 'private')) return null;
+      if (path === undefined) return null;
       const asset = await readInspection(path, sha, mode);
       if (asset) return asset;
       const next = await readSummary('reload').catch(() => null);
@@ -74,7 +74,7 @@ async function readSummary(cache?: RequestCache): Promise<RepositorySummary | nu
   return data;
 }
 
-async function readInspection(path: string, sha: string, mode: 'local' | 'private'): Promise<InspectionAsset | null> {
+async function readInspection(path: string, sha: string, mode: string | undefined): Promise<InspectionAsset | null> {
   const prefix = `${mode === 'local' ? 'inspection' : 'details'}/${sha}-`;
   const allowed = path.startsWith(prefix) && /^[a-f0-9]{64}\.json$/.test(path.slice(prefix.length));
   if (!allowed) return null;
@@ -90,7 +90,7 @@ async function legacyViewerData(mode: string | undefined): Promise<ViewerData> {
   const [history, quality, saved, localContext] = await Promise.all([
     readOptional<PublicHistory>('./history.json'),
     readOptional<QualityHistory>('./quality-history.json'),
-    mode === 'private' ? readOptional<DetailsBundle>('./details.json') : null,
+    mode === 'local' ? null : readOptional<DetailsBundle>('./details.json'),
     mode === 'local' ? readOptional<Record<string, InspectionContext>>('./inspection-context.json') : null,
   ]);
   if (history?.schema !== historySchema || !Array.isArray(history.reports)) throw new Error('Unsupported history format');

@@ -13,7 +13,7 @@ import { sourceResponse } from '../../main/ts/report/html/site/source-route.js';
 import { serveAssets } from '../../main/ts/report/html/site/server.js';
 
 
-test('source locators are a valid part of detailed summaries and are withheld from public summaries', () => {
+test('source locators are a valid part of every summary', () => {
   const sources = { provider: 'local', url: './sources/{revision}/{path}' };
   for (const mode of ['local', 'private'] as const) {
     const options = { mode, sources };
@@ -21,10 +21,6 @@ test('source locators are a valid part of detailed summaries and are withheld fr
     assert.ok(validateSummary(summary));
     assert.deepEqual((summary as { sources?: unknown }).sources, sources);
   }
-  const options = { mode: 'public', sources } as const;
-  const summary: unknown = JSON.parse(siteSummary([], options).toString('utf8'));
-  assert.ok(validateSummary(summary));
-  assert.equal((summary as { sources?: unknown }).sources, undefined);
 });
 
 test('auto selects CI before remotes and explicit providers resolve subgroup and enterprise URLs', () => {

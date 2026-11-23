@@ -42,7 +42,7 @@ test('built-in metrics keep their query words and plugin metrics group under the
   assert.equal(coverage.key, 'coverage');
   assert.deepEqual(trendGroups(specs).map(([group, members]) => [group, members.map(member => member.key)]), [
     ['Maintainability', ['complexity', 'remediation-minutes']],
-    ['Coverage', ['lcov-covered-lines', 'lcov-coverable-lines', 'coverage']],
+    ['Coverage', ['coverage']],
     ['Size', ['lines']],
     ['fixture', ['todo-count']],
   ]);
@@ -117,4 +117,22 @@ test('where higher is better the scale turns round, so the worst band is still r
   assert.deepEqual([0.95, 0.85, 0.75, 0.65, 0.5].map(value => bandOf(coverage, value, 1)), [0, 1, 2, 3, 4]);
   assert.deepEqual([0.9, 0.6, 0.5999].map(value => bandOf(coverage, value, 1)), [0, 3, 4]);
   assert.deepEqual(bandLabels(coverage), ['90%+', '80–90%', '70–80%', '60–70%', '<60%']);
+});
+
+test('a Repometry metric the viewer has no code for goes by its descriptor, and the counts behind a ratio read through it', () => {
+  const coverage = (kind: string): MetricDescriptor[] => [
+    { id: `repometry.lcov-${kind}-coverage/v1`, label: `${kind} coverage`, unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
+      ratio: { of: `repometry.lcov-covered-${kind}es/v1`, over: `repometry.lcov-coverable-${kind}es/v1` }, group: 'Coverage' },
+    { id: `repometry.lcov-covered-${kind}es/v1`, label: 'Covered', unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
+    { id: `repometry.lcov-coverable-${kind}es/v1`, label: 'Measured', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
+  ];
+  const [ratio, covered, coverable] = metricSpecs(coverage('branch')) as [MetricSpec, MetricSpec, MetricSpec];
+  assert.equal(isBuiltin(ratio.descriptor), false);
+  assert.deepEqual([ratio.key, covered.key, coverable.key], ['branch-coverage', 'covered-branches', 'coverable-branches']);
+  // Its own column is there to pick, not shown first; it ranks hotspots and has a trend.
+  assert.deepEqual([ratio.column, ratio.hotspot, ratio.trend, ratio.ratioPart], [false, true, true, false]);
+  for (const part of [covered, coverable]) assert.deepEqual([part.column, part.hotspot, part.trend, part.ratioPart], [false, false, false, true]);
+  // The metrics drawn by hand stay built in, whatever the catalog says of them.
+  assert.equal(isBuiltin(spec('repometry.lcov-covered-lines/v1').descriptor), true);
+  assert.equal(spec('repometry.lcov-covered-lines/v1').trend, false);
 });

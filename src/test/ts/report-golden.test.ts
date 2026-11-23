@@ -34,7 +34,7 @@ test('the report formats and export projections match the fixed baseline', async
   assert.deepEqual(readReportText(JSON.stringify(packJson(report)), report.subject), report);
 
   const actual: Record<string, string> = {};
-  for (const mode of ['public', 'private'] as const) {
+  for (const mode of ['private'] as const) {
     const files = await site.siteFiles([report], { mode, title: 'Fixture' });
     for (const [name, bytes] of files) {
       if (name.endsWith('.json') || name.endsWith('.svg')) {

@@ -141,7 +141,7 @@ jobs:
           path: ${{ runner.temp }}/repometry
       - run: |
           npm ci --omit=dev --ignore-scripts --prefix "$RUNNER_TEMP/repometry"
-          node "$RUNNER_TEMP/repometry/target/main/ts/cli/main.js" report "html=$RUNNER_TEMP/site" --store . --title repometry
+          node "$RUNNER_TEMP/repometry/target/main/ts/cli/main.js" report "html=$RUNNER_TEMP/site" --store . --title repometry --sources github
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-

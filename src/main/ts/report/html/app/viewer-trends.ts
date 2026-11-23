@@ -5,7 +5,7 @@ import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js
 import { renderBarChart, renderLineChart } from './viewer-chart.js';
 import { splitter } from './viewer-files.js';
 import type { ChartPoint } from './viewer-chart.js';
-import { betterOf, definitionOf, difference, formatMetric, isMetric, isPercent, labelOf, metricValue, pluginMetrics, pluginSpec } from './viewer-metrics.js';
+import { betterOf, definitionOf, difference, formatMetric, isMetric, isPercent, labelOf, metricLabels, metricValue, pluginMetrics, pluginSpec } from './viewer-metrics.js';
 import type { Metric } from './viewer-metrics.js';
 
 export type TrendView = Metric | 'debt-changes' | 'diff-coverage';
@@ -15,7 +15,6 @@ export interface TrendData {
   readonly reports: readonly PublicHistoryEntry[];
   readonly quality: Record<string, QualitySummary>;
   readonly context: Record<string, InspectionContext> | null;
-  readonly detailed: boolean;
   readonly compact: boolean;
   /** Link to the Trends page for a commit, keeping or replacing the view and period. */
   readonly link: (sha: string, view?: TrendView, period?: Period) => string;
@@ -34,18 +33,30 @@ function viewLabel(view: TrendView): string {
 }
 const builtinGroups: readonly (readonly [string, readonly TrendView[]])[] = [
   ['Maintainability', ['debt', 'debt-changes', 'duplication', 'cognitive', 'complexity', 'smells']],
-  ['Coverage', ['coverage', 'diff-coverage']],
+  // Branch and function coverage come from the registry, where the coverage report has them.
+  ['Coverage', ['coverage', 'branch-coverage' as Metric, 'function-coverage' as Metric, 'diff-coverage']],
   ['Security', ['security']],
   ['Size', ['code-lines', 'files', 'functions', 'classes', 'comments']],
 ];
 
-/** The series list: Repometry's own groups, with other plugins' metrics joining a group they name or one of their own. */
+/**
+ * The series list: Repometry's own groups, with other plugins' metrics joining a group they name or one of their own.
+ * A registry metric the groups already place keeps its place, and is left out where this history has no such metric.
+ */
 function groups(): (readonly [string, readonly TrendView[]])[] {
-  const merged = new Map<string, TrendView[]>(builtinGroups.map(([group, views]) => [group, [...views]]));
+  const placed = new Set<TrendView>(builtinGroups.flatMap(([, views]) => views));
+  const keys = new Set(pluginMetrics().filter(spec => spec.trend).map(spec => spec.key));
+  const merged = new Map<string, TrendView[]>(builtinGroups.map(([group, views]) =>
+    [group, views.filter(view => !pluginKey(view) || keys.has(view))]));
   for (const spec of pluginMetrics()) {
-    if (spec.trend) merged.set(spec.group, [...merged.get(spec.group) ?? [], spec.key as TrendView]);
+    if (spec.trend && !placed.has(spec.key as TrendView)) merged.set(spec.group, [...merged.get(spec.group) ?? [], spec.key as TrendView]);
   }
   return [...merged];
+}
+
+/** A view the registry names, not one the viewer draws by hand. */
+function pluginKey(view: TrendView): boolean {
+  return view !== 'debt-changes' && view !== 'diff-coverage' && !(view in metricLabels);
 }
 
 export function isTrendView(value: string | null | undefined): value is TrendView {
@@ -60,7 +71,7 @@ export function isPeriod(value: string | null | undefined): value is Period {
 export function availableViews(data: TrendData): TrendView[] {
   const has = (metric: Metric) => data.reports.some(report => value(data, report, metric) !== null);
   return groups().flatMap(([, views]) => views).filter(view =>
-    view === 'diff-coverage' ? data.detailed : view === 'debt-changes' ? has('effort') : has(view));
+    view === 'diff-coverage' || (view === 'debt-changes' ? has('effort') : has(view)));
 }
 
 /** The whole curve by default; only a very long history opens on its last hundred inspections. */

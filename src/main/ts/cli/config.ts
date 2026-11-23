@@ -5,16 +5,14 @@ import { normalizeProfile } from '../core/profile/profile.js';
 import type { Invocation } from './arguments.js';
 import { invocationDirectory } from './store.js';
 
-const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'mode', 'sources', 'branch',
+const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
   'minCoverage', 'minLines', 'maxCoverageDrop', 'maxNewIssues']);
 
 function parseConfig(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
   string(value.$schema, '$schema');
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
-  const { mode } = value;
-  if (mode !== undefined && mode !== 'private' && mode !== 'public') throw new Error('Config mode must be public or private');
-  return { ...profile, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'), mode,
+  return { ...profile, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
     sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
     minCoverage: number(value.minCoverage, 'minCoverage'), minLines: number(value.minLines, 'minLines'),
     maxCoverageDrop: number(value.maxCoverageDrop, 'maxCoverageDrop'), maxNewIssues: number(value.maxNewIssues, 'maxNewIssues') };

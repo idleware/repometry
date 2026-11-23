@@ -191,7 +191,7 @@ test('default vendor and generated-source exclusions also filter LCOV', async t 
     { definition: definitions.coverage, target: 'repository', covered: 1, total: 1, value: 1 });
 });
 
-test('export omits private fields and working trees and refuses to overwrite an existing site', async (t) => {
+test('export writes the whole store without working trees and refuses to overwrite an existing site', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'repometry-export-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const sha = 'a'.repeat(40);
@@ -219,22 +219,20 @@ test('export omits private fields and working trees and refuses to overwrite an 
   const scripts = [...app, ...wire].filter(name => name.endsWith('.js'));
   const assets = [...scripts, ...resources.filter(name => name.endsWith('.css') || name === 'index.html')];
   assert.deepEqual((await readdir(viewer)).sort(),
-    [...assets, 'coverage.svg', 'history.json', 'maintainability.svg', 'quality-history.json', 'summary.json'].sort());
+    [...assets, 'coverage.svg', 'details', 'history.json', 'maintainability.svg', 'pulls.json', 'quality-history.json', 'summary.json'].sort());
   const html = await readFile(join(viewer, 'index.html'), 'utf8');
-  assert.match(html, /name="repometry-view" content="public"/);
+  assert.match(html, /name="repometry-view" content="private"/);
   await expectShippedModules(viewer, html, scripts);
   const text = await readFile(join(dir, 'viewer', 'history.json'), 'utf8');
   assert.doesNotMatch(text, /private-/);
   const quality = await readFile(join(dir, 'viewer', 'quality-history.json'), 'utf8');
   assert.doesNotMatch(quality, /private-/);
-  const publicSummary = JSON.parse(await readFile(join(dir, 'viewer', 'summary.json'), 'utf8'));
+  const summary = JSON.parse(await readFile(join(dir, 'viewer', 'summary.json'), 'utf8'));
   const schemas = new Ajv2020({ schemas: [metricCatalog, historyV1, qualityV1, summaryV1, compactV1, reportV1, reportV2, fileMetricsV1, contextV1, detailsV1] });
   const validSummary = schemas.compile<RepositorySummary>(summaryV1);
-  assert.ok(validSummary(publicSummary), JSON.stringify(validSummary.errors));
-  assert.equal(publicSummary.commits[0]?.sha, sha);
-  assert.equal(publicSummary.commits[0]?.detail, undefined);
-  assert.equal(publicSummary.commits[0]?.counts, undefined);
-  assert.doesNotMatch(JSON.stringify(publicSummary), /private-/);
+  assert.ok(validSummary(summary), JSON.stringify(validSummary.errors));
+  assert.deepEqual(summary.commits.map((row: { sha: string }) => row.sha), [sha]);
+  assert.ok(summary.commits[0]?.detail, 'the commit links its details');
   assert.ok(new Ajv2020().compile(qualityV1)(JSON.parse(quality)));
   const data = JSON.parse(text) as PublicHistory;
   const validate = new Ajv2020().compile<PublicHistory>(historyV1);
@@ -246,7 +244,7 @@ test('export omits private fields and working trees and refuses to overwrite an 
   await writeFile(join(dir, 'components.json'), JSON.stringify([
     { name: 'Matching component', pathGlobs: ['private-*'] }, { name: 'Empty component', pathGlobs: ['other/*'] },
   ]));
-  const detailed = invoke(dir, ['report', 'html=private-viewer', '--mode', 'private', '--sources', 'none',
+  const detailed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none',
     '--components', 'components.json', '--title', 'Demo <"name">']);
   assert.equal(detailed.status, 0, detailed.stderr);
   const page = await readFile(join(dir, 'private-viewer', 'index.html'), 'utf8');
@@ -275,14 +273,14 @@ test('export omits private fields and working trees and refuses to overwrite an 
   assert.equal(saved.inspections[sha]?.diagnostics[0]?.message, 'private-diagnostic');
   await writeFile(join(dir, 'private-viewer', 'details.json'), JSON.stringify(saved));
   await store.save({ ...report, generatedAt: '2026-11-21T00:00:00.000Z', diagnostics: [] });
-  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--mode', 'private', '--sources', 'none', '--components', 'components.json']);
+  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--components', 'components.json']);
   assert.equal(refreshed.status, 0, refreshed.stderr);
   const nextSummary = JSON.parse(await readFile(join(dir, 'private-viewer', 'summary.json'), 'utf8'));
   assert.notEqual(nextSummary.commits[0].detail, firstPath);
   assert.equal(nextSummary.commits[0].counts.diagnosticCount, 0);
   assert.equal(await readFile(join(dir, 'private-viewer', firstPath), 'utf8'), rawFirstDetail);
   await assert.rejects(readFile(join(dir, 'private-viewer', 'details.json')), { code: 'ENOENT' });
-  assert.equal(invoke(dir, ['report', 'html=private-viewer']).status, 1);
+  assert.equal(invoke(dir, ['report', 'html=private-viewer']).status, 0);
   const projectIndex = invoke(dir, ['projects', '--output', '.']);
   assert.equal(projectIndex.status, 0, projectIndex.stderr);
   const projects = await readFile(join(dir, 'projects.json'), 'utf8');

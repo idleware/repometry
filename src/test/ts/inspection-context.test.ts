@@ -38,17 +38,14 @@ test('equivalent exclusions and changing LCOV inputs preserve profile comparabil
   assert.equal(inspectionHistory([modern, legacy])[modern.subject.id]?.boundary, null);
 });
 
-test('the private timeline marks a profile change without publishing its rules or digest', () => {
+test('the timeline marks a profile change without publishing its rules or digest', () => {
   const original = report('b', profile);
   const filtered = report('a', { ...profile, source: { ...source, excludedPaths: ['.yarn/releases'] } });
   const rows = [original, filtered].map(commitSummary);
-  const privateText = siteSummary(rows, { mode: 'local' }).toString();
-  const publishedText = siteSummary(rows, { mode: 'public' }).toString();
-  const privateIndex = JSON.parse(privateText) as RepositorySummary;
-  const publishedIndex = JSON.parse(publishedText) as RepositorySummary;
-  assert.deepEqual(privateIndex.commits.map(row => row.profileBoundary), ['changed', undefined]);
-  assert.deepEqual(publishedIndex.commits.map(row => row.profileBoundary), [undefined, undefined]);
-  assert.doesNotMatch(privateText + publishedText, /profileDigest|\.yarn\/releases/);
+  const text = siteSummary(rows, { mode: 'local' }).toString();
+  const index = JSON.parse(text) as RepositorySummary;
+  assert.deepEqual(index.commits.map(row => row.profileBoundary), ['changed', undefined]);
+  assert.doesNotMatch(text, /profileDigest|\.yarn\/releases/);
 });
 
 function report(key: string, appliedConfig: Report['appliedConfig']): Report {

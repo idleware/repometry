@@ -22,9 +22,6 @@ export async function outputReports(root: string, store: Store, requested: reado
   config: Awaited<ReturnType<typeof readConfig>>) {
   const output = input.text('output');
   if (output !== undefined && requested.length !== 1) throw new Error('--output requires exactly one report; use FORMAT=PATH for multiple reports');
-  const mode = input.text('mode') ?? config.mode ?? 'public';
-  if (mode !== 'public' && mode !== 'private') throw new Error('--mode must be public or private');
-  if (input.text('components') && mode !== 'private') throw new Error('--components requires --mode private');
   const requests = requested.map(spec => {
     const equal = spec.indexOf('=');
     const format = equal < 0 ? spec : spec.slice(0, equal);
@@ -39,12 +36,12 @@ export async function outputReports(root: string, store: Store, requested: reado
   const repository = await findRepository(root);
   const readCommitMetadata = repository === undefined ? undefined : commitMetadataReader(repository);
   const sourceOption = input.text('sources') ?? config.sources;
-  const sources = mode === 'private' ? resolveSourceLocator(sourceOption, { remotes: await sourceRemotes(root), env: process.env }) : undefined;
-  const [components, pulls] = mode === 'private' ? await Promise.all([
+  const sources = resolveSourceLocator(sourceOption, { remotes: await sourceRemotes(root), env: process.env });
+  const [components, pulls] = await Promise.all([
     readComponents(componentsPath(root, input), input.text('components') === undefined),
     store.path ? listPullReviews(store.path) : [],
-  ]) : [undefined, undefined];
-  const options = { mode, sources, components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
+  ]);
+  const options = { sources, components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
     title: input.text('title') ?? (input.text('repo') ? basename(root) : undefined),
     footer: !input.flag('no-footer') } as const;
   for (const request of requests) {
@@ -52,17 +49,17 @@ export async function outputReports(root: string, store: Store, requested: reado
     else {
       const rows = await store.reader.listSummaries?.() ?? (await store.reader.list()).filter(report => report.subject.kind === 'commit').map(commitSummary);
       const data = siteSummary(await withCommitMetadata(rows, readCommitMetadata), options);
-      await writeSummary(request.path, data, mode === 'private');
+      await writeSummary(request.path, data);
     }
   }
   return requests;
 }
 
-async function writeSummary(path: string, data: Buffer, privateReport: boolean): Promise<void> {
+async function writeSummary(path: string, data: Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporary, data, { mode: privateReport ? 0o600 : 0o644, flag: 'wx' });
+    await writeFile(temporary, data, { mode: 0o644, flag: 'wx' });
     await rename(temporary, path);
   } finally {
     await rm(temporary, { force: true });

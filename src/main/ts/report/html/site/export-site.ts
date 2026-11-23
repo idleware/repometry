@@ -40,7 +40,8 @@ async function listAssets(directory: URL, include: (name: string) => boolean) {
 
 export interface SiteOptions {
   readonly title?: string;
-  readonly mode?: 'public' | 'local' | 'private';
+  /** `local` for `repometry view`, which serves details live; an export writes them as files. */
+  readonly mode?: 'local' | 'private';
   readonly components?: readonly Component[];
   readonly pulls?: readonly PullReview[];
   readonly sources?: SourceLocator;
@@ -56,7 +57,7 @@ export function withoutFooter(html: string): string {
 }
 
 export async function siteFiles(reports: readonly Report[],
-  { title = '', mode = 'public', components, pulls = [], sources, branch, readCommitMetadata, footer = true }: SiteOptions = {},
+  { title = '', mode = 'private', components, pulls = [], sources, branch, readCommitMetadata, footer = true }: SiteOptions = {},
   indexed?: readonly CommitSummary[]): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>(await Promise.all((await listViewerAssets()).map(async ([name, source]) => {
     const bytes = await readFile(source);
@@ -67,22 +68,21 @@ export async function siteFiles(reports: readonly Report[],
     return [name, contents] as const;
   })));
   const index = files.get('index.html')!.toString('utf8')
-    .replace('name="repometry-view" content="public"', `name="repometry-view" content="${mode}"`)
+    .replace('name="repometry-view" content="private"', `name="repometry-view" content="${mode}"`)
     .replace('name="repometry-project" content=""', () => `name="repometry-project" content="${escapeAttribute(title)}"`);
   files.set('index.html', Buffer.from(footer ? index : withoutFooter(index)));
   const commits = reports.filter(report => report.subject.kind === 'commit');
   const rows = orderSummaries(await withCommitMetadata(indexed ?? commits.map(commitSummary), readCommitMetadata));
   const publicRows = rows.map(({ quality, counts, detail, revision, profileDigest, profileBoundary, subject, author, tags,
-    metrics, values, privateMetrics, ...history }) => ({ ...history, subject, author: author && { name: author.name }, tags }));
+    metrics, values, privateMetrics, ...history }) => ({ ...history, subject, author, tags }));
   const history = { schema: historySchema, reports: publicRows };
   const quality = { schema: 'urn:repometry:schema:quality-history:1',
     reports: Object.fromEntries(rows.map(row => [row.sha, row.quality])) };
   files.set('history.json', Buffer.from(`${JSON.stringify(history)}\n`));
   files.set('quality-history.json', Buffer.from(`${JSON.stringify(quality)}\n`));
   const latest = rows[0];
-  // Scanner counts stay out of the public export, and so does their badge.
-  for (const [name, data] of badges(latest, latest?.quality, mode === 'public' ? undefined : latest?.counts?.security)) files.set(name, data);
-  if (mode !== 'public') files.set('pulls.json', Buffer.from(`${JSON.stringify({ schema: pullReviewsSchema, reviews: pulls })}\n`));
+  for (const [name, data] of badges(latest, latest?.quality, latest?.counts?.security)) files.set(name, data);
+  files.set('pulls.json', Buffer.from(`${JSON.stringify({ schema: pullReviewsSchema, reviews: pulls })}\n`));
   const details = new Map<string, string>();
   if (mode === 'private') {
     for (const report of commits) {
@@ -97,11 +97,10 @@ export async function siteFiles(reports: readonly Report[],
   return files;
 }
 
-export function siteSummary(rows: readonly CommitSummary[], { mode = 'public', components, pulls = [], sources, branch }: SiteOptions,
+export function siteSummary(rows: readonly CommitSummary[], { mode = 'private', components, pulls = [], sources, branch }: SiteOptions,
   details = new Map<string, string>()): Buffer {
   const ordered = orderSummaries(rows);
   const commits = ordered.map(({ counts, detail, revision, profileDigest, profileBoundary, subject, author, tags, ...row }, index): CommitSummary => {
-    if (mode === 'public') return { ...row, subject, author: author && { name: author.name }, tags };
     const previous = ordered[index + 1];
     const boundary = !previous ? undefined : !profileDigest || !previous.profileDigest ? 'unavailable'
       : profileDigest === previous.profileDigest ? undefined : 'changed';
@@ -111,22 +110,20 @@ export function siteSummary(rows: readonly CommitSummary[], { mode = 'public', c
       ...(boundary === undefined ? {} : { profileBoundary: boundary }),
     };
   });
-  const summary = repositorySummary(commits, mode === 'public' ? undefined : pulls.length, mode !== 'public');
+  const summary = repositorySummary(commits, pulls.length, true);
   return Buffer.from(`${JSON.stringify({ ...summary, ...(branch === undefined ? {} : { source: { branch } }),
-    ...(mode !== 'public' && sources ? { sources } : {}) })}\n`);
+    ...(sources ? { sources } : {}) })}\n`);
 }
 
 export async function exportSite(reader: ReportReader, destination: string, options: SiteOptions = {}): Promise<void> {
-  const indexed = options.mode === 'private' ? undefined : await reader.listSummaries?.();
-  const files = await siteFiles(indexed ? [] : await reader.list(), options, indexed);
-  await mkdir(destination, { recursive: true, mode: options.mode === 'private' ? 0o700 : 0o755 });
+  const files = await siteFiles(await reader.list(), options);
+  await mkdir(destination, { recursive: true, mode: 0o755 });
   if (!(await lstat(destination)).isDirectory()) throw new Error('The viewer destination must be a directory');
   const entries = await readdir(destination, { withFileTypes: true });
-  const privateExport = options.mode === 'private';
-  const oldDetails = privateExport && entries.some(entry => entry.name === 'details.json' && entry.isFile());
+  const oldDetails = entries.some(entry => entry.name === 'details.json' && entry.isFile());
   const detailDirectory = entries.some(entry => entry.name === 'details' && entry.isDirectory());
   if (entries.some(entry => !(entry.isFile() && files.has(entry.name))
-    && !(privateExport && entry.name === 'details' && entry.isDirectory())
+    && !(entry.name === 'details' && entry.isDirectory())
     && !(oldDetails && entry.name === 'details.json' && entry.isFile()))) {
     throw new Error('Use a dedicated viewer destination containing only Repometry export files');
   }
@@ -152,15 +149,12 @@ export async function exportSite(reader: ReportReader, destination: string, opti
   await mkdir(staging);
   try {
     const hasDetails = [...files.keys()].some(name => name.startsWith('details/'));
-    if (hasDetails) await mkdir(join(staging, 'details'), { mode: 0o700 });
-    for (const [name, bytes] of files) {
-      const mode = name.startsWith('details/') || name === 'pulls.json' || (privateExport && name === 'summary.json') ? 0o600 : 0o644;
-      await writeFile(join(staging, name), bytes, { mode });
-    }
+    if (hasDetails) await mkdir(join(staging, 'details'));
+    for (const [name, bytes] of files) await writeFile(join(staging, name), bytes, { mode: 0o644 });
     const afterDependencies = ['viewer.js', 'summary.json', 'index.html'];
     const install = (name: string) => rename(join(staging, name), join(destination, name));
     await install('history.json');
-    if (hasDetails && !detailDirectory) await mkdir(join(destination, 'details'), { mode: 0o700 });
+    if (hasDetails && !detailDirectory) await mkdir(join(destination, 'details'));
     for (const name of files.keys()) {
       if (name !== 'history.json' && !afterDependencies.includes(name)) await install(name);
     }

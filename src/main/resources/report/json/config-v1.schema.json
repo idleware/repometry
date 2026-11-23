@@ -21,7 +21,6 @@
     },
     "imports": { "$ref": "#/$defs/strings" },
     "reports": { "$ref": "#/$defs/strings" },
-    "mode": { "enum": ["public", "private"] },
     "sources": { "type": "string", "minLength": 1 },
     "branch": { "type": "string", "minLength": 1 },
     "minCoverage": { "type": "number", "minimum": 0, "maximum": 100 },

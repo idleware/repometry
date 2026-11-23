@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="repometry-view" content="public">
+    <meta name="repometry-view" content="private">
     <meta name="repometry-project" content="">
     <title>Repometry</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1 -1 32 32'%3E%3Cstyle%3E.f%7Bfill:%231f6b35%7D.s%7Bfill:%235fae6a%7D@media (prefers-color-scheme:dark)%7B.f%7Bfill:%238fe08f%7D.s%7Bfill:%233f8a4c%7D%7D%3C/style%3E%3Cpath class='f' d='M3 4 29 3 3 15z'/%3E%3Cpath class='s' d='M3 19 9 16.23V29H3zM13 14.38l6-2.77V29h-6zM23 9.77 29 7v22h-6z'/%3E%3C/svg%3E">
@@ -24,13 +24,13 @@
         <div class="tabs-row">
         <nav id="navigation" class="tabs" aria-label="Report">
           <a data-page="overview" href="#overview">Overview</a>
-          <a data-page="issues" href="#issues" data-private hidden>Issues<span class="tab-count" id="issues-count"></span></a>
-          <a data-page="hotspots" href="#hotspots" data-private hidden>Hotspots</a>
-          <a data-page="metrics" href="#metrics" data-private hidden>Metrics</a>
+          <a data-page="issues" href="#issues" data-loaded hidden>Issues<span class="tab-count" id="issues-count"></span></a>
+          <a data-page="hotspots" href="#hotspots" data-loaded hidden>Hotspots</a>
+          <a data-page="metrics" href="#metrics" data-loaded hidden>Metrics</a>
           <a data-page="trends" href="#trends">Trends</a>
-          <a data-page="pulls" href="#pulls" data-private hidden>Pull requests</a>
-          <a data-page="settings" href="#settings" data-private hidden>Profile</a>
-          <a data-page="diagnostics" href="#diagnostics" data-private hidden>Diagnostics<span class="tab-count" id="diagnostics-count"></span></a>
+          <a data-page="pulls" href="#pulls" data-loaded hidden>Pull requests</a>
+          <a data-page="settings" href="#settings" data-loaded hidden>Profile</a>
+          <a data-page="diagnostics" href="#diagnostics" data-loaded hidden>Diagnostics<span class="tab-count" id="diagnostics-count"></span></a>
         </nav>
         <div id="inspection-meta" class="inspection-meta" hidden>
           <a class="download" href="./history.json" download>Download data</a>
@@ -55,9 +55,9 @@
                 </div>
                 <div class="verdict">
                   <span id="coverage-mark" class="mark ring" aria-hidden="true"></span>
-                  <span class="verdict-text"><button type="button" role="tab" class="verdict-tab" data-metric="coverage" aria-controls="trend" aria-describedby="coverage-detail">Coverage</button><span id="coverage-detail" class="verdict-detail"></span></span>
+                  <span class="verdict-text"><button type="button" role="tab" class="verdict-tab" data-metric="coverage" aria-controls="trend" aria-describedby="coverage-detail coverage-kinds">Coverage</button><span id="coverage-detail" class="verdict-detail"></span><span id="coverage-kinds" class="verdict-detail verdict-more" hidden></span></span>
                 </div>
-                <div class="verdict" id="security-verdict" data-private hidden>
+                <div class="verdict" id="security-verdict" data-loaded hidden>
                   <span id="security-mark" class="mark severity"></span>
                   <span class="verdict-text"><button type="button" role="tab" class="verdict-tab" data-metric="security" aria-controls="trend" aria-describedby="security-mark security-detail">Security</button><span id="security-detail" class="verdict-detail"></span></span>
                 </div>
@@ -72,19 +72,13 @@
               <dl id="lead" class="lead"></dl>
             </div>
           </div>
-          <aside id="overview-hotspots" class="overview-aside" aria-labelledby="overview-hotspots-title" data-private hidden>
+          <aside id="overview-hotspots" class="overview-aside" aria-labelledby="overview-hotspots-title" data-loaded hidden>
             <div id="overview-sunburst"></div>
             <div class="section-heading">
               <h3 id="overview-hotspots-title">Hotspots</h3>
               <a id="all-hotspots" class="text-link" href="#hotspots">All</a>
             </div>
             <div id="overview-hotspot-list"></div>
-          </aside>
-          <aside id="overview-public" class="overview-public" aria-labelledby="overview-public-title" hidden>
-            <div class="panel public-panel">
-              <h3 id="overview-public-title">Public report</h3>
-              <div id="overview-public-content"></div>
-            </div>
           </aside>
         </div>
       </section>
@@ -114,10 +108,6 @@
       <section id="settings" aria-labelledby="settings-title" hidden>
         <h2 id="settings-title">Profile</h2>
         <div id="settings-content"></div>
-      </section>
-      <section id="unavailable" aria-labelledby="unavailable-title" hidden>
-        <h2 id="unavailable-title"></h2>
-        <div id="unavailable-content" class="report-notice"></div>
       </section>
     </main>
     <footer class="site-footer">

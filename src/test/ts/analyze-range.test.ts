@@ -130,5 +130,19 @@ test('an inspection records its commit title and author, so a report needs no Gi
   assert.equal(exported.status, 0, exported.stderr);
   const row = (JSON.parse(await readFile(join(site, 'summary.json'), 'utf8')) as { commits: { subject?: string; author?: { name: string; email?: string } }[] }).commits[0]!;
   assert.equal(row.subject, title);
-  assert.deepEqual(row.author, { name: author });
+  assert.equal(row.author?.name, author);
+});
+
+test('a report shows everything the store holds, and there is no mode to choose', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-report-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = join(directory, 'store');
+  assert.equal(invoke(['analyze', 'HEAD', '--store', store, '--no-config']).status, 0);
+  const site = join(directory, 'site');
+  const result = invoke(['report', `html=${site}`, '--store', store, '--sources', 'none']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok((await readdir(join(site, 'details'))).length > 0, 'per-commit details are written');
+  const mode = invoke(['report', `html=${join(directory, 'x')}`, '--store', store, '--mode', 'public']);
+  assert.equal(mode.status, 1);
+  assert.match(mode.stderr, /--mode is not an option of report/);
 });

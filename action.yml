@@ -201,7 +201,7 @@ runs:
         REPOMETRY_SOURCES: ${{ inputs.sources }}
         REPOMETRY_PUBLIC_SITE: ${{ inputs.public-site }}
       run: |
-        args=(report "--repo=$REPOMETRY_REPO" --mode public "--sources=$REPOMETRY_SOURCES")
+        args=(report "--repo=$REPOMETRY_REPO" "--sources=$REPOMETRY_SOURCES")
         if [[ -n "$REPOMETRY_STORE" ]]; then args+=("--store=$REPOMETRY_STORE"); fi
         if [[ -n "$REPOMETRY_CONFIG" ]]; then args+=("--config=$REPOMETRY_CONFIG"); fi
         args+=(-- "html=$REPOMETRY_PUBLIC_SITE")
