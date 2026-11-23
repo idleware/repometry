@@ -1,3 +1,8 @@
+## [0.3.1](https://github.com/idleware/repometry/compare/v0.3.0...v0.3.1) (2026-11-23)
+
+### Fixes & improvements
+* perf: show coverage hits ([8c0de8d](https://github.com/idleware/repometry/commit/8c0de8dad021f0b207af594d4931ea446a63a98e))
+
 ## [0.3.0](https://github.com/idleware/repometry/compare/v0.2.1...v0.3.0) (2026-11-23)
 
 ### Features
