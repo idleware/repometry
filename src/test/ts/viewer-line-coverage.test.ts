@@ -44,3 +44,13 @@ test('blank and comment-only lines carry no code, so coverage gives them no coun
   assert.deepEqual(lines.map(line => codeless(tokenize(line))), [true, true, true, true, true, true, false, false, false]);
   assert.equal(codeless(tokenizer('notes.txt')('# not a comment here')), false);
 });
+
+test('a gap of blank and comment lines takes the tint of a run it sits inside, and stays plain between different states', async () => {
+  const { bridgeStates } = await import('../../main/ts/report/html/app/viewer-source.js');
+  // Lines 1–12: covered, blank, covered, blank blank, uncovered, blank, uncovered, blank, code no one measured, blank, covered.
+  const states = new Map([[1, 'covered'], [3, 'covered'], [6, 'uncovered'], [8, 'uncovered'], [12, 'covered']] as const);
+  const codeless = [false, true, false, true, true, false, true, false, true, false, true, false];
+  assert.deepEqual([...bridgeStates(new Map(states), codeless)], [[2, 'covered'], [7, 'uncovered']]);
+  // At the file's start and end a gap has one side only, so it stays plain.
+  assert.equal(bridgeStates(new Map([[2, 'covered']] as const), [true, false, true]).size, 0);
+});

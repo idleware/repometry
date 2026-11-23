@@ -25,6 +25,8 @@ test('chips of one kind widen, of different kinds narrow, and conditions must al
   const c = file('docs/c.md', null);
   assert.equal(languageOf(a.path), 'TypeScript');
   assert.equal(languageOf(c.path), 'MD');
+  assert.deepEqual(['ci.yaml', '.github/x.yml', 'package.json', 'Dockerfile', 'docker/Dockerfile.dev', 'app.dockerfile', 'Containerfile', 'Makefile']
+    .map(languageOf), ['YAML', 'YAML', 'JSON', 'Dockerfile', 'Dockerfile', 'Dockerfile', 'Dockerfile', 'Other']);
   const pick = (query: string) => [a, b, c].filter(entry => matches(entry, parseQuery(query), facts)).map(entry => entry.path);
   assert.deepEqual(pick('lang:TypeScript lang:JavaScript'), ['src/core/a.ts', 'src/util/b.js']);
   assert.deepEqual(pick('lang:JavaScript has:findings'), ['src/util/b.js']);

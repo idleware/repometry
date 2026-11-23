@@ -160,7 +160,14 @@ test('profile and CLI exclusions apply to source files and LCOV and are recorded
   const allExcluded = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json',
     '--exclude', 'extra bundle.js', '--exclude', included, '--import', 'lcov=coverage.info']);
   assert.equal(allExcluded.status, 0, allExcluded.stderr);
-  assert.equal(JSON.parse(allExcluded.stdout).status, 'not-applicable');
+  const securityOnly = JSON.parse(allExcluded.stdout) as Pick<Report, 'scope' | 'status'>;
+  assert.deepEqual(securityOnly.scope, { files: 0, parsed: 0 });
+  assert.equal(securityOnly.status, 'complete');
+
+  const empty = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json',
+    '--exclude', 'extra bundle.js', '--exclude', included, '--exclude', 'profile.json', '--exclude', 'coverage.info']);
+  assert.equal(empty.status, 0, empty.stderr);
+  assert.equal(JSON.parse(empty.stdout).status, 'not-applicable');
 
   const invalid = invoke(dir, ['analyze', '--working-tree', '--exclude', '../vendor']);
   assert.equal(invalid.status, 1);

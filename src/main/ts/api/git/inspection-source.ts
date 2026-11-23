@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { gitRoot, readGitCommit } from './git.js';
+import { gitRoot, gitUtf8, readGitCommit } from './git.js';
 import { containsPath, readWorkingTree } from './local.js';
 
 export interface SourceSelection {
@@ -9,18 +9,25 @@ export interface SourceSelection {
   readonly source: { readonly workingTree: true } | { readonly revision: string };
 }
 
-export async function readInspectionSource(request: SourceSelection, excludes: (path: string) => boolean) {
+export async function readInspectionSource(request: SourceSelection, excludes: (path: string) => boolean,
+  claims?: (path: string) => boolean) {
   const root = await realpath('workingTree' in request.source ? request.directory : await gitRoot(request.directory));
   const output = await physicalPath(resolve(request.output));
   if (containsPath(output, root) || output.split(sep).includes('.git')) {
     throw new Error('Choose a dedicated report directory outside Git metadata');
   }
   const snapshot = 'workingTree' in request.source
-    ? await readWorkingTree(root, output, excludes)
-    : await readGitCommit(root, request.source.revision, excludes);
+    ? await readWorkingTree(root, output, excludes, await trackedClaims(root, claims))
+    : await readGitCommit(root, request.source.revision, excludes, claims);
   const excludedOutput = snapshot.subject.kind === 'working-tree' && containsPath(root, output)
     ? relative(root, output).split(sep).join('/') : null;
   return { root, snapshot, excludedOutput, output };
+}
+
+async function trackedClaims(directory: string, claims: ((path: string) => boolean) | undefined) {
+  if (!claims || !await gitRoot(directory).catch(() => undefined)) return claims;
+  const tracked = new Set((await gitUtf8(directory, ['ls-files', '--cached', '-z', '--', '.'])).split('\0'));
+  return (path: string) => tracked.has(path) && claims(path);
 }
 
 async function physicalPath(path: string): Promise<string> {

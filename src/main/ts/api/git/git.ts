@@ -3,6 +3,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { comparePaths, isExcludedDirectory, isSourcePath, textLineCount, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
+import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
 import { isGeneratedSource } from '../../core/profile/exclusions.js';
 
 const git = promisify(execFile);
@@ -86,7 +87,8 @@ export async function gitBlobText(directory: string, oid: string): Promise<strin
   return utf8(result.stdout);
 }
 
-export async function readGitCommit(directory: string, revision: string, excludes: (path: string) => boolean): Promise<SourceSnapshot> {
+export async function readGitCommit(directory: string, revision: string, excludes: (path: string) => boolean,
+  claims?: (path: string) => boolean): Promise<SourceSnapshot> {
   const id = await resolveGitCommit(directory, revision);
   const tracked = (await gitTreeFiles(directory, id, undefined, true)).filter(({ path }) =>
     !path.split('/').slice(0, -1).some(isExcludedDirectory) && !excludes(path));
@@ -100,14 +102,26 @@ export async function readGitCommit(directory: string, revision: string, exclude
     generated.add(path);
     return [];
   });
+  const claimed = tracked.filter(({ path }) => !isSourcePath(path) && claims?.(path));
+  const oversized = new Set(claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes).map(({ path }) => path));
+  const requested = new Set(claimed.filter(({ path }) => !oversized.has(path)).map(({ oid }) => oid));
+  const claimedBlobs = new Map<string, Buffer>();
+  const counts = inventoryLineCounts(directory, tracked.filter(({ path }) => !oversized.has(path)), blobs,
+    (oid, bytes) => { if (requested.has(oid) && isClaimedText(bytes)) claimedBlobs.set(oid, bytes); });
+  for (const { path, oid } of claimed) {
+    const bytes = claimedBlobs.get(oid);
+    if (bytes && !oversized.has(path)) files.push({ path, bytes });
+  }
   files.sort((left, right) => comparePaths(left.path, right.path));
-  const counts = inventoryLineCounts(directory, tracked, blobs);
   const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid, size }) => ({ path, lines: counts.get(oid) ?? null, ...(size === undefined ? {} : { bytes: size }) }));
-  return { subject: { kind: 'commit', id }, files, inventory, generatedExcluded: [...generated].sort(comparePaths) };
+  return { subject: { kind: 'commit', id }, files, inventory, generatedExcluded: [...generated].sort(comparePaths),
+    ...(oversized.size ? { oversizedClaims: [...oversized].sort(comparePaths) } : {}) };
 }
 
-function inventoryLineCounts(directory: string, entries: readonly GitFile[], sources: ReadonlyMap<string, Buffer>): ReadonlyMap<string, number | null> {
+function inventoryLineCounts(directory: string, entries: readonly GitFile[], sources: ReadonlyMap<string, Buffer>,
+  capture: (oid: string, bytes: Buffer) => void): ReadonlyMap<string, number | null> {
   const lines = new Map([...sources].map(([oid, value]) => [oid, textLineCount(value)]));
+  for (const [oid, bytes] of sources) capture(oid, bytes);
   const entriesById = new Map(entries.map(entry => [entry.oid, entry]));
   let batch: string[] = [];
   let bytes = 0;
@@ -122,7 +136,10 @@ function inventoryLineCounts(directory: string, entries: readonly GitFile[], sou
   return lines;
 
   function flush(): void {
-    for (const [oid, value] of readBlobs(directory, batch)) lines.set(oid, textLineCount(value));
+    for (const [oid, value] of readBlobs(directory, batch)) {
+      lines.set(oid, textLineCount(value));
+      capture(oid, value);
+    }
     batch = [];
     bytes = 0;
   }

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { isRecord } from '../../../core/engine/plugin.js';
-import { isSensitiveFinding } from '../../../core/model/finding.js';
 import { findingImportMethods } from '../../../core/model/scanner-import.js';
+import { nativeScanners, securityCounts } from './security-summary.js';
 import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths, digest } from '../../../core/model/snapshot.js';
@@ -48,15 +48,10 @@ function ignoreContext(report: Report): Pick<InspectionContext, 'ignores'> {
 
 function scannerContext(report: Report): Pick<InspectionContext, 'security' | 'scanners'> {
   const methods = findingImportMethods(report.appliedConfig.findingImports);
-  if (!methods.length) return {};
-  const scanners = [...new Map(methods.flatMap(({ tools }) => tools.map(tool => [JSON.stringify(tool), tool] as const))).values()];
-  const security = methods.some(({ category }) => isSensitiveFinding(category))
-    ? { low: 0, medium: 0, high: 0, unknown: 0 } : undefined;
-  if (security) {
-    for (const finding of report.findings ?? []) {
-      if (isSensitiveFinding(finding.category)) security[finding.level]++;
-    }
-  }
+  const sources = [...methods.flatMap(({ tools }) => tools), ...nativeScanners(report)];
+  if (!methods.length && !sources.length) return {};
+  const scanners = [...new Map(sources.map(tool => [JSON.stringify(tool), tool] as const)).values()];
+  const security = securityCounts(report);
   return security ? { scanners, security } : { scanners };
 }
 
@@ -75,7 +70,7 @@ function readProfile(config: Report['appliedConfig']) {
     const { inputDigest, inputDigests, pathBase, ...settings } = coverage;
     coverage = settings;
   }
-  const { churnWindow, ...settings } = config;
+  const { churnWindow, securityScanners, ...settings } = config;
   // The policy is stable across commits; its matched paths describe this snapshot alone.
   const { generatedExcluded, ...sourceSettings } = source;
   return {

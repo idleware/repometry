@@ -1,8 +1,7 @@
 import { isRecord } from '../../../core/engine/plugin.js';
 import { definitions } from '../../../core/model/measurement.js';
 import { qualitySummary } from '../../../core/model/quality-summary.js';
-import { isSensitiveFinding } from '../../../core/model/finding.js';
-import { findingImportMethods } from '../../../core/model/scanner-import.js';
+import { securityCounts } from './security-summary.js';
 import { compareHistoryEntries } from '../wire/public-history-model.js';
 import type { PublicHistoryEntry } from '../wire/public-history-model.js';
 import { inspectionProfileDigest } from './inspection-context.js';
@@ -17,14 +16,7 @@ export function commitSummary(report: Report): CommitSummary {
   const history = historyEntry(report);
   const profileDigest = inspectionProfileDigest(report);
   const metrics = metricProjection(report);
-  const tracksSecurity = findingImportMethods(report.appliedConfig.findingImports)
-    .some(({ category }) => isSensitiveFinding(category));
-  const security = tracksSecurity ? { low: 0, medium: 0, high: 0, unknown: 0 } : undefined;
-  if (security) {
-    for (const finding of report.findings ?? []) {
-      if (isSensitiveFinding(finding.category)) security[finding.level]++;
-    }
-  }
+  const security = securityCounts(report);
   return {
     ...history,
     ...(report.commit === undefined ? {} : { subject: report.commit.subject, author: report.commit.author }),

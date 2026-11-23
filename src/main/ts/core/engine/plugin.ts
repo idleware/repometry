@@ -42,6 +42,8 @@ export interface FileClaims {
   readonly extensions?: readonly string[];
   readonly globs?: readonly string[];
   readonly languages?: readonly string[];
+  /** Run inspections for matching files without counting them as analysed in the inventory. */
+  readonly scanOnly?: boolean;
 }
 
 export interface ProductDeclaration {

@@ -5,43 +5,52 @@ import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js
 /** The report's own grade colours, so a badge in a README reads as the report does. */
 const colors: Record<Grade, string> = { A: '#1f9d5a', B: '#74a83a', C: '#d9a400', D: '#ec8a2c', F: '#db4a3f' };
 const unavailable = '#6b7684';
-const label = '#0f1720';
 
 export interface SecurityCounts { readonly critical?: number; readonly high: number; readonly medium: number; readonly low: number; readonly unknown: number }
 
-/**
- * The README badges. Security joins coverage and maintainability only where the export may carry scanner counts:
- * the public export leaves them out, and so leaves the badge out.
- */
+/** The README badges. Security is available when the inspection recorded scanner counts. */
 export function badges(report: PublicHistoryEntry | undefined, quality: QualitySummary | undefined,
   security?: SecurityCounts): Map<string, Buffer> {
   const lines = report?.lineCoverage;
   const ratio = lines && lines.total > 0 ? lines.covered / lines.total : null;
   const grade = quality?.maintainability?.grade ?? null;
-  // A missing measurement is one mark, not a word.
-  const coverage = ratio === null ? '—'
-    : new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 1 }).format(ratio);
+  const coverage = lines && lines.total > 0 ? `${BigInt(lines.covered) * 100n / BigInt(lines.total)}%` : '—';
   const files = new Map([
-    ['coverage.svg', badge('coverage', coverage, ratio === null ? null : coverageGrade(ratio), 68)],
-    ['maintainability.svg', badge('maintainability', grade ?? '—', grade, 112)],
+    ['coverage.svg', badge('coverage', coverage, ratio === null ? null : coverageGrade(ratio))],
+    ['maintainability.svg', badge('maintainability', grade ?? '—', grade)],
   ]);
   if (security) {
     const grade = securityGrade(security);
-    files.set('security.svg', badge('security', grade, grade, 64));
+    files.set('security.svg', badge('security', grade, grade));
   }
   return files;
 }
 
-function badge(name: string, value: string, grade: Grade | null, labelWidth: number): Buffer {
+function badge(name: string, value: string, grade: Grade | null): Buffer {
   const fill = grade ? colors[grade] : unavailable;
-  const valueWidth = Math.max(30, value.length * 8 + 14);
+  const labelWidth = Math.max(11, name.length * 7) + 12;
+  const valueWidth = Math.max(11, value.length * 7) + 12;
   const width = labelWidth + valueWidth;
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="26" viewBox="0 0 ${width} 26" role="img" aria-label="${name}: ${value}">
-  <rect width="${width}" height="26" rx="5" fill="${fill}"/>
-  <path d="M0 5a5 5 0 0 1 5-5h${labelWidth - 5}v26H5a5 5 0 0 1-5-5Z" fill="${label}"/>
-  <g fill="#fff" font-family="system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">
-    <text x="${labelWidth / 2}" y="17">${name}</text>
-    <text x="${labelWidth + valueWidth / 2}" y="17">${value}</text>
+  const labelCenter = labelWidth / 2;
+  const valueCenter = labelWidth + valueWidth / 2;
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20" viewBox="0 0 ${width} 20" role="img" aria-label="${name}: ${value}">
+  <defs>
+    <clipPath id="badge"><rect width="${width}" height="20" rx="3"/></clipPath>
+    <linearGradient id="shade" x2="0" y2="100%">
+      <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".1"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#badge)">
+    <rect width="${labelWidth}" height="20" fill="#555"/>
+    <rect x="${labelWidth}" width="${valueWidth}" height="20" fill="${fill}"/>
+    <rect width="${width}" height="20" fill="url(#shade)"/>
+  </g>
+  <g aria-hidden="true" fill="#fff" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-anchor="middle">
+    <text x="${labelCenter}" y="15" fill="#010101" fill-opacity=".3">${name}</text>
+    <text x="${valueCenter}" y="15" fill="#010101" fill-opacity=".3">${value}</text>
+    <text x="${labelCenter}" y="14">${name}</text>
+    <text x="${valueCenter}" y="14">${value}</text>
   </g>
 </svg>\n`);
 }

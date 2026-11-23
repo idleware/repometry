@@ -30,7 +30,8 @@ export function manifestProducts(plugin: Plugin | LegacyPlugin, allowLegacy: boo
     throw new Error(`Invalid kinds for plugin ${id}`);
   }
   if (claims !== undefined && (!isRecord(claims) || Object.entries(claims).some(([key, values]) =>
-    !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
+    key === 'scanOnly' ? typeof values !== 'boolean'
+    : !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
     || (key === 'extensions' && values.some(extension => !/^\.[\w-]+$/.test(extension)))))) {
     throw new Error(`Invalid file claims for plugin ${id}`);
   }

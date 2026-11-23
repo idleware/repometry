@@ -392,8 +392,10 @@ function metricsView(details: InspectionDetails, navigation: Navigation, setting
     // A filtered file list says how many of the folder's files it kept; other lists name the selection only once.
     const listsFiles = noun === 'files' && rows.length === files.length;
     const of = filtering && !(listsFiles && display.length <= pageSize) ? ` · ${count(files.length)} of ${count(scopeFiles.length)} files selected` : '';
+    const range = entryRange(display, first, visible.length);
     result.textContent = rows.length === 0 ? (hint.hidden ? 'No files match this selection.' : '')
-      : display.length > pageSize ? `${count(first + 1)}–${count(first + visible.length)} of ${count(rows.length)} ${noun}${of}`
+      : display.length > pageSize && range ? `${count(range[0])}–${count(range[1])} of ${count(rows.length)} ${noun}${of}`
+        : display.length > pageSize ? `${count(rows.length)} ${noun}${of}`
         : filtering && listsFiles ? `${count(rows.length)} of ${count(scopeFiles.length)} files`
         : `${count(rows.length)} ${rows.length === 1 ? noun.replace(/s$/, '').replace('entrie', 'entry') : noun}${of}`;
     tableWrap.hidden = rows.length === 0;
@@ -840,6 +842,17 @@ function rememberLayer(layer: SourceLayer): void {
   } catch {
     // Blocked storage only forgets the choice; the URL still carries it.
   }
+}
+
+/**
+ * The entries a page shows, 1-based, counting rows and not the fold of ignored files, which takes a place in the list
+ * but is no entry of its own. None where the page holds only the fold.
+ */
+export function entryRange(display: readonly { readonly kind: string }[], first: number, shown: number): [number, number] | null {
+  const entries = (from: number, to: number) => display.slice(from, to).filter(row => row.kind !== 'unread').length;
+  const before = entries(0, first);
+  const here = entries(first, first + shown);
+  return here ? [before + 1, before + here] : null;
 }
 
 type MapShape = 'rings' | 'tiles';
@@ -1753,6 +1766,8 @@ function issueGroup(group: readonly Finding[], navigation: Navigation, files: Re
   summary.append(identity, severity, element('span', 'fx-issue-count', group.some(finding => finding.effortMinutes !== undefined)
     ? `${quantity(group.length, 'occurrence')} · ${duration(effort)}` : quantity(group.length, 'occurrence')));
   const locations = element('ul', 'fx-event-list fx-occurrences');
+  // The excerpts mark their lines in the finding's own colour, as its severity badge does.
+  locations.dataset.level = item.level;
   // The occurrences, and the source they load, are built when the group is first opened: a page of closed groups
   // requests nothing.
   details.addEventListener('toggle', () => { if (details.open && !locations.childElementCount) locations.append(...group.map(occurrence)); });

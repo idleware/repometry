@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { profileSettings } from '../../main/ts/report/json/projections/inspection-details.js';
 import { badges } from '../../main/ts/report/html/site/badges.js';
+import type { PublicHistoryEntry } from '../../main/ts/report/json/wire/public-history-model.js';
 
 test('the applied profile is projected field by field, and malformed parts are left out', () => {
   const profile = profileSettings({
@@ -40,4 +41,14 @@ test('a security badge is made only when scanner counts are given, grading the w
   const medium = badges(undefined, undefined, { high: 0, medium: 1, low: 4, unknown: 0 }).get('security.svg')!.toString();
   assert.match(medium, /security: C/);
   assert.match(badges(undefined, undefined).get('coverage.svg')!.toString(), /coverage: —/);
+});
+
+test('flat coverage badges floor the displayed percentage and keep their grade colour', () => {
+  const svg = (covered: number, total: number) => badges({ lineCoverage: { covered, total } } as PublicHistoryEntry,
+    undefined).get('coverage.svg')!.toString();
+  assert.match(svg(657, 1000), /aria-label="coverage: 65%"/);
+  assert.match(svg(29, 100), /aria-label="coverage: 29%"/);
+  assert.match(svg(996, 1000), /fill="#1f9d5a"/);
+  assert.match(svg(1, 100), /fill="#db4a3f"/);
+  assert.match(svg(100, 100), /height="20"[^>]*role="img" aria-label="coverage: 100%"/);
 });

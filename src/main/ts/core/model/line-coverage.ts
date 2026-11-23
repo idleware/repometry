@@ -2,11 +2,13 @@ import { isRecord } from '../engine/plugin.js';
 import type { DataContract } from '../engine/plugin.js';
 
 export type CoveredLineRange = readonly [first: number, last: number];
+export type HitRun = readonly [first: number, last: number, count: number];
 
 export interface FileLineCoverage {
   readonly covered: readonly CoveredLineRange[];
   readonly uncovered: readonly CoveredLineRange[];
   readonly partial?: readonly CoveredLineRange[];
+  readonly hits?: readonly HitRun[];
 }
 
 export type LineCoverage = Readonly<Record<string, FileLineCoverage>>;
@@ -15,7 +17,7 @@ export const lcovLines: DataContract<LineCoverage> = {
   id: 'repometry.lcov-lines/v1',
   accepts: (value): value is LineCoverage => isRecord(value) && Object.values(value).every(file =>
     isRecord(file) && isMerged(file.covered) && isMerged(file.uncovered) &&
-    (file.partial === undefined || isMerged(file.partial))),
+    (file.partial === undefined || isMerged(file.partial)) && (file.hits === undefined || isMergedHits(file.hits))),
 };
 
 function isMerged(value: unknown): value is readonly CoveredLineRange[] {
@@ -27,6 +29,22 @@ function isMerged(value: unknown): value is readonly CoveredLineRange[] {
     if (typeof first !== 'number' || typeof last !== 'number' || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last) || first <= previous + 1 || last < first) return false;
     previous = last;
+  }
+  return true;
+}
+
+function isMergedHits(value: unknown): value is readonly HitRun[] {
+  if (!Array.isArray(value)) return false;
+  let previousEnd = 0;
+  let previousCount = -1;
+  for (const run of value as unknown[]) {
+    if (!Array.isArray(run) || run.length !== 3) return false;
+    const [first, last, count] = run as unknown[];
+    if (typeof first !== 'number' || typeof last !== 'number' || typeof count !== 'number' || !Number.isSafeInteger(first)
+      || !Number.isSafeInteger(last) || !Number.isSafeInteger(count) || first <= previousEnd || last < first || count < 0
+      || (first === previousEnd + 1 && count === previousCount)) return false;
+    previousEnd = last;
+    previousCount = count;
   }
   return true;
 }

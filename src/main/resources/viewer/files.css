@@ -503,6 +503,9 @@ code.fx-function-name { font-size: .75rem; color: var(--secondary); }
 .src-excerpt .src-line { grid-template-columns: .375rem 2.75rem max-content; }
 .src-excerpt .src-line:hover { background: transparent; }
 .src-range, .src-excerpt .src-range:hover { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--grade-c); }
+/* A finding's excerpt follows its severity badge: amber for medium (above), red for high, grey for low and unknown. */
+.fx-occurrences[data-level="high"] .src-range { background: var(--bad-bg); box-shadow: inset 3px 0 0 var(--bad); }
+.fx-occurrences:is([data-level="low"], [data-level="unknown"]) .src-range { background: var(--selected); box-shadow: inset 3px 0 0 var(--neutral-2); }
 .src-more { display: block; padding: .1875rem 1rem .125rem 3.125rem; font-family: var(--sans); font-size: .75rem; }
 
 /* Map heading with its shape switch; the treemap's labels and folder frames. */

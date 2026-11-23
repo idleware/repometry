@@ -7,6 +7,12 @@ export interface SourceFile {
   readonly bytes: Uint8Array;
 }
 
+export const maxClaimedFileBytes = 1024 * 1024;
+
+export function isClaimedText(bytes: Uint8Array): boolean {
+  return bytes.byteLength <= maxClaimedFileBytes && !bytes.subarray(0, 8192).includes(0);
+}
+
 export interface InventoryFile {
   readonly path: string;
   readonly lines: number | null;
@@ -19,4 +25,5 @@ export interface SourceSnapshot {
   readonly files: readonly SourceFile[];
   readonly inventory?: readonly InventoryFile[];
   readonly generatedExcluded?: readonly string[];
+  readonly oversizedClaims?: readonly string[];
 }

@@ -136,7 +136,11 @@ const languages: Readonly<Record<string, string>> = {
   py: 'Python', go: 'Go', rs: 'Rust', java: 'Java', kt: 'Kotlin', kts: 'Kotlin', rb: 'Ruby', php: 'PHP', cs: 'C#',
   c: 'C', h: 'C', cc: 'C++', cpp: 'C++', cxx: 'C++', hpp: 'C++', hh: 'C++', swift: 'Swift', scala: 'Scala',
   vue: 'Vue', svelte: 'Svelte', sh: 'Shell', bash: 'Shell', css: 'CSS', scss: 'SCSS', less: 'Less', html: 'HTML',
+  yaml: 'YAML', yml: 'YAML', json: 'JSON', dockerfile: 'Dockerfile',
 };
+
+/** Files a name alone types: Dockerfile and Containerfile, with or without a suffix such as Dockerfile.dev. */
+const namedLanguages: readonly (readonly [RegExp, string])[] = [[/^(?:dockerfile|containerfile)(?:\..+)?$/i, 'Dockerfile']];
 
 /** Language colours follow the conventions people already know from code hosts. */
 const languageColors: Readonly<Record<string, string>> = {
@@ -144,10 +148,14 @@ const languageColors: Readonly<Record<string, string>> = {
   Kotlin: '#a97bff', Ruby: '#701516', PHP: '#4f5d95', 'C#': '#178600', C: '#555555', 'C++': '#f34b7d', Swift: '#f05138',
   Scala: '#c22d40', Vue: '#41b883', Svelte: '#ff3e00', Shell: '#89e051', CSS: '#663399', SCSS: '#c6538c', Less: '#1d365d',
   HTML: '#e34c26',
+  // Configuration reads beside the code, so it takes quieter tones than the code hosts give it.
+  YAML: '#c47d84', JSON: '#9b86b5', Dockerfile: '#4f9a94',
 };
 
 export function languageOf(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1);
+  const named = namedLanguages.find(([pattern]) => pattern.test(name));
+  if (named) return named[1];
   const dot = name.lastIndexOf('.');
   const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
   return languages[extension] ?? (extension ? extension.toUpperCase() : 'Other');

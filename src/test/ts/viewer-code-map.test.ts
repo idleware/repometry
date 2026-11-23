@@ -40,3 +40,14 @@ test('a relative scale compares files with files and folders with the folders at
   assert.equal(band(file, 'churn', 24, peakOf('src/core/a.ts', false)), 4);
   assert.equal(band(file, 'churn', 24, 120), 1);
 });
+
+test('a page counts its entries, not the fold of ignored files, so the last page never passes the total', async () => {
+  const { entryRange } = await import('../../main/ts/report/html/app/viewer-files.js');
+  const rows = (count: number) => Array.from({ length: count }, () => ({ kind: 'file' }));
+  // 160 read files, the fold, then 37 ignored ones unfolded: 198 places, 197 files.
+  const display = [...rows(160), { kind: 'unread' }, ...rows(37)];
+  assert.deepEqual(entryRange(display, 150, 48), [151, 197]);
+  assert.deepEqual(entryRange(display, 0, 50), [1, 50]);
+  // Folded away, the last page is the fold alone after the read files.
+  assert.equal(entryRange([...rows(150), { kind: 'unread' }], 150, 1), null);
+});

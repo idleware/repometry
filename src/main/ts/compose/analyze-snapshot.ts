@@ -12,7 +12,8 @@ import type { Measurement } from '../core/model/measurement.js';
 import { debtModel } from '../core/model/quality-summary.js';
 import { reportSchema } from '../core/model/report.js';
 import type { Diagnostic, Report } from '../core/model/report.js';
-import { comparePaths, digest, sourceDirectoriesExcluded, sourceExtensions, sourceFile, sourceLineCounts, textLineCount } from '../core/model/snapshot.js';
+import { comparePaths, digest, isSourcePath, sourceDirectoriesExcluded, sourceExtensions, sourceFile, sourceLineCounts, textLineCount } from '../core/model/snapshot.js';
+import { isClaimedText, maxClaimedFileBytes } from '../core/model/source.js';
 import { defaultSourceExclusions, exclusionMatcher, generatedSourcePolicy, sourceExclusionMatcher } from '../core/profile/exclusions.js';
 import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
 import type { AnalysisInput } from '../core/usecases/inspect.js';
@@ -21,6 +22,7 @@ import { duplication, duplicationInput } from '../plugins/duplication/duplicatio
 import { babelProvider, babelTypes, parserDefaults } from '../plugins/language-js/babel-provider.js';
 import { fileQuality, maintainability } from '../plugins/maintainability/maintainability.js';
 import { structure } from '../plugins/structure/structure.js';
+import { securityPlugins } from './security-plugins.js';
 
 const sourcePlugins = [babelProvider, { ...structure, tools: babelTypes }, { ...maintainability, tools: babelTypes }];
 const selected = ['structure/size', 'structure/complexity', 'maintainability/file'] as const;
@@ -28,12 +30,17 @@ const bindings = new Map(selected.map(operation => [operation, { syntax: { opera
 const sourcePlan = plan({ plugins: sourcePlugins, select: selected, inputs: new Map([['file', sourceFile.id]]), bindings });
 const duplicationPlan = plan({ plugins: [duplication], select: ['duplication/detect'], inputs: new Map([['sources', duplicationInput.id]]) });
 const coveragePlan = plan({ plugins: [coverage], select: ['lcov/import', 'lcov/lines'], inputs: new Map([['lcov', lcovInput.id]]) });
+const securityClaims = securityPlugins.map(plugin => claimMatcher(plugin.claims));
+
+export function claimsNativeFile(path: string): boolean {
+  return securityClaims.some(match => match(path));
+}
 
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
   [definitions.functions]: 'Babel function nodes with bodies, including nested functions and methods.',
   [definitions.complexity]: 'One plus branches in the function body: if, ternary, loops, catch, non-default switch cases and logical operators. Nested functions are measured separately. Line and column are 1-based and columns count UTF-16 units.',
-  [definitions.coverage]: 'Distinct covered DA lines divided by the distinct DA lines listed for mapped files. Duplicate records are merged by the presence of any hit. A zero denominator has no ratio.',
+  [definitions.coverage]: 'Distinct covered code lines divided by the distinct code lines listed in LCOV DA records. Hit counts are summed across records. A zero denominator has no ratio.',
   [definitions.codeLines]: 'Nonblank physical lines after removing Babel comment spans and the interpreter directive. A line containing both code and a comment counts as code.',
   [definitions.comments]: 'Physical lines containing only a Babel comment or interpreter directive.',
   [definitions.classes]: 'Babel class declaration and expression nodes.',
@@ -44,28 +51,40 @@ const measurementDefinitions = {
 export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths = [], coverage: inputCoverage }: AnalysisInput,
   additional: readonly Plugin[] = []): Promise<Report> {
   const rows: Measurement[] = [];
-  const diagnostics: Diagnostic[] = [];
+  const diagnostics: Diagnostic[] = (snapshot.oversizedClaims ?? []).map(oversizedClaim);
   const findings: Finding[] = [];
   const cloneSources: CloneSource[] = [];
+  const sourceFiles = snapshot.files.filter(file => isSourcePath(file.path));
+  const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional];
   const enabled = [...sourcePlugins, duplication, ...(inputCoverage === undefined ? [] : [coverage])];
-  const plugins = [...enabled, ...additional];
+  const plugins = [...enabled, ...claimedPlugins];
   if (additional.length) plan({ plugins, select: [], inputs: new Map() });
   if (inputCoverage === undefined && additional.some(plugin => plugin.id === coverage.id)) throw new Error('An additional plugin uses a built-in plugin ID');
   const reportProducts = new ReportProducts(plugins);
-  const sourcePlans = new Map<string, readonly PlannedOperation[]>([['', sourcePlan]]);
+  const sourcePlans = new Map<string, readonly PlannedOperation[]>([['[true]', sourcePlan]]);
   const usedPlans = new Map(sourcePlan.map(task => [task.key, task]));
-  const matches = additional.map(plugin => claimMatcher(plugin.claims));
+  const matches = claimedPlugins.map(plugin => claimMatcher(plugin.claims));
   const parsed = new Set<string>();
+  const inspected = new Set<string>();
+  const scanned = new Set<string>();
+  let completedFileInspection = false;
+  const scanOnlyOperations = new Set(plugins.filter(plugin => plugin.claims?.scanOnly).flatMap(({ id, operations }) =>
+    operations.map(operation => `${id}/${operation.id}`)));
+  const securityOperations = new Map<string, string>(claimedPlugins.filter(plugin => plugin.kinds.includes('security')).flatMap(plugin =>
+    plugin.operations.filter(operation => operation.role === 'inspection').map(operation => [`${plugin.id}/${operation.id}`, plugin.id] as const)));
 
   for (const file of snapshot.files) {
-    const selectedPlugins = additional.filter((_, index) => matches[index]!(file.path));
-    const group = JSON.stringify(selectedPlugins.map(plugin => plugin.id));
-    const groupKey = selectedPlugins.length === 0 ? '' : group;
+    const source = isSourcePath(file.path);
+    const claimed = claimedPlugins.filter((_, index) => matches[index]!(file.path));
+    const selectedPlugins = isClaimedText(file.bytes) ? claimed : [];
+    if (claimed.length && file.bytes.byteLength > maxClaimedFileBytes) diagnostics.push(oversizedClaim(file.path));
+    if (!source && !selectedPlugins.length) continue;
+    const groupKey = JSON.stringify([source, ...selectedPlugins.map(plugin => plugin.id)]);
     const tasks = sourcePlans.get(groupKey) ?? plan({
-      plugins: [...sourcePlugins, ...additional],
-      select: [...selected, ...selectedPlugins.flatMap(plugin => plugin.operations
+      plugins: source ? [...sourcePlugins, ...claimedPlugins] : selectedPlugins,
+      select: [...(source ? selected : []), ...selectedPlugins.flatMap(plugin => plugin.operations
         .filter(operation => operation.role === 'inspection').map(operation => `${plugin.id}/${operation.id}`))],
-      inputs: new Map([['file', sourceFile.id]]), bindings,
+      inputs: new Map([['file', sourceFile.id]]), ...(source ? { bindings } : {}),
     });
     sourcePlans.set(groupKey, tasks);
     const results = await execute(tasks, new Map([['file', { contract: sourceFile.id, value: file }]]));
@@ -85,7 +104,8 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
   record(duplicationPlan[0]!, copies);
 
   if (inputCoverage !== undefined) {
-    const value = { text: inputCoverage.text, root: inputCoverage.sourceRoot, sourceLines: sourceLineCounts(snapshot.files),
+    const value = { text: inputCoverage.text, root: inputCoverage.sourceRoot, sourceLines: sourceLineCounts(sourceFiles),
+      codeLines: new Map(cloneSources.map(({ path, codeLines }) => [path, new Set(codeLines)])),
       excludes: sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded) };
     const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]));
     for (const task of coveragePlan) record(task, outcomes.get(task.key)!);
@@ -98,6 +118,7 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
   }
 
   const pluginData = reportProducts.result();
+  const securityScanners = claimedPlugins.filter(plugin => scanned.has(plugin.id)).map(({ id, version }) => ({ name: id, version }));
   const inventory = new Map((snapshot.inventory ?? []).map(({ path, lines, bytes }) => [path, { lines, bytes }]));
   for (const { path, bytes } of snapshot.files) {
     if (!inventory.has(path)) inventory.set(path, { lines: textLineCount(bytes), bytes: bytes.length });
@@ -112,7 +133,9 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
         defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
       parser: parserDefaults,
       maintainability: { structuralRules, duplication: duplicationSettings, debtModel, remediation: 'nonoverlapping-complexity/v1' },
-      coverage: inputCoverage === undefined ? null : { inputDigest: digest(inputCoverage.text), pathBase: inputCoverage.sourceRoot, merge: 'any-hit' },
+      coverage: inputCoverage === undefined ? null : { inputDigest: digest(inputCoverage.text), pathBase: inputCoverage.sourceRoot,
+        merge: 'any-hit', hitCounts: 'sum', lines: 'code-only' },
+      ...(securityScanners.length ? { securityScanners } : {}),
       plugins: plugins.map(({ id, version, api, tools, kinds, claims }) =>
         ({ id, version, api, tools: tools ?? {}, ...(kinds === undefined ? {} : { kinds }), ...(claims === undefined ? {} : { claims }) })),
       operations: [...usedPlans.values(), ...duplicationPlan, ...(inputCoverage === undefined ? [] : coveragePlan)]
@@ -120,14 +143,14 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
     },
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
-    scope: { files: snapshot.files.length, parsed: parsed.size },
-    status: diagnostics.length > 0 ? 'partial' : snapshot.files.length === 0 ? 'not-applicable' : 'complete',
+    scope: { files: sourceFiles.length, parsed: parsed.size },
+    status: diagnostics.length > 0 ? 'partial' : sourceFiles.length === 0 && !completedFileInspection ? 'not-applicable' : 'complete',
     measurements: rows,
     diagnostics,
     findings,
     ...(pluginData === undefined ? {} : { pluginData: { ...pluginData,
       inventory: [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, { lines, bytes }]) =>
-        ({ path, lines, ...(bytes === undefined ? {} : { bytes }), language: languageId(path), analysed: parsed.has(path) })) } }),
+        ({ path, lines, ...(bytes === undefined ? {} : { bytes }), language: languageId(path), analysed: parsed.has(path) || inspected.has(path) })) } }),
   };
 
   function record(task: PlannedOperation, outcome: Outcome, path?: string): void {
@@ -137,6 +160,12 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
     }
     try {
       const stored = reportProducts.record(task, outcome.product, path);
+      if (path !== undefined && task.operation.role === 'inspection') {
+        completedFileInspection = true;
+        if (!scanOnlyOperations.has(task.key)) inspected.add(path);
+      }
+      const scanner = securityOperations.get(task.key);
+      if (scanner) scanned.add(scanner);
       if (stored) {
         rows.push(...stored.measurements);
         findings.push(...stored.findings);
@@ -145,6 +174,10 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
       diagnostics.push({ operation: task.key, state: 'failed', path, message: error instanceof Error ? error.message : String(error) });
     }
   }
+}
+
+function oversizedClaim(path: string): Diagnostic {
+  return { operation: 'source/claims', state: 'partial', path, message: 'Plugin inspection skipped a file larger than 1 MiB' };
 }
 
 function languageId(path: string): string {

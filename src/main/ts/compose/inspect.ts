@@ -12,7 +12,7 @@ import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { executeInspection } from '../core/usecases/inspect.js';
 import type { AnalysisExecutor, InspectionPorts } from '../core/usecases/inspect.js';
 import { LocalReportStore } from '../report/json/store/local-store.js';
-import { analyzeSnapshot } from './analyze-snapshot.js';
+import { analyzeSnapshot, claimsNativeFile } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
 
 export { analyzeSnapshot } from './analyze-snapshot.js';
@@ -44,7 +44,7 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
 }
 
 async function readSource(request: InspectRequest, excludes: (path: string) => boolean) {
-  const source = await readInspectionSource(request, excludes);
+  const source = await readInspectionSource(request, excludes, claimsNativeFile);
   const store = new LocalReportStore(source.output);
   return { ...source, save: (report: Report) => store.save(report) };
 }

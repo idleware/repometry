@@ -116,10 +116,8 @@ export type HitRun = readonly [first: number, last: number, count: number];
 
 /** How often tests ran each line, where the report carries the counts; an older report has none. */
 export function lineHits(coverage: FileLineCoverage): Map<number, number> {
-  // The wire is getting `hits`; until it lands the field is read off the record as the agreed shape.
-  const runs = (coverage as FileLineCoverage & { readonly hits?: readonly HitRun[] | undefined }).hits;
   const hits = new Map<number, number>();
-  for (const [from, to, count] of runs ?? []) for (let line = Math.max(1, from); line <= to; line++) hits.set(line, count);
+  for (const [from, to, count] of coverage.hits ?? []) for (let line = Math.max(1, from); line <= to; line++) hits.set(line, count);
   return hits;
 }
 
@@ -167,7 +165,10 @@ export function setSourceLayer(container: HTMLElement, layer: SourceLayer): void
 /** The source as numbered lines; returns a function that brings a line into view and marks it. */
 export function renderSource(container: HTMLElement, text: string, options: SourceOptions): (line: number) => void {
   const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+  // Tokenized up front, in order, since a comment's state carries from line to line.
   const tokenize = tokenizer(options.path);
+  const tokens = lines.map(line => tokenize(line));
+  const bridged = options.coverage ? bridgeStates(options.coverage, tokens.map(codeless)) : new Map<number, LineState>();
   const starts = new Map(options.functions.map(entry => [entry.line, entry]));
   const notes = new Map<number, SourceNote[]>();
   for (const note of options.notes) notes.set(note.line, [...notes.get(note.line) ?? [], note]);
@@ -190,10 +191,12 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
       mark.append(badge);
     }
     // The coverage layer tints each measured line's gutter cell and writes in it how often the line ran; a miss's red says it.
-    // Some tools count blank and comment lines as run; nothing runs there, so they keep the strip's tint and say nothing.
-    const runs = tokenize(line);
-    const state = options.coverage?.get(number);
-    if (state && codeless(runs)) {
+    // Nothing runs on a blank or comment line: where a tool counts one anyway, or it sits inside a run of one state, it
+    // keeps the strip's tint and says nothing.
+    const runs = tokens[index]!;
+    const own = options.coverage?.get(number);
+    const state = own ?? bridged.get(number);
+    if (state && (!own || codeless(runs))) {
       const cell = element('span', `src-cov src-cov-mark-${state}`);
       cell.setAttribute('aria-hidden', 'true');
       mark.append(cell);
@@ -396,6 +399,24 @@ export function tokenizer(path: string): (line: string) => [TokenKind, string][]
     if (plain) runs.push(['', plain]);
     return runs;
   };
+}
+
+/**
+ * The tint a gap of blank and comment lines takes so a run of one state stays one strip: the state of the measured
+ * lines on both sides, where they agree. A gap between different states, or at the file's start or end, stays plain.
+ */
+export function bridgeStates(states: ReadonlyMap<number, LineState>, codeless: readonly boolean[]): Map<number, LineState> {
+  const bridged = new Map<number, LineState>();
+  let line = 1;
+  while (line <= codeless.length) {
+    if (states.has(line) || !codeless[line - 1]) { line += 1; continue; }
+    let end = line;
+    while (end < codeless.length && !states.has(end + 1) && codeless[end]) end += 1;
+    const before = states.get(line - 1);
+    if (before && before === states.get(end + 1)) for (let at = line; at <= end; at++) bridged.set(at, before);
+    line = end + 1;
+  }
+  return bridged;
 }
 
 /** A line with no code: blank, or nothing but comment. */

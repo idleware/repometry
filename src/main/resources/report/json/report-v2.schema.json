@@ -154,7 +154,8 @@
         "properties": {
           "covered": { "$ref": "#/$defs/lcovLineRanges" },
           "uncovered": { "$ref": "#/$defs/lcovLineRanges" },
-          "partial": { "$ref": "#/$defs/lcovLineRanges" }
+          "partial": { "$ref": "#/$defs/lcovLineRanges" },
+          "hits": { "$ref": "#/$defs/lcovHitRuns" }
         }
       }
     },
@@ -165,6 +166,16 @@
         "type": "array",
         "minItems": 2,
         "prefixItems": [{ "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 1 }],
+        "items": false
+      }
+    },
+    "lcovHitRuns": {
+      "type": "array",
+      "description": "Ordered inclusive ranges of measured lines with the same hit count.",
+      "items": {
+        "type": "array",
+        "minItems": 3,
+        "prefixItems": [{ "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 0 }],
         "items": false
       }
     },
