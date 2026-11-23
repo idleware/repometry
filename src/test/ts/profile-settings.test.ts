@@ -48,7 +48,25 @@ test('flat coverage badges floor the displayed percentage and keep their grade c
     undefined).get('coverage.svg')!.toString();
   assert.match(svg(657, 1000), /aria-label="coverage: 65%"/);
   assert.match(svg(29, 100), /aria-label="coverage: 29%"/);
-  assert.match(svg(996, 1000), /fill="#1f9d5a"/);
+  assert.match(svg(996, 1000), /fill="#5ec269"/);
   assert.match(svg(1, 100), /fill="#db4a3f"/);
-  assert.match(svg(100, 100), /height="20"[^>]*role="img" aria-label="coverage: 100%"/);
+  const fullCoverage = svg(100, 100);
+  assert.match(fullCoverage, /height="20"[^>]*role="img" aria-label="coverage: 100%"/);
+  assert.match(fullCoverage, /<text x="7"[^>]*font-weight="400"[^>]*>coverage<\/text>/);
+  assert.match(fullCoverage, /font-weight="700" textLength="30"[^>]*>100%<\/text>/);
+  assert.doesNotMatch(fullCoverage, /<path\b/);
+  assert.equal(fullCoverage.match(/lengthAdjust="spacingAndGlyphs"/g)?.length, 2);
+});
+
+test('the three badges can be inlined together without sharing SVG IDs', () => {
+  const files = badges(undefined, undefined, { high: 0, medium: 0, low: 0, unknown: 0 });
+  const ids: string[] = [];
+  for (const bytes of files.values()) {
+    const svg = bytes.toString();
+    const localIds = [...svg.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]!);
+    const references = [...new Set([...svg.matchAll(/url\(#([^)]+)\)/g)].map(match => match[1]!))];
+    assert.deepEqual(references.sort(), localIds.toSorted());
+    ids.push(...localIds);
+  }
+  assert.equal(new Set(ids).size, 9);
 });
