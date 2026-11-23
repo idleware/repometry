@@ -36,9 +36,14 @@ function useDetails(details) {
 function measured(descriptor) {
     return local.index.has(descriptor.ratio?.over ?? descriptor.id);
 }
-/** Other plugins' metrics as Metrics columns, after Repometry's own, in the order the history lists them. */
-function pluginColumns() {
-    return pluginMetrics().filter(spec => spec.descriptor.scope === 'file').map(spec => ({
+/** Coverage kinds beside line coverage (branches, functions), where the coverage report has them. */
+function coverageKinds() {
+    return pluginMetrics().filter(spec => spec.plugin === 'repometry' && spec.group === 'Coverage' && spec.descriptor.unit === 'ratio'
+        && spec.descriptor.scope === 'file');
+}
+/** Registry metrics as Metrics columns, in the order the history lists them. */
+function pluginColumns(specs) {
+    return specs.map(spec => ({
         label: spec.short,
         value: entry => entryValue(local.index, entry, spec),
         display: entry => format(spec, entryValue(local.index, entry, spec)),
@@ -87,7 +92,7 @@ const builtinColumns = [
     { label: labelOf('complexity'), value: entry => entry.complexity?.maximum ?? null, display: entry => count(entry.complexity?.maximum) },
     { label: labelOf('cognitive'), value: entry => entry.quality?.cognitiveComplexity ?? null, display: entry => count(entry.quality?.cognitiveComplexity),
         available: directory => directory?.quality?.cognitiveComplexity !== undefined },
-    { label: 'Line coverage', value: coverageRatio, display: coverageText, available: directory => directory ? coverageRatio(directory) !== null : true },
+    { label: labelOf('coverage'), value: coverageRatio, display: coverageText, available: directory => directory ? coverageRatio(directory) !== null : true },
     { label: 'Duplication', value: duplicationRatio, display: duplicationText,
         available: directory => directory?.quality?.duplication !== undefined },
     { label: labelOf('effort'), value: entry => entry.quality?.maintainability?.effortMinutes ?? null,
@@ -104,7 +109,13 @@ function isGroup(value) {
 function metricsView(details, navigation, settings, directory, selectedFile) {
     const view = element('div', 'fx-view');
     const { metrics } = details;
-    const columns = [...builtinColumns, ...pluginColumns()];
+    // The other coverage kinds sit beside line coverage; every other registry metric follows Repometry's own columns,
+    // except the counts a ratio is made of, which read through the ratio as line coverage's do.
+    const kinds = coverageKinds();
+    const afterCoverage = builtinColumns.findIndex(column => column.label === labelOf('coverage')) + 1;
+    const columns = [...builtinColumns.slice(0, afterCoverage),
+        ...pluginColumns(kinds), ...builtinColumns.slice(afterCoverage),
+        ...pluginColumns(pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && !spec.ratioPart && !kinds.includes(spec)))];
     const scopeFiles = metrics.files.filter(entry => inside(entry.path, directory));
     const scopeTotals = aggregate(directory, scopeFiles);
     const scopeIgnored = scopeFiles.some(entry => entry.analysed === false);
@@ -555,9 +566,10 @@ function directorySummary(entry, analysed, lockfiles, selection) {
         quality?.duplication === undefined ? null : fact(labelOf('duplication'), duplicationText(entry)),
         quality?.maintainability === undefined ? null : fact(labelOf('effort'), duration(quality.maintainability.effortMinutes)),
         coverageRatio(entry) === null ? null : fact(labelOf('coverage'), coverageText(entry)),
-        // Other plugins' totals follow Repometry's own, where this inspection ran them and they roll up.
-        ...pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && spec.descriptor.aggregate !== 'none' && measured(spec.descriptor))
-            .map(spec => fact(spec.short, format(spec, entryValue(local.index, entry, spec)))),
+        // Other plugins' totals follow Repometry's own, where this inspection ran them and they roll up; the counts behind
+        // a ratio read through it.
+        ...pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && spec.descriptor.aggregate !== 'none' && !spec.ratioPart
+            && measured(spec.descriptor)).map(spec => fact(spec.short, format(spec, entryValue(local.index, entry, spec)))),
     ].filter(item => item !== null));
     panel.append(heading, facts);
     return panel;
@@ -589,6 +601,11 @@ function fileDetails(details, entry, navigation, hooks = {}) {
     if (quality?.cognitiveComplexity !== undefined)
         facts.append(fact(labelOf('cognitive'), count(quality.cognitiveComplexity)));
     facts.append(fact(labelOf('coverage'), coverageText(entry), coverageContext(entry)));
+    for (const spec of coverageKinds()) {
+        const value = measured(spec.descriptor) ? entryValue(local.index, entry, spec) : null;
+        if (value !== null)
+            facts.append(fact(spec.short, format(spec, value)));
+    }
     if (quality?.duplication)
         facts.append(fact(labelOf('duplication'), duplicationText(entry), duplicationContext(entry)));
     if (quality?.maintainability)

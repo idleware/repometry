@@ -1,6 +1,6 @@
 import { renderBarChart, renderLineChart } from './viewer-chart.js';
 import { splitter } from './viewer-files.js';
-import { betterOf, definitionOf, difference, formatMetric, isMetric, isPercent, labelOf, metricValue, pluginMetrics, pluginSpec } from './viewer-metrics.js';
+import { betterOf, definitionOf, difference, formatMetric, isMetric, isPercent, labelOf, metricLabels, metricValue, pluginMetrics, pluginSpec } from './viewer-metrics.js';
 const statusLabels = { complete: 'Complete', partial: 'Partial', 'not-applicable': 'Not applicable' };
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const pageRows = 50;
@@ -13,18 +13,28 @@ function viewLabel(view) {
 }
 const builtinGroups = [
     ['Maintainability', ['debt', 'debt-changes', 'duplication', 'cognitive', 'complexity', 'smells']],
-    ['Coverage', ['coverage', 'diff-coverage']],
+    // Branch and function coverage come from the registry, where the coverage report has them.
+    ['Coverage', ['coverage', 'branch-coverage', 'function-coverage', 'diff-coverage']],
     ['Security', ['security']],
     ['Size', ['code-lines', 'files', 'functions', 'classes', 'comments']],
 ];
-/** The series list: Repometry's own groups, with other plugins' metrics joining a group they name or one of their own. */
+/**
+ * The series list: Repometry's own groups, with other plugins' metrics joining a group they name or one of their own.
+ * A registry metric the groups already place keeps its place, and is left out where this history has no such metric.
+ */
 function groups() {
-    const merged = new Map(builtinGroups.map(([group, views]) => [group, [...views]]));
+    const placed = new Set(builtinGroups.flatMap(([, views]) => views));
+    const keys = new Set(pluginMetrics().filter(spec => spec.trend).map(spec => spec.key));
+    const merged = new Map(builtinGroups.map(([group, views]) => [group, views.filter(view => !pluginKey(view) || keys.has(view))]));
     for (const spec of pluginMetrics()) {
-        if (spec.trend)
+        if (spec.trend && !placed.has(spec.key))
             merged.set(spec.group, [...merged.get(spec.group) ?? [], spec.key]);
     }
     return [...merged];
+}
+/** A view the registry names, not one the viewer draws by hand. */
+function pluginKey(view) {
+    return view !== 'debt-changes' && view !== 'diff-coverage' && !(view in metricLabels);
 }
 export function isTrendView(value) {
     return value === 'debt-changes' || value === 'diff-coverage' || (isMetric(value) && groups().some(([, views]) => views.includes(value)));
@@ -35,7 +45,7 @@ export function isPeriod(value) {
 /** Views that have data in this history, in display order. */
 export function availableViews(data) {
     const has = (metric) => data.reports.some(report => value(data, report, metric) !== null);
-    return groups().flatMap(([, views]) => views).filter(view => view === 'diff-coverage' ? data.detailed : view === 'debt-changes' ? has('effort') : has(view));
+    return groups().flatMap(([, views]) => views).filter(view => view === 'diff-coverage' || (view === 'debt-changes' ? has('effort') : has(view)));
 }
 /** The whole curve by default; only a very long history opens on its last hundred inspections. */
 export function defaultPeriod(total) {

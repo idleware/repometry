@@ -220,7 +220,7 @@ function pagedTable(spec) {
     render();
     return box;
 }
-/** Without the details (the public view) only the exclusions are known; the profile itself is not published. */
+/** Until the details arrive only the exclusions are known; the summary does not carry the profile itself. */
 function fallback(data) {
     const section = block('Files');
     const exclusions = data.context?.exclusions;
@@ -230,8 +230,8 @@ function fallback(data) {
         facts.append(row('Excluded directories', exclusions.directories.length ? chips(exclusions.directories.map(directory => `**/${directory}/`)) : none()));
         section.append(facts);
     }
-    section.append(element('p', 'detail', data.details ? 'This inspection did not record its profile.'
-        : 'The applied profile is shown in the local and private views.'));
+    if (data.details)
+        section.append(element('p', 'detail', 'This inspection did not record its profile.'));
     return section;
 }
 const formatKey = 'repometry.badge-format';

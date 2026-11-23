@@ -21,17 +21,17 @@ export async function loadViewerData(mode) {
         context: Object.fromEntries(summary.commits.map(commit => [commit.sha, {
                 exclusions: null, boundary: commit.profileBoundary ?? null, security: commit.counts?.security,
             }])),
-        counts: mode === 'public' ? undefined : counts,
+        counts,
         pullReviewCount: summary.pullReviewCount,
         ...(Array.isArray(summary.metrics) ? { metrics: summary.metrics } : {}),
         ...(() => {
-            const sources = mode === 'public' ? undefined : sourceLocator(summary.sources);
+            const sources = sourceLocator(summary.sources);
             return sources ? { sources } : {};
         })(),
         ...(typeof summary.source?.branch === 'string' && summary.source.branch.trim() ? { branch: summary.source.branch.trim() } : {}),
         async loadDetails(sha) {
             const path = details.get(sha);
-            if (path === undefined || (mode !== 'local' && mode !== 'private'))
+            if (path === undefined)
                 return null;
             const asset = await readInspection(path, sha, mode);
             if (asset)
@@ -74,7 +74,7 @@ async function legacyViewerData(mode) {
     const [history, quality, saved, localContext] = await Promise.all([
         readOptional('./history.json'),
         readOptional('./quality-history.json'),
-        mode === 'private' ? readOptional('./details.json') : null,
+        mode === 'local' ? null : readOptional('./details.json'),
         mode === 'local' ? readOptional('./inspection-context.json') : null,
     ]);
     if (history?.schema !== historySchema || !Array.isArray(history.reports))

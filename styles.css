@@ -1,8 +1,5 @@
 /* Repometry viewer: light, flat and quiet. Every colour is a token; the dark theme follows the system. */
 :root {
-  --copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.2'%3E%3Crect x='3.6' y='3.6' width='7.4' height='7.4' rx='1.2'/%3E%3Cpath d='M8.4 3.6V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v5.4a1 1 0 0 0 1 1h1.6'/%3E%3C/svg%3E");
-  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.4 4.8 9 10 3' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3C/svg%3E");
-  --lock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 12'%3E%3Cpath d='M2.5 5V3.5a2.5 2.5 0 0 1 5 0V5' fill='none' stroke='%23000' stroke-width='1.3'/%3E%3Crect x='1' y='5' width='8' height='6.5' rx='1.2'/%3E%3C/svg%3E");
   --branch-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.4'%3E%3Ccircle cx='3' cy='2.25' r='1.25'/%3E%3Ccircle cx='3' cy='9.75' r='1.25'/%3E%3Ccircle cx='9' cy='3.75' r='1.25'/%3E%3Cpath d='M3 3.5v5M9 5c0 2.5-6 1.5-6 3.5'/%3E%3C/svg%3E");
   color-scheme: light dark;
   --page: #ffffff;
@@ -214,31 +211,6 @@ label select, label input { color: var(--ink); font-weight: 400; font-size: .875
 .tabs a { flex: none; display: inline-flex; align-items: center; gap: .375rem; min-height: 40px; padding: 0 .1rem; color: var(--secondary); font-size: .875rem; font-weight: 500; text-decoration: none; border-bottom: 2px solid transparent; }
 .tabs a:hover { color: var(--ink); }
 .tabs a[aria-current] { color: var(--ink); border-bottom-color: var(--accent); }
-.tabs a[data-unavailable] { color: var(--muted); }
-.tabs a[data-unavailable]::after { content: ""; width: .625rem; height: .75rem; background: currentColor; -webkit-mask: var(--lock) center / contain no-repeat; mask: var(--lock) center / contain no-repeat; }
-.tabs a[data-unavailable]:hover { color: var(--secondary); }
-.tabs a[data-unavailable][aria-current] { color: var(--secondary); border-bottom-color: var(--rule-strong); }
-.report-notice { display: flex; flex-wrap: wrap; align-items: center; gap: .625rem 1rem; padding: .75rem 1rem; font-size: .875rem; color: var(--secondary); background: var(--surface-2); border: 1px solid var(--rule); border-radius: var(--radius); }
-.report-notice-text { flex: 1 1 22rem; margin: 0; line-height: 1.55; }
-.report-notice strong { font-weight: 600; color: var(--ink); }
-.report-notice code { color: var(--ink); white-space: nowrap; -webkit-user-select: all; user-select: all; }
-.report-notice-text > code, .report-notice-command { padding: .125rem .375rem; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 4px; }
-.report-notice-command { display: inline-flex; align-items: center; gap: .375rem; margin: 0; line-height: inherit; vertical-align: baseline; cursor: copy; }
-.report-notice-command code { font-size: .8125rem; }
-.report-notice-command::after { content: ""; width: .75rem; height: .75rem; background: var(--muted); -webkit-mask: var(--copy) center / contain no-repeat; mask: var(--copy) center / contain no-repeat; }
-.report-notice-command:hover { border-color: var(--secondary); }
-.report-notice-command:hover::after { background: var(--ink); }
-.report-notice-command[data-copied]::after { background: var(--good); -webkit-mask-image: var(--check); mask-image: var(--check); }
-#unavailable-content { max-width: 46rem; }
-.public-panel { padding: 1.25rem 1.25rem 1.375rem; }
-.public-panel h3 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; font-size: 1rem; font-weight: 600; }
-.public-panel h3::before { content: ""; width: .75rem; height: .875rem; background: var(--muted); -webkit-mask: var(--lock) center / contain no-repeat; mask: var(--lock) center / contain no-repeat; }
-.public-panel p { margin: 0 0 .875rem; font-size: .875rem; line-height: 1.55; color: var(--secondary); }
-.public-panel-command { display: flex; width: 100%; justify-content: space-between; min-height: 2.5rem; padding: 0 .75rem; background: var(--surface-2); border-radius: 6px; }
-.public-panel code { color: var(--ink); white-space: nowrap; -webkit-user-select: all; user-select: all; }
-.public-panel-command:hover { background: var(--surface); }
-.public-panel-command code { font-size: .875rem; }
-.public-panel > div > code { display: block; padding: .5rem .75rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--rule-strong); border-radius: 6px; }
 .tab-count { min-width: 1.25rem; padding: 0 .35rem; border-radius: 999px; background: var(--rule); color: var(--secondary); font-size: .75rem; font-weight: 600; line-height: 1.25rem; text-align: center; font-variant-numeric: tabular-nums; }
 .tab-count:empty { display: none; }
 
@@ -284,6 +256,9 @@ main:focus { outline: none; }
 .verdict-tab:focus-visible { outline: none; }
 .verdict:has(.verdict-tab:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .verdict-detail { color: var(--secondary); font-size: .875rem; overflow-wrap: anywhere; }
+/* The coverage kinds beyond lines: a quieter second line under the headline's detail. */
+.verdict-more { font-size: .8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.verdict-more > span { white-space: nowrap; }
 /* A detail that counts something leads to exactly what it counts. */
 .verdict-detail a { position: relative; z-index: 1; color: inherit; text-decoration-color: var(--rule-strong); }
 .verdict-detail a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
@@ -486,7 +461,6 @@ tbody tr:last-child > * { border-bottom: 0; }
 
 @media (max-width: 72rem) {
   .overview-grid:has(> aside:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
-  .public-panel { max-width: 36rem; }
   .overview-aside { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 0 2.5rem; align-items: start; }
   .overview-aside > :not(#overview-sunburst) { grid-column: 2; }
   .overview-aside #overview-sunburst { grid-row: 1 / span 4; }

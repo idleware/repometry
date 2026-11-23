@@ -1,12 +1,11 @@
 import { loadViewerData, ViewerSummaryChanged } from './viewer-data.js';
 import { band, bandLimits, codeSmellCategories, renderFileView, mapStub, renderSunburst, securityCategories } from './viewer-files.js';
-import { count, difference, formatMetric, labelOf, metricValue, securityGrades, securityRisks, useCatalog } from './viewer-metrics.js';
+import { count, difference, formatMetric, labelOf, metricValue, pluginSpec, securityGrades, securityRisks, useCatalog } from './viewer-metrics.js';
 import { charted, commitTime, isPeriod, stableWindow, isTrendView, renderSeries, renderTrendsPage, seriesPoints, trendLegend } from './viewer-trends.js';
 import { createCommitPicker } from './viewer-commits.js';
 import { renderProfile } from './viewer-profile.js';
 import { loadSource, sourcePage, useSources } from './viewer-source.js';
 import { renderDiffCoverageTrend, renderPulls } from './viewer-pulls.js';
-import { isDetailed, pageAccess, publicNotice, unavailableTabs } from './viewer-access.js';
 const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 });
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 /**
@@ -19,9 +18,10 @@ const areas = {
     security: { figures: ['security', 'security-high', 'security-medium', 'security-low'] },
     complexity: { figures: ['complexity', 'functions', 'cognitive', 'code-lines'] },
 };
+/** Coverage kinds beyond lines, by their registry keys, in the words the Overview card uses for them. */
+const coverageKinds = [['branch-coverage', 'Branches'], ['function-coverage', 'Functions']];
 const pages = ['overview', 'metrics', 'hotspots', 'trends', 'issues', 'diagnostics', 'settings', 'pulls'];
 const mode = document.querySelector('meta[name="repometry-view"]')?.content;
-const detailed = isDetailed(mode);
 const title = document.querySelector('meta[name="repometry-project"]')?.content.trim();
 if (title) {
     document.title = `${title} · Repometry`;
@@ -111,26 +111,8 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     selectVerdict();
     element('inspection-meta').hidden = false;
     commit.hidden = false;
-    if (detailed) {
-        for (const item of document.querySelectorAll('[data-private]'))
-            item.hidden = false;
-    }
-    else {
-        // A public report keeps the sections of the full one in view: picking one says how to see it.
-        for (const page of unavailableTabs) {
-            const tab = document.querySelector(`#navigation a[data-page="${page}"]`);
-            if (!tab)
-                continue;
-            tab.hidden = false;
-            tab.dataset.unavailable = '';
-            const note = document.createElement('span');
-            note.className = 'visually-hidden';
-            note.textContent = ', not in the public report';
-            tab.append(note);
-        }
-        fillPanel(element('overview-public-content'));
-        element('overview-public').hidden = false;
-    }
+    for (const item of document.querySelectorAll('[data-loaded]'))
+        item.hidden = false;
     function route() {
         const [rawPage = '', query = ''] = location.hash.slice(1).split('?', 2);
         if (bySha.has(rawPage))
@@ -164,20 +146,17 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
         const version = ++revision;
         const report = bySha.get(current.sha);
         const inspection = context?.[current.sha];
-        const locked = pageAccess(current.page, detailed) === 'notice';
-        const previousPage = [...pages, 'unavailable'].find(page => !element(page).hidden);
+        const previousPage = pages.find(page => !element(page).hidden);
         const focusWasInPage = previousPage && element(previousPage).contains(document.activeElement);
         commit.set(report.sha);
         commit.hidden = current.page === 'pulls';
         element('inspection-meta').hidden = current.page === 'pulls';
         for (const page of pages)
-            element(page).hidden = locked || page !== current.page;
-        element('unavailable').hidden = !locked;
-        const shown = locked ? 'unavailable' : current.page;
-        if (previousPage && previousPage !== shown) {
+            element(page).hidden = page !== current.page;
+        if (previousPage && previousPage !== current.page) {
             window.scrollTo({ top: 0 });
             if (focusWasInPage) {
-                const section = element(shown);
+                const section = element(current.page);
                 section.tabIndex = -1;
                 section.focus({ preventScroll: true });
             }
@@ -193,39 +172,31 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
         document.querySelector('.brand').href = href({ page: 'overview', sha: current.sha });
         renderInspection(report);
         renderQuality(report, quality[report.sha]);
-        if (locked) {
-            const tab = document.querySelector(`#navigation a[data-page="${current.page}"]`);
-            element('unavailable-title').textContent = tab?.firstChild?.textContent ?? 'Not in this report';
-            fillNotice(element('unavailable-content'));
-            return;
-        }
         if (current.page === 'overview')
             renderLead(reports, report, quality, context, chartMetric, cached.get(report.sha));
         renderScannerContext(inspection, report.sha);
         const needsDetail = isFilePage(current.page) || ['overview', 'settings'].includes(current.page) || !counts;
-        const detail = detailed && needsDetail ? selectedDetails(report.sha) : undefined;
-        if (detailed) {
-            const row = counts?.[report.sha];
-            const cachedDetail = cached.get(report.sha);
-            if (row)
-                updateTabs(current.page, row.findingCount, row.diagnosticCount, row.componentCount);
-            else if (cachedDetail)
-                updateDetailsTabs(current.page, cachedDetail);
-            if (pullReviewCount !== undefined)
-                showTab('pulls', pullReviewCount > 0 || current.page === 'pulls');
-            else
-                void loadPulls().then(records => {
-                    if (version === revision)
-                        showTab('pulls', Boolean(records?.length) || current.page === 'pulls');
-                });
-            void detail?.then(asset => {
-                if (!asset || version !== revision)
-                    return;
-                updateDetailsTabs(current.page, asset.inspection);
-                const latest = context[report.sha];
-                renderScannerContext(latest, report.sha);
+        const detail = needsDetail ? selectedDetails(report.sha) : undefined;
+        const row = counts?.[report.sha];
+        const cachedDetail = cached.get(report.sha);
+        if (row)
+            updateTabs(current.page, row.findingCount, row.diagnosticCount, row.componentCount);
+        else if (cachedDetail)
+            updateDetailsTabs(current.page, cachedDetail);
+        if (pullReviewCount !== undefined)
+            showTab('pulls', pullReviewCount > 0 || current.page === 'pulls');
+        else
+            void loadPulls().then(records => {
+                if (version === revision)
+                    showTab('pulls', Boolean(records?.length) || current.page === 'pulls');
             });
-        }
+        void detail?.then(asset => {
+            if (!asset || version !== revision)
+                return;
+            updateDetailsTabs(current.page, asset.inspection);
+            const latest = context[report.sha];
+            renderScannerContext(latest, report.sha);
+        });
         if (current.page === 'overview')
             renderTrend(trendData(), report, chartMetric, compact.matches);
         if (current.page === 'trends') {
@@ -264,14 +235,14 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
                 latest: { report: newest, quality: quality[newest.sha], context: context[newest.sha] },
             });
             draw(cached.get(report.sha));
-            if (detailed && !cached.has(report.sha))
+            if (!cached.has(report.sha))
                 void detail?.then(asset => {
                     if (asset && version === revision)
                         draw(asset.inspection);
                 });
             return;
         }
-        if (!detailed || (!isFilePage(page) && page !== 'overview'))
+        if (!isFilePage(page) && page !== 'overview')
             return;
         const target = element(page === 'overview' ? 'overview-hotspot-list' : `${page}-content`);
         function display(details) {
@@ -330,7 +301,7 @@ function start({ reports, quality, context, counts, pullReviewCount, branch, met
     }
     function trendData() {
         return {
-            reports, quality, context, detailed, compact: compact.matches,
+            reports, quality, context, compact: compact.matches,
             link: (sha, view, period) => href({ page: 'trends', sha, view, period }),
         };
     }
@@ -367,12 +338,9 @@ function href({ page, sha, directory, file, view, period, query, group, line, ca
 function isFilePage(page) {
     return page === 'metrics' || page === 'hotspots' || page === 'issues' || page === 'diagnostics';
 }
-/**
- * A detail that counts something leads to exactly what it counts, where the report has a page for it: a link in the
- * local and private views, plain text in the public one.
- */
+/** A detail that counts something leads to exactly what it counts, where the report has a page for it. */
 function detailText(id, text, link) {
-    if (!detailed || link === undefined) {
+    if (link === undefined) {
         element(id).textContent = text;
         return;
     }
@@ -398,6 +366,19 @@ function renderInspection(report) {
     else
         detailText('coverage-detail', `${coverageText(report.lineCoverage)} of ${count(report.lineCoverage.total)} lines`, coverage < 1 ? uncoveredLink(report.sha) : undefined);
     element('coverage-mark').replaceChildren(ring(coverage));
+    // Line coverage leads; the other kinds the coverage report carries follow on a quieter line.
+    const kinds = coverageKinds.flatMap(([key, name]) => {
+        const metric = key;
+        const value = pluginSpec(metric) ? metricValue(report, metric, undefined) : null;
+        if (value === null)
+            return [];
+        // Each kind keeps its number; a narrow card wraps between kinds, never inside one.
+        const kind = document.createElement('span');
+        kind.textContent = `${name} ${formatMetric(value, metric)}`;
+        return [kind];
+    });
+    element('coverage-kinds').replaceChildren(...kinds.flatMap((kind, index) => index ? [' · ', kind] : [kind]));
+    element('coverage-kinds').hidden = kinds.length === 0;
 }
 function renderQuality(report, quality) {
     const maintainability = quality?.maintainability ?? null;
@@ -447,7 +428,7 @@ function renderLead(reports, selected, quality, context, area, details) {
         const destination = value === null || value <= 0 ? undefined : figureLink(metric, value, selected.sha, details);
         if (value === null)
             shown.textContent = '—';
-        else if (!detailed || !destination)
+        else if (!destination)
             shown.textContent = formatMetric(value, metric);
         else {
             const anchor = document.createElement('a');
@@ -730,46 +711,6 @@ function overviewStub(sha) {
         list.append(item);
     }
     output.replaceChildren(list);
-}
-/** The public report notice in a page's place: what this report holds and the command that shows all of it. */
-function fillNotice(container) {
-    const text = document.createElement('p');
-    text.className = 'report-notice-text';
-    const lead = document.createElement('strong');
-    lead.textContent = publicNotice.lead;
-    text.append(lead, ` ${publicNotice.text} `, commandChip(), ` ${publicNotice.tail}`);
-    container.replaceChildren(text);
-}
-/** The same notice in the Overview's side panel, where the hotspots sit in a detailed report. */
-function fillPanel(container) {
-    const text = document.createElement('p');
-    text.textContent = publicNotice.panel;
-    const command = commandChip();
-    command.classList.add('public-panel-command');
-    container.replaceChildren(text, command);
-}
-/** The command as code, copied with one click; where the browser refuses the clipboard, it is selected instead. */
-function commandChip() {
-    const code = document.createElement('code');
-    code.textContent = publicNotice.command;
-    if (!navigator.clipboard)
-        return code;
-    const copy = document.createElement('button');
-    copy.type = 'button';
-    copy.className = 'report-notice-command';
-    copy.title = 'Copy the command';
-    const status = document.createElement('span');
-    status.className = 'visually-hidden';
-    status.setAttribute('role', 'status');
-    copy.append(code, status);
-    copy.addEventListener('click', () => {
-        void navigator.clipboard.writeText(publicNotice.command).then(() => {
-            copy.dataset.copied = '';
-            status.textContent = 'Copied';
-            setTimeout(() => { delete copy.dataset.copied; status.textContent = ''; }, 1600);
-        }, () => window.getSelection()?.selectAllChildren(code));
-    });
-    return copy;
 }
 function notice(container, text) {
     const paragraph = document.createElement('p');

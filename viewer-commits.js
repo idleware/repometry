@@ -226,7 +226,7 @@ export function createCommitPicker(slot, entries, pick, branch) {
 }
 /**
  * How a commit's author reads in the list: the name, with the email only when the search found the email and not the
- * name. A public export carries the name alone, and then it is the name alone; nothing reads as missing.
+ * name. A history without emails carries the name alone, and then it is the name alone; nothing reads as missing.
  */
 export function authorLabel(author, words) {
     if (!author?.name)
