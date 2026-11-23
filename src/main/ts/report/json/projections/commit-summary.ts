@@ -27,6 +27,7 @@ export function commitSummary(report: Report): CommitSummary {
   }
   return {
     ...history,
+    ...(report.commit === undefined ? {} : { subject: report.commit.subject, author: report.commit.author }),
     revision: reportRevision(report),
     ...(profileDigest === undefined ? {} : { profileDigest }),
     quality: qualitySummary(report),
@@ -49,10 +50,14 @@ export function orderSummaries(rows: readonly CommitSummary[]): CommitSummary[] 
 export type CommitMetadata = Pick<PublicHistoryEntry, 'subject' | 'author' | 'tags'>;
 export type ReadCommitMetadata = (revisions: readonly string[]) => Promise<ReadonlyMap<string, CommitMetadata>>;
 
+/** Values recorded at analysis win; Git fills in older inspections and adds tags, which can land after analysis. */
 export async function withCommitMetadata(rows: readonly CommitSummary[], read?: ReadCommitMetadata): Promise<readonly CommitSummary[]> {
   if (!read || !rows.length) return rows;
   const metadata = await read(rows.map(row => row.sha));
-  return rows.map(row => ({ ...row, ...metadata.get(row.sha) }));
+  return rows.map(row => {
+    const found = metadata.get(row.sha);
+    return found === undefined ? row : { ...found, ...row, ...(found.tags === undefined ? {} : { tags: found.tags }) };
+  });
 }
 
 export function expandSummaryCatalog(summary: RepositorySummary): CommitSummary[] {

@@ -14,11 +14,9 @@ export function commitMetadataReader(repository: string): ReadCommitMetadata {
         result.set(sha, { subject: message.split(/\r?\n/, 1)[0]!, author: { name, email } });
       }
     }
-    if (result.size) {
-      for (const [sha, tags] of await tagsByCommit(repository)) {
-        const commit = result.get(sha);
-        if (commit) result.set(sha, { ...commit, tags });
-      }
+    const requested = new Set(revisions);
+    for (const [sha, tags] of await tagsByCommit(repository)) {
+      if (requested.has(sha)) result.set(sha, { ...result.get(sha), tags });
     }
     return result;
   };

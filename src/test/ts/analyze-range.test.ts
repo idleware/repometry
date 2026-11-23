@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -85,6 +85,10 @@ test('typed paths resolve against the current directory and defaults against the
   const missing = run(['view', '--store', 'no-store', '--port', '0']);
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, new RegExp(`No saved inspections in ${join(await realpath(sub), 'no-store').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  const directory = await realpath(root);
+  const rebased = run(['view', '-C', directory, '--store', 'no-store']);
+  assert.equal(rebased.status, 1);
+  assert.equal(rebased.stderr, `repometry: No saved inspections in ${join(directory, 'no-store')}. Run repometry analyze first.\n`);
 });
 
 test('file metrics carry each file size in bytes, and folders sum them', async t => {
@@ -109,4 +113,22 @@ test('a revision outside a Git repository is one line, not git output', async t 
   const result = spawnSync(process.execPath, [cli, 'analyze', 'HEAD'], { cwd: directory, encoding: 'utf8', env: { ...process.env, REPOMETRY_DEBUG: '' } });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /^repometry: .* is not a Git repository\n$/);
+});
+
+test('an inspection records its commit title and author, so a report needs no Git history', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-commit-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = join(directory, 'store');
+  const analyzed = invoke(['analyze', 'HEAD', '--store', store, '--no-config']);
+  assert.equal(analyzed.status, 0, analyzed.stderr);
+  const title = spawnSync('git', ['log', '-1', '--format=%s'], { encoding: 'utf8' }).stdout.trim();
+  const author = spawnSync('git', ['log', '-1', '--format=%an'], { encoding: 'utf8' }).stdout.trim();
+  const elsewhere = join(directory, 'elsewhere');
+  await mkdir(elsewhere);
+  const site = join(directory, 'site');
+  const exported = spawnSync(process.execPath, [cli, 'report', `html=${site}`, '--store', store], { cwd: elsewhere, encoding: 'utf8' });
+  assert.equal(exported.status, 0, exported.stderr);
+  const row = (JSON.parse(await readFile(join(site, 'summary.json'), 'utf8')) as { commits: { subject?: string; author?: { name: string; email?: string } }[] }).commits[0]!;
+  assert.equal(row.subject, title);
+  assert.deepEqual(row.author, { name: author });
 });

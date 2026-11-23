@@ -19,6 +19,8 @@ export interface Report {
   readonly subject: Subject;
   readonly generatedAt: string;
   readonly committedAt?: string;
+  /** The inspected commit's message title and author, recorded at analysis so the store alone can describe it. */
+  readonly commit?: { readonly subject: string; readonly author: { readonly name: string; readonly email: string } };
   readonly appliedConfig: Readonly<Record<string, unknown>>;
   readonly definitions: Readonly<Record<string, string>>;
   readonly scope: { readonly files: number; readonly parsed: number };

@@ -85,7 +85,7 @@ export async function viewTarget(input: Invocation, port: number) {
     throw new Error(`No report at ${target}: expected a repository, a .repometry folder or an exported report`);
   }
   const root = repository ?? target;
-  const store = selectStore(root, input.text('store') ?? (dataStore ? data : directStore ? target : undefined), resolve('.'));
+  const store = selectStore(root, input.text('store') ?? (dataStore ? data : directStore ? target : undefined), invocationDirectory(input));
   if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error(`No saved inspections in ${store.path ?? input.text('store')}. Run repometry analyze first.`);
   const [components, pulls, config] = await Promise.all([
     readComponents(componentsPath(root, input), input.text('components') === undefined),

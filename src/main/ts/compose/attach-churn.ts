@@ -7,6 +7,10 @@ import { churnSettings, gitChurn } from '../api/git/git-churn.js';
 
 export async function attachChurn(report: Report, root: string, paths: readonly string[]): Promise<Report> {
   if (report.subject.kind !== 'commit') return report;
+  return withCommitDetails(await measureChurn(report, root, paths), root);
+}
+
+async function measureChurn(report: Report, root: string, paths: readonly string[]): Promise<Report> {
   if (paths.length === 0) return withCommitTime(report, root);
   const { churnWindow, ...appliedConfig } = report.appliedConfig;
   const settings = { ...appliedConfig, churn: churnSettings };
@@ -37,4 +41,13 @@ async function withCommitTime(report: Report, root: string): Promise<Report> {
     .catch(() => '');
   const time = Date.parse(timestamp.trim());
   return Number.isFinite(time) ? { ...report, schema: reportSchema, committedAt: new Date(time).toISOString() } : report;
+}
+
+/** Message title and author of the inspected commit, kept with the inspection so exports need no Git history. */
+async function withCommitDetails(report: Report, root: string): Promise<Report> {
+  const log = await gitText(root, ['show', '--no-show-signature', '--no-notes', '--no-patch', '--format=%an%x00%ae%x00%B', report.subject.id, '--'])
+    .catch(() => '');
+  const [name, email, message] = log.split('\0');
+  if (!name || email === undefined || message === undefined) return report;
+  return { ...report, schema: reportSchema, commit: { subject: message.split(/\r?\n/, 1)[0]!, author: { name, email } } };
 }

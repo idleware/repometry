@@ -26,6 +26,20 @@
     "committedAt": {
       "type": "string"
     },
+    "commit": {
+      "type": "object",
+      "required": ["subject", "author"],
+      "properties": {
+        "subject": { "type": "string" },
+        "author": {
+          "type": "object",
+          "required": ["name", "email"],
+          "properties": { "name": { "type": "string" }, "email": { "type": "string" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "appliedConfig": {
       "$ref": "urn:repometry:schema:report:1#/properties/appliedConfig"
     },
