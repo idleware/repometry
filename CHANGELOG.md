@@ -1,3 +1,8 @@
+## [0.6.2](https://github.com/idleware/repometry/compare/v0.6.1...v0.6.2) (2026-11-24)
+
+### Fixes & improvements
+* refactor: simplify the engine and drop parser names from comparison ([c63cf7c](https://github.com/idleware/repometry/commit/c63cf7c5c9ef6b86e3f49f2dc345a13dfd1ff280))
+
 ## [0.6.1](https://github.com/idleware/repometry/compare/v0.6.0...v0.6.1) (2026-11-24)
 
 ### Fixes & improvements
