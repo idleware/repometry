@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { definitions } from '../../main/ts/core/model/measurement.js';
-import { readReportText, reportSchema } from '../../main/ts/report/json/validation/report.js';
+import type { ObjectSource } from '../../main/ts/report/json/store/report-tree.js';
+import { readStoredReport, reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
 
@@ -30,8 +31,9 @@ const report: Report = {
 test('the report formats and export projections match the fixed baseline', async () => {
   const { committedAt, ...legacyFields } = report;
   const old = { ...legacyFields, schema: 'urn:repometry:schema:report:1' };
-  assert.throws(() => readReportText(JSON.stringify(old), report.subject), /Unsupported or missing report schema/);
-  assert.deepEqual(readReportText(JSON.stringify(packJson(report)), report.subject), report);
+  const singleFile: ObjectSource = { read: () => Promise.reject(new Error('A single-file report reads no objects')) };
+  await assert.rejects(readStoredReport(JSON.stringify(old), report.subject, singleFile), /Unsupported or missing report schema/);
+  assert.deepEqual(await readStoredReport(JSON.stringify(packJson(report)), report.subject, singleFile), report);
 
   const actual: Record<string, string> = {};
   for (const mode of ['private'] as const) {

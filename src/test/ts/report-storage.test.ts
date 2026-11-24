@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { definitions } from '../../main/ts/core/model/measurement.js';
+import { GitReportReader } from '../../main/ts/api/git/git-reader.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
+import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
+import { ObjectError, objectPath } from '../../main/ts/report/json/store/report-tree.js';
+import { metaManifest } from '../../main/ts/report/json/validation/metabranch.js';
+import { checkStore } from '../../main/ts/report/json/store/store-check.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
+import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
 function report(char: string, committedAt: string, lines: number): Report {
@@ -21,26 +28,67 @@ function report(char: string, committedAt: string, lines: number): Report {
   };
 }
 
-test('stored snapshots intern repeated paths and still expose complete reports', async t => {
+function detailed(char: string, lines: number): Report {
+  const base = report(char, '2026-01-01T00:00:00.000Z', lines);
+  const path = 'src/nested/component.ts';
+  return {
+    ...base,
+    appliedConfig: { profile: 'fixture', churnWindow: { endingAt: base.committedAt, commits: lines }, coverage: null },
+    definitions: { ...base.definitions, [definitions.complexity]: 'Cyclomatic complexity' },
+    measurements: [
+      ...base.measurements,
+      { definition: definitions.lines, target: 'file', path: 'README.md', value: 3 },
+      { definition: definitions.complexity, target: 'function', path, line: 2, column: 1, name: 'render', value: 4 },
+      { definition: definitions.lines, target: 'repository', value: lines + 3 },
+      { definition: definitions.lines, target: 'file', path: 'src/nested/component.ts.map', value: 1 },
+    ],
+    findings: [
+      { tool: 'lint', rule: 'structure', category: 'lint', level: 'low', path, line: 1, message: 'Keep detail', related: [{ path, line: 2, endLine: 5 }] },
+      { tool: 'lint', rule: 'setup', category: 'lint', level: 'unknown', message: 'Repository-wide' },
+    ],
+    ruleSkips: [{ path: 'README.md', plugin: 'lint', rules: ['structure'], reason: 'unmeasured' }],
+    pluginData: {
+      metrics: [], measured: [], rules: [],
+      products: {
+        'repometry.lcov-lines/v1': [{ operation: 'lcov/lines', value: { [path]: { covered: [[1, 2]], uncovered: [] } } }],
+        'fixture.per-file/v1': [{ operation: 'fixture', path, value: { tokens: lines } }],
+      },
+      inventory: [
+        { path: 'README.md', lines: 3, language: 'markdown', analysed: false },
+        { path, lines, bytes: lines * 10, language: 'typescript', analysed: true },
+        { path: 'src/nested/component.ts.map', lines: 1, language: 'json', analysed: false },
+      ],
+    },
+  };
+}
+
+async function objectCount(store: string): Promise<number> {
+  return (await new LocalReportStore(store).objects.ids()).length;
+}
+
+test('stored reports keep file rows in shared objects and read back exactly', async t => {
   const output = await mkdtemp(join(tmpdir(), 'repometry-storage-'));
   t.after(() => rm(output, { recursive: true, force: true }));
   const store = new LocalReportStore(output);
-  const original = report('a', '2026-01-01T00:00:00.000Z', 20);
-  const path = 'src/nested/component.ts';
-  const content: Report = {
-    ...original,
-    definitions: { ...original.definitions, [definitions.coverage]: 'Line coverage' },
-    measurements: [...original.measurements, { definition: definitions.coverage, target: 'file', path, value: null, covered: 0, total: 0 }],
-    findings: [{ tool: 'lint', rule: 'structure', category: 'lint', level: 'low', path, line: 1, message: 'Keep detail',
-      related: [{ path, line: 2, endLine: 5 }] }],
-  };
-  await store.save(content);
+  const original = detailed('a', 20);
+  await store.save(original);
   const saved = await readFile(join(output, 'commits', original.subject.id, 'report.json'), 'utf8');
-  assert.equal(saved.split(path).length - 1, 1);
-  assert.deepEqual(await store.read(original.subject), content);
+  assert.ok(!saved.includes('"render"') && !saved.includes('Keep detail') && !saved.includes('tokens'), 'file rows live in objects');
+  assert.equal(saved.split('src/nested/component.ts').length - 1, 1, 'line coverage stays one product per commit');
+  assert.equal(JSON.stringify(await store.read(original.subject)), JSON.stringify(original));
+  assert.deepEqual(await store.read(original.subject), original);
+
+  // The next commit changes one file: only that file's rows and its directory are new objects.
+  const before = await objectCount(output);
+  const next: Report = { ...original, subject: { kind: 'commit', id: 'b'.repeat(40) },
+    measurements: original.measurements.map(row => row.path === 'README.md' ? { ...row, value: 4 } : row) };
+  await store.save(next);
+  assert.equal(await objectCount(output) - before, 2);
+  assert.equal(JSON.stringify(await store.read(next.subject)), JSON.stringify(next));
+  assert.deepEqual((await store.list()).map(item => item.subject.id).sort(), ['a'.repeat(40), 'b'.repeat(40)]);
 });
 
-test('stored reports reject a string table edit that moves measurements between files', async t => {
+test('stored reports reject an edit that moves rows between files', async t => {
   const output = await mkdtemp(join(tmpdir(), 'repometry-storage-revision-'));
   t.after(() => rm(output, { recursive: true, force: true }));
   const store = new LocalReportStore(output);
@@ -49,13 +97,110 @@ test('stored reports reject a string table edit that moves measurements between 
   const second = { ...first, path: 'src/other.ts', value: 7 };
   await store.save({ ...original, measurements: [first, second] });
   const file = join(output, 'commits', original.subject.id, 'report.json');
-  const envelope: { strings: string[] } = JSON.parse(await readFile(file, 'utf8'));
-  const a = envelope.strings.indexOf(first.path!);
-  const b = envelope.strings.indexOf(second.path);
-  assert.ok(a >= 0 && b >= 0);
-  [envelope.strings[a], envelope.strings[b]] = [envelope.strings[b]!, envelope.strings[a]!];
-  await writeFile(file, JSON.stringify(envelope));
+  const text = await readFile(file, 'utf8');
+  assert.match(text, /"measurements":\[\[0,2\]\]/);
+  await writeFile(file, text.replace('"measurements":[[0,2]]', '"measurements":[[1,1],[0,1]]'));
   await assert.rejects(store.read(original.subject), /Report revision mismatch/);
+});
+
+test('store check finds missing and corrupt objects and repairs them from a copy or a new save', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-store-check-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const output = join(directory, 'store');
+  const copy = join(directory, 'copy');
+  const store = new LocalReportStore(output);
+  const original = detailed('a', 20);
+  await store.save(original);
+  await store.save({ ...original, subject: { kind: 'commit', id: 'b'.repeat(40) } });
+  await new LocalReportStore(copy).save(original);
+  assert.deepEqual((await checkStore(output)).problems, []);
+
+  const stored = JSON.parse(await readFile(join(output, 'commits', original.subject.id, 'report.json'), 'utf8'));
+  const tree = join(output, objectPath(stored.tree));
+  await rm(tree);
+  await writeFile(join(output, objectPath(stored.profile)), 'not JSON');
+  await assert.rejects(store.read(original.subject), (error: unknown) => error instanceof ObjectError);
+  const damaged = await checkStore(output);
+  assert.deepEqual(damaged.problems.map(item => item.problem).sort(), ['missing-objects', 'missing-objects']);
+  assert.ok(damaged.problems.every(item => item.objects?.includes(stored.tree) && item.objects.includes(stored.profile)));
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  for (const id of await store.objects.ids()) await utimes(join(output, objectPath(id)), old, old);
+  assert.equal((await checkStore(output, {})).repaired?.removed, 0, 'objects under a missing directory stay');
+
+  const repaired = await checkStore(output, { from: new LocalReportStore(copy).objects.source() });
+  assert.equal(repaired.repaired?.restored, 2);
+  assert.deepEqual(repaired.problems, []);
+  assert.equal(JSON.stringify(await store.read(original.subject)), JSON.stringify(original));
+
+  // Saving the same report again restores what it references, as `repometry analyze` does.
+  await rm(tree);
+  await store.save(original);
+  assert.deepEqual((await checkStore(output)).problems, []);
+});
+
+test('single-file reports stay valid next to reports with objects, and repair removes old unreferenced objects', async t => {
+  const output = await mkdtemp(join(tmpdir(), 'repometry-store-mixed-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  const store = new LocalReportStore(output);
+  const older = detailed('a', 20);
+  const single = join(output, 'commits', older.subject.id, 'report.json');
+  const { schema, strings, shapes, data } = packJson(older);
+  const text = `{"schema":"${schema}","summary":${JSON.stringify(commitSummary(older))},\n${JSON.stringify({ strings, shapes, data }).slice(1)}\n`;
+  await mkdir(dirname(single), { recursive: true });
+  await writeFile(single, text);
+  const newer = { ...detailed('b', 21), committedAt: '2026-02-01T00:00:00.000Z' };
+  await store.save(newer);
+  assert.deepEqual(await store.read(older.subject), older);
+  assert.deepEqual(await store.read(newer.subject), newer);
+  assert.deepEqual((await store.listSummaries()).map(row => row.sha), [newer.subject.id, older.subject.id]);
+  const mixed = await checkStore(output);
+  assert.deepEqual(mixed.problems, []);
+  assert.equal(mixed.summary, 'current');
+
+  await store.save({ ...newer, measurements: [{ ...newer.measurements[0]!, value: 22 }] });
+  const unused = await checkStore(output);
+  assert.ok(unused.unreferenced > 0);
+  assert.equal((await checkStore(output, {})).repaired?.removed, 0, 'recent objects may belong to a save in progress');
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  for (const id of await store.objects.ids()) await utimes(join(output, objectPath(id)), old, old);
+  assert.equal((await checkStore(output, {})).repaired?.removed, unused.unreferenced);
+  assert.deepEqual((await checkStore(output)).problems, []);
+  assert.equal(await readFile(single, 'utf8'), text, 'a single-file report is never rewritten');
+});
+
+test('a storage branch reads straight from Git, with or without its summary.json', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-storage-git-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new LocalReportStore(directory);
+  const older = detailed('a', 20);
+  const newer = { ...detailed('b', 21), committedAt: '2026-02-01T00:00:00.000Z' };
+  await store.save(older);
+  await store.save(newer);
+  await writeFile(join(directory, 'manifest.json'), `${JSON.stringify(metaManifest)}\n`);
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git('init', '-q');
+  git('add', '-A');
+  const tree = git('write-tree');
+  const reader = new GitReportReader(directory, tree);
+  assert.deepEqual(await reader.read(older.subject), older);
+  assert.deepEqual(await reader.list(), await store.list());
+  const rows = (await store.listSummaries()).map(({ sha, revision }) => [sha, revision]);
+  assert.deepEqual((await reader.listSummaries()).map(({ sha, revision }) => [sha, revision]), rows);
+  await assert.rejects(reader.read({ kind: 'commit', id: 'c'.repeat(40) }), { code: 'ENOENT' });
+  await assert.rejects(new GitReportReader(directory, 'no-such-branch').listSummaries(), /no-such-branch is not a commit or tree/);
+
+  // A branch without summary.json lists history from each report's first line.
+  git('rm', '--cached', '-q', 'summary.json');
+  const withoutSummary = new GitReportReader(directory, git('write-tree'));
+  assert.deepEqual((await withoutSummary.listSummaries()).map(({ sha, revision }) => [sha, revision]), rows);
+
+  const stored = JSON.parse(await readFile(join(directory, 'commits', older.subject.id, 'report.json'), 'utf8'));
+  git('rm', '--cached', '-q', objectPath(stored.tree));
+  await assert.rejects(new GitReportReader(directory, git('write-tree')).read(older.subject), (error: unknown) => error instanceof ObjectError);
 });
 
 test('summary includes current uncompressed reports and reinspection updates the old point in place', async t => {

@@ -20,5 +20,5 @@ export async function prepareMetabranch({ repository, worktree, branch, report }
   }
   const target = await openMetabranchWorktree(repository, worktree, branch, report.subject.id);
   await new LocalReportStore(target).save(report);
-  return ['manifest.json', 'summary.json', `commits/${report.subject.id}/report.json`];
+  return ['manifest.json', 'summary.json', 'objects', `commits/${report.subject.id}/report.json`];
 }

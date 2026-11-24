@@ -1,5 +1,6 @@
 import { realpath } from 'node:fs/promises';
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
 import { comparePaths, isExcludedDirectory, textLineCount, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
@@ -93,10 +94,105 @@ export async function gitTreeFiles(directory: string, commit: string, prefix?: s
   return entries;
 }
 
-export async function gitBlobText(directory: string, oid: string): Promise<string> {
-  if (!oidPattern.test(oid)) throw new Error('A full blob object ID is required');
-  const result = await git('git', ['--no-replace-objects', 'cat-file', 'blob', oid], { cwd: directory, env, encoding: 'buffer', maxBuffer });
-  return utf8(result.stdout);
+interface Pending {
+  readonly name: string;
+  /** Blob content, or the object ID for a name such as `<revision>^{tree}`. */
+  readonly want: 'blob' | 'id';
+  readonly resolve: (value: Buffer | string | undefined) => void;
+  readonly reject: (error: Error) => void;
+}
+
+/**
+ * Reads blobs named like `<tree>:<path>` through one long-lived `git cat-file --batch`: requests stream in and answers
+ * come back in order. A name Git cannot find reads as undefined. The process keeps Node alive only while it owes answers.
+ */
+export class GitBlobReader {
+  private child?: ChildProcessWithoutNullStreams;
+  private readonly pending: Pending[] = [];
+  private chunks: Buffer[] = [];
+
+  constructor(private readonly directory: string) {}
+
+  read(names: readonly string[]): Promise<(Buffer | undefined)[]> {
+    return Promise.all(names.map(name => this.request(name, 'blob') as Promise<Buffer | undefined>));
+  }
+
+  /** The ID of the object a name resolves to, such as the tree of `<revision>^{tree}`. */
+  id(name: string): Promise<string | undefined> {
+    return this.request(name, 'id') as Promise<string | undefined>;
+  }
+
+  private request(name: string, want: Pending['want']): Promise<Buffer | string | undefined> {
+    return new Promise((resolve, reject) => {
+      if (/[\r\n]/.test(name)) throw new Error('Invalid Git object name');
+      const child = this.child ?? this.start();
+      if (this.pending.length === 0) setHeld(child, true);
+      this.pending.push({ name, want, resolve, reject });
+      child.stdin.write(`${name}\n`);
+    });
+  }
+
+  private start(): ChildProcessWithoutNullStreams {
+    const child = spawn('git', ['--no-replace-objects', 'cat-file', '--batch'], { cwd: this.directory, env });
+    const errors: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => this.receive(chunk));
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    const stop = (error: Error) => this.stop(child, error);
+    child.on('error', stop);
+    child.stdin.on('error', stop);
+    child.on('close', () => stop(new Error(`git cat-file stopped: ${Buffer.concat(errors).toString('utf8').trim()}`)));
+    setHeld(child, false);
+    this.child = child;
+    return child;
+  }
+
+  private receive(chunk: Buffer): void {
+    this.chunks.push(chunk);
+    let buffer = this.chunks.length === 1 ? chunk : Buffer.concat(this.chunks);
+    for (let request = this.pending[0]; request; request = this.pending[0]) {
+      const end = buffer.indexOf(10);
+      if (end < 0) break;
+      const header = buffer.toString('utf8', 0, end);
+      if (header === `${request.name} missing`) {
+        buffer = buffer.subarray(end + 1);
+        this.answer(undefined);
+        continue;
+      }
+      const [, id, type, length] = /^([a-f0-9]+) ([a-z]+) (\d+)$/.exec(header) ?? [];
+      const size = Number(length);
+      if (!Number.isSafeInteger(size) || (request.want === 'blob' && type !== 'blob')) {
+        this.stop(this.child!, new Error(`Unexpected Git object: ${request.name}`));
+        return;
+      }
+      if (buffer.length < end + size + 2) break;
+      const blob = Buffer.from(buffer.subarray(end + 1, end + 1 + size));
+      buffer = buffer.subarray(end + size + 2);
+      this.answer(request.want === 'blob' ? blob : id);
+    }
+    this.chunks = buffer.length ? [buffer] : [];
+  }
+
+  private answer(value: Buffer | string | undefined): void {
+    const request = this.pending.shift()!;
+    if (this.pending.length === 0 && this.child) setHeld(this.child, false);
+    request.resolve(value);
+  }
+
+  private stop(child: ChildProcessWithoutNullStreams, error: Error): void {
+    if (this.child !== child) return;
+    this.child = undefined;
+    this.chunks = [];
+    for (const request of this.pending.splice(0)) request.reject(error);
+    child.kill();
+  }
+}
+
+/** A reader with nothing to answer must not keep the process running. */
+function setHeld(child: ChildProcessWithoutNullStreams, held: boolean): void {
+  for (const handle of [child, child.stdout, child.stdin, child.stderr] as unknown as { ref(): void; unref(): void }[]) {
+    if (held) handle.ref();
+    else handle.unref();
+  }
 }
 
 export async function readGitCommit(directory: string, revision: string, excludes: (path: string) => boolean,

@@ -48,7 +48,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: repometry
-          path: ${{ runner.temp }}/store/commits/${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/store/commits/${{ github.sha }}
+            ${{ runner.temp }}/store/objects
           retention-days: 1
 
   # Installs nothing: publishes the built artifact with pinned zx-semrel only.
@@ -121,10 +123,11 @@ jobs:
           ref: repometry
           fetch-tags: true # release tags for the report; titles and authors come with the inspections
           persist-credentials: false
+      # The inspection's commit file and objects land in place; an object already on the branch has the same bytes.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: repometry
-          path: commits/${{ github.sha }}
+          path: .
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

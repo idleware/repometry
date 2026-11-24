@@ -6,16 +6,27 @@ import { isRecord } from '../../../core/engine/plugin.js';
 import { commitSummary, needsMaintainabilityRefresh, orderSummaries, repositorySummary } from '../projections/commit-summary.js';
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary } from '../wire/summary-model.js';
-import { compactJsonSchema, packJson } from '../wire/compact-json.js';
-import { compareReports, readReport, readReportText, validSubjectId } from '../validation/report.js';
+import { compactJsonSchema } from '../wire/compact-json.js';
+import { compareReports, readReport, readStoredReport, validSubjectId } from '../validation/report.js';
 import type { Report, ReportStore } from '../validation/report.js';
 import { validateSummaryRow } from '../validation/summary-validation.js';
+import { checkDirectory, ensureDirectory, hasCode } from './directory.js';
+import { LocalObjectStore } from './object-store.js';
 import { replaceFile } from './replace-file.js';
+import { ObjectCache, rebuildReport, splitReport, storedReportSchema } from './report-tree.js';
+import type { ObjectSource } from './report-tree.js';
 
-const packedHeader = `{"schema":"${compactJsonSchema}","summary":`;
+const headerStart = `{"schema":"${storedReportSchema}"`;
+// Reports saved before objects carried the same summary header under the compact JSON schema.
+const summaryHeaders = [headerStart, `{"schema":"${compactJsonSchema}"`].map(start => `${start},"summary":`);
 
 export class LocalReportStore implements ReportStore {
-  constructor(private readonly directory: string) {}
+  readonly objects: LocalObjectStore;
+  private readonly cache = new ObjectCache();
+
+  constructor(private readonly directory: string) {
+    this.objects = new LocalObjectStore(directory);
+  }
 
   async save(report: Report, { deferSummary = false } = {}): Promise<void> {
     readReport(report);
@@ -24,29 +35,43 @@ export class LocalReportStore implements ReportStore {
     await mkdir(this.directory, { mode: 0o700, recursive: true });
     await ensureDirectory(base);
     await ensureDirectory(folder);
-    const packed = packJson(JSON.parse(JSON.stringify(report)) as unknown);
-    const { strings, shapes, data } = packed;
+    const value = JSON.parse(JSON.stringify(report)) as Record<string, unknown>;
+    const { stored, objects } = splitReport(value);
+    const saved: ObjectSource = { read: async ids => ids.map(id => JSON.parse(objects.get(id)!) as unknown) };
+    if (JSON.stringify(await rebuildReport(stored, saved)) !== JSON.stringify(value)) {
+      throw new Error(`The store cannot keep report ${report.subject.id} exactly`);
+    }
     const row = report.subject.kind === 'commit' ? commitSummary(report) : undefined;
     if (row && !validateSummaryRow(row)) throw new Error(`Invalid report summary: ${report.subject.id}`);
+    // Objects go first, so a published commit file never names a missing object.
+    await this.objects.write(objects);
     // Keep the small index row on the first line of the same atomic file as the report.
-    const contents = row
-      ? `${packedHeader}${JSON.stringify(row)},\n${JSON.stringify({ strings, shapes, data }).slice(1)}\n`
-      : `${JSON.stringify(packed)}\n`;
-    await replaceFile(folder, 'report.json', contents);
+    const body = JSON.stringify(stored).slice(1);
+    await replaceFile(folder, 'report.json', row ? `${headerStart},"summary":${JSON.stringify(row)},\n${body}\n` : `${headerStart},${body}\n`);
     if (report.subject.kind === 'commit' && !deferSummary) await this.refreshSummary();
   }
 
-  async read(subject: Subject): Promise<Report> {
-    const folder = this.folder(subject);
-    const path = join(folder, 'report.json');
-    await checkDirectory(join(this.directory, subjectFolder(subject.kind)));
-    await checkDirectory(folder);
-    if (!(await lstat(path)).isFile()) throw new Error(`Expected a report file: ${path}`);
-    return readReportText(await readFile(path, 'utf8'), subject);
+  read(subject: Subject): Promise<Report> {
+    return this.readWith(subject, this.objects.source(this.cache));
   }
 
   async list(): Promise<readonly Report[]> {
+    const objects = this.objects.source(this.cache);
     const reports: Report[] = [];
+    for (const subject of await this.subjects()) {
+      try {
+        reports.push(await this.readWith(subject, objects));
+      } catch (error) {
+        // A writer may have created the directory but not published its report yet.
+        if (!hasCode(error, 'ENOENT')) throw error;
+      }
+    }
+    return reports.sort(compareReports);
+  }
+
+  /** Saved subjects by folder name, whether or not their report is published yet. */
+  async subjects(): Promise<readonly Subject[]> {
+    const subjects: Subject[] = [];
     for (const kind of ['commit', 'working-tree'] as const) {
       const base = join(this.directory, subjectFolder(kind));
       try {
@@ -56,16 +81,20 @@ export class LocalReportStore implements ReportStore {
         throw error;
       }
       for (const entry of await readdir(base, { withFileTypes: true })) {
-        if (!entry.isDirectory() || !validSubjectId(kind, entry.name)) continue;
-        try {
-          reports.push(await this.read({ kind, id: entry.name }));
-        } catch (error) {
-          // A writer may have created the directory but not published its report yet.
-          if (!hasCode(error, 'ENOENT')) throw error;
-        }
+        if (entry.isDirectory() && validSubjectId(kind, entry.name)) subjects.push({ kind, id: entry.name });
       }
     }
-    return reports.sort(compareReports);
+    return subjects;
+  }
+
+  /** The saved report file of a subject. */
+  async text(subject: Subject): Promise<string> {
+    const folder = this.folder(subject);
+    const path = join(folder, 'report.json');
+    await checkDirectory(join(this.directory, subjectFolder(subject.kind)));
+    await checkDirectory(folder);
+    if (!(await lstat(path)).isFile()) throw new Error(`Expected a report file: ${path}`);
+    return readFile(path, 'utf8');
   }
 
   async listSummaries(): Promise<readonly CommitSummary[]> {
@@ -109,6 +138,10 @@ export class LocalReportStore implements ReportStore {
     throw new Error('Reports kept changing during summary publication. The inspection is saved and the summary can be refreshed by retrying.');
   }
 
+  private async readWith(subject: Subject, objects: ObjectSource): Promise<Report> {
+    return readStoredReport(await this.text(subject), subject, objects);
+  }
+
   private folder(subject: Subject): string {
     if (!validSubjectId(subject.kind, subject.id)) throw new Error(`Invalid ${subject.kind} ID: ${subject.id}`);
     return join(this.directory, subjectFolder(subject.kind), subject.id);
@@ -118,38 +151,26 @@ export class LocalReportStore implements ReportStore {
 async function readSummaryHeader(path: string, sha: string): Promise<CommitSummary | undefined> {
   const file = await open(path, 'r');
   try {
-    const buffer = Buffer.alloc(4096);
+    const buffer = Buffer.alloc(64 * 1024);
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
-    const end = buffer.subarray(0, bytesRead).indexOf(10);
-    if (end < 0) return undefined;
-    const first = buffer.toString('utf8', 0, end);
-    if (!first.startsWith(packedHeader) || !first.endsWith(',')) return undefined;
-    const envelope: unknown = JSON.parse(first.slice(0, -1) + '}');
-    if (!isRecord(envelope) || !validateSummaryRow(envelope.summary) || envelope.summary.sha !== sha
-      || !envelope.summary.revision || envelope.summary.detail !== undefined) throw new Error(`Invalid report summary: ${sha}`);
-    return needsMaintainabilityRefresh(envelope.summary) ? undefined : envelope.summary;
+    return headerSummary(buffer.toString('utf8', 0, bytesRead), sha);
   } finally {
     await file.close();
   }
 }
 
+/** The summary row a saved report keeps on its first line, unless it has none or it needs recalculating. */
+export function headerSummary(text: string, sha: string): CommitSummary | undefined {
+  const end = text.indexOf('\n');
+  if (end < 0) return undefined;
+  const first = text.slice(0, end);
+  if (!summaryHeaders.some(start => first.startsWith(start)) || !first.endsWith(',')) return undefined;
+  const envelope: unknown = JSON.parse(first.slice(0, -1) + '}');
+  if (!isRecord(envelope) || !validateSummaryRow(envelope.summary) || envelope.summary.sha !== sha
+    || !envelope.summary.revision || envelope.summary.detail !== undefined) throw new Error(`Invalid report summary: ${sha}`);
+  return needsMaintainabilityRefresh(envelope.summary) ? undefined : envelope.summary;
+}
+
 function subjectFolder(kind: Subject['kind']): string {
   return kind === 'commit' ? 'commits' : 'working-trees';
-}
-
-function hasCode(error: unknown, code: string): boolean {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
-
-async function ensureDirectory(path: string): Promise<void> {
-  try {
-    await mkdir(path, { mode: 0o700 });
-  } catch (error) {
-    if (!hasCode(error, 'EEXIST')) throw error;
-  }
-  await checkDirectory(path);
-}
-
-async function checkDirectory(path: string): Promise<void> {
-  if (!(await lstat(path)).isDirectory()) throw new Error(`Expected a directory: ${path}`);
 }

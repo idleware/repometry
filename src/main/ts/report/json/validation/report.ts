@@ -8,7 +8,9 @@ import { canonicalMetricId } from '../../../core/model/measurement.js';
 import { lcovLines } from '../../../core/model/line-coverage.js';
 import { digest } from '../../../core/model/snapshot.js';
 import type { Subject } from '../../../core/model/source.js';
-import { compactJsonSchema, unpackJson } from '../wire/compact-json.js';
+import { unpackJson } from '../wire/compact-json.js';
+import { rebuildReport, storedReportSchema } from '../store/report-tree.js';
+import type { ObjectSource } from '../store/report-tree.js';
 import type { CommitSummary } from '../wire/summary-model.js';
 import { reportSchema } from '../../../core/model/report.js';
 import type { Report } from '../../../core/model/report.js';
@@ -23,11 +25,16 @@ export interface ReportReader extends DomainReportReader {
 
 export interface ReportStore extends ReportReader, ReportWriter {}
 
-export function readReportText(text: string, subject: Subject): Report {
+/**
+ * Reads a saved report file: a commit file whose rows live in `objects`, or a single-file report saved before
+ * objects existed, which is read as it is. Both give the same report.
+ */
+export async function readStoredReport(text: string, subject: Subject, objects: ObjectSource): Promise<Report> {
   const envelope: unknown = JSON.parse(text);
-  const report = readReport(unpackJson(envelope));
+  const value = isRecord(envelope) && envelope.schema === storedReportSchema ? await rebuildReport(envelope, objects) : unpackJson(envelope);
+  const report = readReport(value);
   if (report.subject.kind !== subject.kind || report.subject.id !== subject.id) throw new Error(`Report subject mismatch: ${subject.id}`);
-  if (isRecord(envelope) && envelope.schema === compactJsonSchema && isRecord(envelope.summary)
+  if (isRecord(envelope) && isRecord(envelope.summary)
     && envelope.summary.revision !== undefined && envelope.summary.revision !== reportRevision(report)) {
     throw new Error(`Report revision mismatch: ${subject.id}`);
   }

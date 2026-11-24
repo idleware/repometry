@@ -2,6 +2,7 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
+import { gitReportObjects } from '../api/git/git-reader.js';
 import { resolveGitBranch } from '../api/git/commit-metadata.js';
 import { clearSourceCache, sourceCacheRoot } from '../api/git/source-cache.js';
 import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
@@ -25,6 +26,8 @@ import { exportProjects } from '../report/html/site/projects.js';
 import { fileMetrics } from '../report/json/projections/file-metrics.js';
 import { LocalReportStore } from '../report/json/store/local-store.js';
 import { savePullReview } from '../report/json/store/pull-review-store.js';
+import { LocalObjectStore } from '../report/json/store/object-store.js';
+import { checkStore } from '../report/json/store/store-check.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
 import type { Command, Invocation } from './arguments.js';
@@ -141,6 +144,25 @@ const commands: Readonly<Record<string, Command>> = {
       const path = sourceCacheRoot();
       if (action === 'clear') await clearSourceCache(path);
       print({ schema: 'urn:repometry:schema:cache-result:1', path, ...(action === 'clear' ? { cleared: ['sources'] } : {}) });
+    },
+  },
+  store: {
+    description: 'Check saved inspections and repair what can be restored.', parameters: 'check', min: 1, max: 1,
+    options: {
+      repair: flag('Restore missing data from a copy.'),
+      from: option('PATH|git:REF', 'The copy: another store or a storage branch.'),
+    },
+    async run(input) {
+      if (input.args[0] !== 'check') throw new Error('Use store check');
+      const from = input.text('from');
+      if (from !== undefined && !input.flag('repair')) throw new Error('--from requires --repair');
+      const { directory, root, store } = await context(input);
+      const path = writableStore(store);
+      const source = from === undefined ? undefined
+        : from.startsWith('git:') ? await gitReportObjects(root, from.slice(4)) : new LocalObjectStore(resolve(directory, from)).source();
+      const result = await checkStore(path, input.flag('repair') ? { from: source } : undefined);
+      print({ ...result, store: path });
+      return result.problems.length ? 1 : 0;
     },
   },
   worker: { description: 'Run the remote analysis worker.',

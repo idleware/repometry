@@ -7,7 +7,8 @@ import { compareInspections } from '../../main/ts/core/usecases/compare.js';
 import { commitSummary, repositorySummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
 import { complexFunctions } from '../../main/ts/report/json/projections/inspection-details.js';
-import { readReportText } from '../../main/ts/report/json/validation/report.js';
+import type { ObjectSource } from '../../main/ts/report/json/store/report-tree.js';
+import { readStoredReport } from '../../main/ts/report/json/validation/report.js';
 import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
 
 const formerIds = new Map([
@@ -32,7 +33,8 @@ test('previous IDs in a v2 report and packed summary header share the current hi
     definitions: Object.fromEntries(Object.entries(report.definitions).map(([id, description]) => [previous(id), description])),
     measurements: report.measurements.map(row => ({ ...row, definition: previous(row.definition) })),
     pluginData: { ...data, measured: data.measured.map(previous), metrics: data.metrics.map(metric => ({ ...metric, id: previous(metric.id) })) } };
-  const previousRead = readReportText(JSON.stringify(packJson(previousReport)), previousReport.subject);
+  const singleFile: ObjectSource = { read: () => Promise.reject(new Error('A single-file report reads no objects')) };
+  const previousRead = await readStoredReport(JSON.stringify(packJson(previousReport)), previousReport.subject, singleFile);
   assert.equal(JSON.stringify(previousRead), JSON.stringify(previousReport));
   assert.deepEqual(qualitySummary(previousRead), qualitySummary(current));
   assert.deepEqual(fileMetrics(previousRead).files, fileMetrics(current).files);

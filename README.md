@@ -39,6 +39,9 @@ npx repometry view
 # Export a static report to .repometry/report/html. Use -o DIR for another folder.
 npx repometry report html
 
+# Check saved inspections. --repair restores missing data from a copy.
+npx repometry store check --repair --from git:repometry
+
 # List supported formats and get help for a command.
 npx repometry plugins
 npx repometry help analyze
