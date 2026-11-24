@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bridgeStates, callReading, hitLabel, isSourceLayer, lineCoverageText, lineHits, lineReadings, lineStates } from '../../main/ts/report/html/app/viewer-line-coverage.js';
-import { codeless, tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
 
 test('coverage ranges become one state per measured line, 1-based and inclusive, and unnamed lines stay unmeasured', () => {
   const states = lineStates({ covered: [[1, 3], [7, 7]], uncovered: [[5, 6]], partial: [[2, 2]] });
@@ -36,22 +35,14 @@ test('a count is short in the gutter and whole in the words a pointer or a scree
   assert.equal(lineCoverageText('covered'), 'Covered');
 });
 
-test('blank and comment-only lines carry no code, so coverage gives them no count', () => {
-  const tokenize = tokenizer('a.ts');
-  const lines = ['', '   ', '// note', '/**', ' * a doc line', ' */', 'const a = 1; // trailing', '}', '  /* inline */ run();'];
-  assert.deepEqual(lines.map(line => codeless(tokenize(line))), [true, true, true, true, true, true, false, false, false]);
-  assert.equal(codeless(tokenizer('notes.txt')('# not a comment here')), false);
-});
-
-test('a gap of blank and comment lines takes the tint of the line above it, so the strip never breaks', () => {
-  // Lines 1–12: covered, blank, covered, blank blank, uncovered, blank, uncovered, blank, code no one measured, blank, covered.
+test('a line without a coverage record takes the state above it, so the strip never breaks', () => {
+  // Lines 1–12: covered, gap, covered, gap gap, uncovered, gap, uncovered, gap gap gap, covered.
   const states = new Map([[1, 'covered'], [3, 'covered'], [6, 'uncovered'], [8, 'uncovered'], [12, 'covered']] as const);
-  const codeless = [false, true, false, true, true, false, true, false, true, false, true, false];
-  assert.deepEqual([...bridgeStates(new Map(states), codeless)],
-    [[2, 'covered'], [4, 'covered'], [5, 'covered'], [7, 'uncovered'], [9, 'uncovered'], [11, 'covered']]);
-  // A gap at the file's start takes the line below; one at its end, the line above; one with no measured side, nothing.
-  assert.deepEqual([...bridgeStates(new Map([[2, 'covered']] as const), [true, false, true])], [[1, 'covered'], [3, 'covered']]);
-  assert.equal(bridgeStates(new Map(), [true, true]).size, 0);
+  assert.deepEqual([...bridgeStates(new Map(states))],
+    [[2, 'covered'], [4, 'covered'], [5, 'covered'], [7, 'uncovered'], [9, 'uncovered'], [10, 'uncovered'], [11, 'uncovered']]);
+  // A gap before the first record takes the state below; after the last record the strip ends.
+  assert.deepEqual([...bridgeStates(new Map([[3, 'partial'], [5, 'covered']] as const))], [[1, 'partial'], [2, 'partial'], [4, 'partial']]);
+  assert.equal(bridgeStates(new Map()).size, 0);
 });
 
 // github.ts as the inspection records it: two functions never called, one called once, each declaration line run twice

@@ -5,7 +5,7 @@ import { plan } from '../core/engine/plan.js';
 import type { InputBinding, PlannedOperation } from '../core/engine/plan.js';
 import type { Plugin, Product } from '../core/engine/plugin.js';
 import type { CloneSource } from '../core/model/clone-source.js';
-import { codeStructure } from '../core/model/code-structure.js';
+import { codeStructure, structuralCheckIds, structureCodeLines } from '../core/model/code-structure.js';
 import type { CodeStructure } from '../core/model/code-structure.js';
 import { sourceFile } from '../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../core/model/source.js';
@@ -16,6 +16,7 @@ import type { AnalysisResults } from './analysis-results.js';
 import { defaultProvider, inspectionKeys, pluginForScope, structuralInspections } from './analysis-sources.js';
 import type { AnalysisSources, SelectedSource } from './analysis-sources.js';
 import type { LanguageProvider } from './languages.js';
+import { unmeasuredStructure } from './structure-measures.js';
 
 const standardInspections = ['structure/size', 'structure/complexity', 'maintainability/file'] as const;
 const fileInput = new Map([['file', sourceFile.id]]);
@@ -24,6 +25,7 @@ export const defaultFilePlan = filePlan(defaultProvider, []);
 
 export interface FileAnalysis {
   readonly cloneSources: readonly CloneSource[];
+  readonly codeLines: ReadonlyMap<string, ReadonlySet<number>>;
   readonly functionBodies: ReadonlyMap<string, readonly SourceLineRange[]>;
 }
 
@@ -31,6 +33,7 @@ export async function inspectFiles(sources: AnalysisSources, batchFacts: Readonl
   results: AnalysisResults, withCoverage: boolean, cache?: OperationCacheOptions): Promise<FileAnalysis> {
   const plans = new Map<string, readonly PlannedOperation[]>([[filePlanKey(defaultProvider, []), defaultFilePlan]]);
   const cloneSources: CloneSource[] = [];
+  const codeLines = new Map<string, ReadonlySet<number>>();
   const functionBodies = new Map<string, readonly SourceLineRange[]>();
   for (const source of sources.sources) {
     const plugins = matchedInspections(source, sources, results);
@@ -42,11 +45,15 @@ export async function inspectFiles(sources: AnalysisSources, batchFacts: Readonl
     if (facts) products.set('syntax', { contract: codeStructure.id, value: facts });
     const outcomes = await execute(tasks, products, cache);
     const syntax = provider && outcomes.get(provider.key);
-    const bodies = recordFileSyntax(source, syntax, facts, results, withCoverage);
-    if (bodies !== undefined) functionBodies.set(file.path, bodies);
+    const parsed = recordFileSyntax(source, syntax, facts, results, withCoverage);
+    if (withCoverage && parsed) {
+      const lines = structureCodeLines(parsed);
+      if (lines !== undefined) codeLines.set(file.path, new Set(lines));
+      if (parsed.functionBodies !== undefined) functionBodies.set(file.path, parsed.functionBodies);
+    }
     collectFileProducts(tasks, outcomes, source, cloneSources, results);
   }
-  return { cloneSources, functionBodies };
+  return { cloneSources, codeLines, functionBodies };
 }
 
 function matchedInspections({ file }: SelectedSource, sources: AnalysisSources, results: AnalysisResults): Plugin[] {
@@ -88,12 +95,24 @@ function filePlanKey(provider: LanguageProvider | undefined, plugins: readonly P
 }
 
 function recordFileSyntax({ file, provider }: SelectedSource, outcome: Outcome | undefined, batch: CodeStructure | undefined,
-  results: AnalysisResults, withCoverage: boolean): readonly SourceLineRange[] | undefined {
+  results: AnalysisResults, withCoverage: boolean): CodeStructure | undefined {
   const value = outcome?.state === 'completed' ? outcome.product.value : undefined;
   const builtinParsed = provider === defaultProvider && value !== undefined;
   const facts = batch ?? ((!builtinParsed || withCoverage) && codeStructure.accepts(value) ? value : undefined);
   if (facts || builtinParsed) results.parsed.add(file.path);
-  return withCoverage ? facts?.functionBodies : undefined;
+  if (facts && !builtinParsed) recordUnmeasured(file.path, facts, results);
+  return facts;
+}
+
+function recordUnmeasured(path: string, facts: CodeStructure, results: AnalysisResults): void {
+  const unmeasured = unmeasuredStructure(facts);
+  if (unmeasured.length) results.unmeasured.set(path, unmeasured);
+  if (facts.observations === undefined) {
+    results.ruleSkips.push({ path, plugin: 'maintainability', rules: structuralCheckIds, reason: 'unmeasured' });
+  }
+  if (facts.clones === undefined) {
+    results.ruleSkips.push({ path, plugin: 'duplication', rules: ['identical-code', 'similar-code'], reason: 'unmeasured' });
+  }
 }
 
 function collectFileProducts(tasks: readonly PlannedOperation[], outcomes: ReadonlyMap<string, Outcome>,
@@ -109,5 +128,5 @@ function collectFileProducts(tasks: readonly PlannedOperation[], outcomes: Reado
 function cloneSource(outcome: Outcome, provider: LanguageProvider | undefined): CloneSource | undefined {
   if (outcome.state !== 'completed' || outcome.product.contract !== fileQuality.id || !fileQuality.accepts(outcome.product.value)) return;
   const source = outcome.product.value.cloneSource;
-  return provider && source.scheme === undefined ? { ...source, scheme: provider.plugin.id } : source;
+  return source && provider && source.scheme === undefined ? { ...source, scheme: provider.plugin.id } : source;
 }

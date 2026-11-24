@@ -111,6 +111,9 @@ export function historyEntry(report: Report): PublicHistoryEntry {
       lineCoverage = { covered: item.covered, total: item.total };
     }
   }
+  const unmeasured = new Set(report.pluginData?.inventory?.flatMap(file => file.unmeasured ?? []));
+  if (unmeasured.has('functions')) functions = null;
+  if (unmeasured.has('cyclomaticComplexity')) maxComplexity = null;
   const window = report.appliedConfig.churnWindow;
   const endingAt = isRecord(window) && typeof window.endingAt === 'string' ? window.endingAt : '';
   const committedAt = Date.parse(report.committedAt ?? endingAt);

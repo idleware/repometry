@@ -70,7 +70,7 @@ let local: { readonly catalog: readonly MetricDescriptor[] | undefined; readonly
 export function useDetails(details: InspectionDetails): void {
   const catalog = details.metrics.catalog;
   extendCatalog(catalog);
-  useLanguages(details.metrics.languages);
+  useLanguages(details.metrics);
   local = { catalog, index: catalogIndex(catalog) };
   usePluginMeasures(pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && measured(spec.descriptor)).map(spec => [spec.key, {
     label: spec.label, percent: spec.descriptor.unit === 'ratio', minutes: spec.descriptor.unit === 'minutes',

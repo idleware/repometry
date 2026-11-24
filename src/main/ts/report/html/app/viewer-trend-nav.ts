@@ -1,7 +1,7 @@
 // The Trends page's sidebar: the series in their groups, each with its value at the selected commit, and the period.
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 import { element } from './viewer-dom.js';
-import { coverageGrade, formatMetric } from './viewer-metrics.js';
+import { coverageGrade, formatMetric, gradeScope } from './viewer-metrics.js';
 import { groups, trendValue, viewLabel, viewMetric } from './viewer-trend-data.js';
 import type { Period, TrendData, TrendView } from './viewer-trend-data.js';
 
@@ -54,7 +54,8 @@ function groupBlock({ data, selected, current, period }: Listing, group: string,
   if (reading) title.append(reading);
   const list = element('ul');
   list.append(...present.map(view => seriesLink(data, selected, view, view === current, period)));
-  block.append(title, list);
+  const scope = group === 'Maintainability' ? gradeScope(data.quality[selected.sha]) : undefined;
+  block.append(title, ...scope ? [element('p', 'trend-group-note', scope)] : [], list);
   return block;
 }
 

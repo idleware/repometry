@@ -91,6 +91,20 @@
         "$ref": "#/$defs/finding"
       }
     },
+    "ruleSkips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "plugin", "rules", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "plugin": { "type": "string" },
+          "rules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+          "reason": { "const": "unmeasured" }
+        },
+        "additionalProperties": false
+      }
+    },
     "pluginData": {
       "type": "object",
       "required": ["metrics", "measured", "rules", "products"],
@@ -134,7 +148,13 @@
               "bytes": { "type": "integer", "minimum": 0 },
               "language": { "type": "string" },
               "provider": { "type": "string", "minLength": 1 },
-              "analysed": { "type": "boolean" }
+              "analysed": { "type": "boolean" },
+              "unmeasured": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "enum": ["functions", "cyclomaticComplexity", "cognitiveComplexity", "classes",
+                  "commentLines", "codeLines", "duplication", "structuralRules"] }
+              }
             },
             "additionalProperties": false
           }

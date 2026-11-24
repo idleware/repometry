@@ -1,14 +1,16 @@
 import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
 import { basename, count, element, fact, link, parentPath, quantity } from './viewer-dom.js';
 import { coverageContext, coverageRatio, coverageText, duplicationContext, duplicationText, effortText } from './viewer-file-figures.js';
-import { lockfilesLabel } from './viewer-languages.js';
+import { isLockfile, lockfilesLabel } from './viewer-languages.js';
+import { tableColumns } from './viewer-columns.js';
+import { partialNote } from './viewer-totals.js';
 import type { Directory, Metrics, Navigation } from './viewer-inspection.js';
 import { coverageKinds, localValue, measured, measuredFileMetrics } from './viewer-inspection.js';
 import { atPath } from './viewer-locations.js';
 import { format } from './viewer-metric-format.js';
 import { labelOf, size } from './viewer-metrics.js';
 import { lineSnippet } from './viewer-source-view.js';
-import { highlightCode } from './viewer-tokenizer.js';
+import { highlighter } from './viewer-tokenizer.js';
 
 /** A fact where the inspection took the measurement; a measurement it did not take leaves no row behind. */
 function factIf(shown: boolean, label: string, value: string, context?: string): HTMLElement[] {
@@ -23,42 +25,42 @@ function panel(label: string, title: string, className = 'fx-aside'): { panel: H
   return { panel: aside, heading };
 }
 
-export interface SelectionCounts {
-  /** Files a plugin read, and lockfiles, among the selected ones. */
-  readonly analysed: number;
-  readonly lockfiles: number;
-  /** How the selection reads against its folder, where a query narrowed it. */
-  readonly selection?: string | undefined;
-}
-
-/** The totals of a folder, or of the files a query selected in it. */
-export function directorySummary(entry: Directory, { analysed, lockfiles, selection }: SelectionCounts): HTMLElement {
+/**
+ * The totals of a folder, or of the files a query selected in it, with how the selection reads against its folder. A
+ * total some of the files a plugin read do not carry says in how many it was measured.
+ */
+export function directorySummary(entry: Directory, files: readonly Metrics[], selection?: string): HTMLElement {
   const { panel: aside, heading } = panel(selection ? 'Selection totals' : 'Folder totals',
     selection ? 'Selection' : basename(entry.path) || 'All files');
   // The breadcrumbs above name the folder; only a selection needs its words here.
   if (selection) heading.append(element('p', 'fx-aside-path fx-aside-selection', selection));
   const facts = element('dl', 'fx-kv');
   const quality = entry.quality;
+  const analysed = files.filter(file => file.analysed !== false).length;
+  const lockfiles = files.filter(file => isLockfile(file.path)).length;
   const partial = analysed !== entry.files;
+  // A total is partial as its table column is: the column says which files carry the measure.
+  const presence = new Map(tableColumns().map(column => [column.label, column.present]));
+  const note = (label: string) => presence.get(label) && partialNote(files, presence.get(label)!);
   facts.append(
     // Every tracked file counts here; Trends counts the analysed ones, so both say which they are.
     fact('Tracked files', count(entry.files)),
     ...factIf(partial, labelOf('files'), count(analysed)),
     ...factIf(lockfiles > 0, lockfilesLabel, count(lockfiles)),
-    ...factIf(quality?.codeLines !== undefined, labelOf('code-lines'), count(quality?.codeLines)),
+    ...factIf(quality?.codeLines !== undefined, labelOf('code-lines'), count(quality?.codeLines), note(labelOf('code-lines'))),
     // Physical lines are what the language bar weighs once some files are ignored, so its total stands here too.
     ...factIf(quality?.codeLines === undefined || partial, labelOf('lines'), count(entry.lines)),
     ...factIf(entry.bytes !== undefined, 'Size', size(entry.bytes)),
     ...factIf(entry.functions !== null, labelOf('functions'), count(entry.functions)),
-    fact(labelOf('complexity'), count(entry.complexity?.maximum)),
-    ...factIf(quality?.cognitiveComplexity !== undefined, labelOf('cognitive'), count(quality?.cognitiveComplexity)),
-    ...factIf(quality?.duplication !== undefined, labelOf('duplication'), duplicationText(entry)),
-    ...factIf(quality?.maintainability !== undefined, labelOf('effort'), effortText(quality?.maintainability?.effortMinutes)),
+    fact(labelOf('complexity'), count(entry.complexity?.maximum), note(labelOf('complexity'))),
+    ...factIf(quality?.cognitiveComplexity !== undefined, labelOf('cognitive'), count(quality?.cognitiveComplexity), note(labelOf('cognitive'))),
+    ...factIf(quality?.duplication !== undefined, labelOf('duplication'), duplicationText(entry), note(labelOf('duplication'))),
+    ...factIf(quality?.maintainability !== undefined, labelOf('effort'), effortText(quality?.maintainability?.effortMinutes), note(labelOf('effort'))),
     ...factIf(coverageRatio(entry) !== null, labelOf('coverage'), coverageText(entry)),
     // Other plugins' totals follow Repometry's own, where this inspection ran them and they roll up; the counts behind
     // a ratio read through it.
     ...measuredFileMetrics().filter(spec => spec.descriptor.aggregate !== 'none' && !spec.ratioPart)
-      .map(spec => fact(spec.short, format(spec, localValue(entry, spec)))),
+      .map(spec => fact(spec.short, format(spec, localValue(entry, spec)), note(spec.short))),
   );
   aside.append(heading, facts);
   return aside;
@@ -144,7 +146,7 @@ function sourceFunctionList(functions: InspectionDetails['functions'], reveal: (
     button.type = 'button';
     button.disabled = record.line === null;
     const name = element(snippet ? 'code' : 'span', 'fx-function-name');
-    if (snippet) name.append(...highlightCode(record.path, snippet));
+    if (snippet) name.append(...highlighter(record.path)(snippet));
     else name.textContent = record.name;
     button.append(name);
     if (record.line !== null) button.append(element('span', 'fx-function-line', `${record.line}`));

@@ -177,7 +177,7 @@ function scan(path: string, ast: Node): Finding[] {
       }
       return;
     }
-    const imported = resolve(target);
+    const imported = resolveImport(target, bindings);
     if (imported?.module === 'child_process' && shellCalls.has(imported.name)) {
       if (first !== undefined && isBuiltString(first)) {
         report('child-process-injection', node, `${imported.name}() passes a command built from interpolated values to a shell, `
@@ -197,7 +197,7 @@ function scan(path: string, ast: Node): Finding[] {
       inspectFunctionConstructor(args, node);
       return;
     }
-    const imported = resolve(target);
+    const imported = resolveImport(target, bindings);
     const [code] = args;
     if (imported?.module === 'vm' && imported.name === 'Script' && code !== undefined && !isStatic(code)) {
       report('vm-code-execution', node, 'new vm.Script() compiles code that is not a literal, and the vm module '
@@ -240,15 +240,6 @@ function scan(path: string, ast: Node): Finding[] {
     const host = /^http:\/\/(?:[^@/?#\s]*@)?(\[[^\]]*\]|[^/:?#\s]*)/.exec(value)?.[1]?.toLowerCase() ?? '';
     if (!isPublicHost(host)) return;
     report('http-url', node, `The plain HTTP URL to ${host} sends data unencrypted, so it can be read or altered in transit; use https.`);
-  }
-
-  function resolve(node: Node): Imported | undefined {
-    if (node.type === 'Identifier') return bindings.named.get(node.name);
-    const name = memberName(node);
-    if (name === undefined || (node.type !== 'MemberExpression' && node.type !== 'OptionalMemberExpression')) return undefined;
-    const object = unwrap(node.object);
-    const module = object.type === 'Identifier' ? bindings.namespaces.get(object.name) : requiredModule(object);
-    return module === undefined ? undefined : { module, name };
   }
 
   function report(rule: RuleId, node: Node, message: string): void {
@@ -297,28 +288,27 @@ function bindDeclarator(id: Node, init: Node, bindings: Bindings): void {
     return;
   }
   if (id.type !== 'Identifier') return;
-  // const exec = require('child_process').exec; const run = promisify(exec);
-  const member = memberName(init);
-  if (member !== undefined && (init.type === 'MemberExpression' || init.type === 'OptionalMemberExpression')) {
-    const object = unwrap(init.object);
-    const owner = object.type === 'Identifier' ? bindings.namespaces.get(object.name) : requiredModule(object);
-    if (owner !== undefined) bindings.named.set(id.name, { module: owner, name: member });
-    return;
-  }
-  if (init.type === 'CallExpression' && init.arguments[0] !== undefined) {
-    const callee = unwrap(init.callee);
-    if ((callee.type === 'Identifier' && callee.name === 'promisify') || memberName(callee) === 'promisify') {
-      const wrapped = unwrap(init.arguments[0]);
-      const original = wrapped.type === 'Identifier' ? bindings.named.get(wrapped.name) : undefined;
-      if (original !== undefined) bindings.named.set(id.name, original);
-      else if (wrapped.type === 'MemberExpression') {
-        const object = unwrap(wrapped.object);
-        const owner = object.type === 'Identifier' ? bindings.namespaces.get(object.name) : requiredModule(object);
-        const name = memberName(wrapped);
-        if (owner !== undefined && name !== undefined) bindings.named.set(id.name, { module: owner, name });
-      }
-    }
-  }
+  const imported = init.type === 'CallExpression' ? resolvePromisified(init, bindings)
+    : init.type === 'Identifier' ? undefined : resolveImport(init, bindings);
+  if (imported) bindings.named.set(id.name, imported);
+}
+
+function resolvePromisified(call: Extract<Node, { type: 'CallExpression' }>, bindings: Bindings): Imported | undefined {
+  const [argument] = call.arguments;
+  const callee = unwrap(call.callee);
+  const name = callee.type === 'Identifier' ? callee.name : memberName(callee);
+  if (argument === undefined || name !== 'promisify') return undefined;
+  const target = unwrap(argument);
+  return target.type === 'OptionalMemberExpression' ? undefined : resolveImport(target, bindings);
+}
+
+function resolveImport(node: Node, bindings: Bindings): Imported | undefined {
+  if (node.type === 'Identifier') return bindings.named.get(node.name);
+  const name = memberName(node);
+  if (name === undefined || (node.type !== 'MemberExpression' && node.type !== 'OptionalMemberExpression')) return undefined;
+  const object = unwrap(node.object);
+  const module = object.type === 'Identifier' ? bindings.namespaces.get(object.name) : requiredModule(object);
+  return module === undefined ? undefined : { module, name };
 }
 
 /** The tracked module that `require('x')` or `await import('x')` loads, if any. */

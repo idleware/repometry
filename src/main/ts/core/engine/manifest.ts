@@ -1,6 +1,7 @@
 import { isRecord } from './plugin.js';
 import type { MetricDescriptor, Plugin, ProductDeclaration, RuleDescriptor } from './plugin.js';
 import { definitions } from '../model/measurement.js';
+import { structureMeasures } from '../model/code-structure.js';
 import { isLanguageDisplay } from '../model/language.js';
 
 const kinds = new Set(['language', 'analysis', 'coverage', 'security', 'import', 'source']);
@@ -83,9 +84,11 @@ function validLanguages(values: unknown): boolean {
   const ids = new Set<string>();
   for (const value of values as unknown[]) {
     if (!isRecord(value) || !isLanguageDisplay(value) || ids.has(value.id)) return false;
-    const { extensions, globs } = value;
+    const { extensions, globs, measures } = value;
     if (extensions !== undefined && (!strings(extensions) || !extensions.every(isExtension))) return false;
     if (globs !== undefined && !strings(globs)) return false;
+    if (measures !== undefined && (!strings(measures) || measures.some(measure => !(structureMeasures as readonly string[]).includes(measure))
+      || measures.includes('duplication') && !measures.includes('codeLines'))) return false;
     if (!(Array.isArray(extensions) && extensions.length || Array.isArray(globs) && globs.length)) return false;
     ids.add(value.id);
   }

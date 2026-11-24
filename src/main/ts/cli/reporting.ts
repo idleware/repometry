@@ -3,7 +3,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { commitMetadataReader } from '../api/git/commit-metadata.js';
 import { readLocalSources, sourceRemotes } from '../api/git/local-sources.js';
-import { defaultLanguages } from '../compose/languages.js';
+import { defaultLanguages, languageRegistry } from '../compose/languages.js';
 import { resolveSourceLocator } from '../compose/sources.js';
 import { commitSummary, withCommitMetadata } from '../report/json/projections/commit-summary.js';
 import { exportSite, siteSummary } from '../report/html/site/export-site.js';
@@ -42,7 +42,7 @@ export async function outputReports(root: string, store: Store, requested: reado
     readComponents(componentsPath(root, input), input.text('components') === undefined),
     store.path ? listPullReviews(store.path) : [],
   ]);
-  const options = { languages: defaultLanguages, sources, components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
+  const options = { languages: config.plugins.length ? languageRegistry(config.plugins) : defaultLanguages, sources, components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
     title: input.text('title') ?? (input.text('repo') ? basename(root) : undefined),
     footer: !input.flag('no-footer') } as const;
   for (const request of requests) {
@@ -91,7 +91,7 @@ export async function viewTarget(input: Invocation, port: number) {
     readConfig(root, input),
   ]);
   const local = repository ? readLocalSources(repository) : undefined;
-  const server = await serveSite(store.reader, port, { languages: defaultLanguages, title: input.text('title') ?? basename(root), components, pulls,
+  const server = await serveSite(store.reader, port, { languages: config.plugins.length ? languageRegistry(config.plugins) : defaultLanguages, title: input.text('title') ?? basename(root), components, pulls,
     branch: input.text('branch') ?? config.branch, readCommitMetadata: repository ? commitMetadataReader(repository) : undefined,
     sources: local ? resolveSourceLocator('local', { remotes: [], env: {} }) : undefined, footer: !input.flag('no-footer') }, local);
   return { ...server, label: `${basename(root)} (live from ${store.path ?? input.text('store')})` };

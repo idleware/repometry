@@ -13,8 +13,9 @@ import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js'
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
 import { prepareMetabranch } from '../compose/prepare-metabranch.js';
 import { reviewExitCode, reviewPull } from '../compose/review.js';
-import { builtInPlugins } from '../compose/plugin-list.js';
+import { builtInPlugins, describePlugin } from '../compose/plugin-list.js';
 import { isRecord } from '../core/engine/plugin.js';
+import type { Plugin } from '../core/engine/plugin.js';
 import { validSubjectId } from '../core/model/report.js';
 import type { Report } from '../core/model/report.js';
 import { sourceExclusionMatcher } from '../core/profile/exclusions.js';
@@ -120,10 +121,14 @@ const commands: Readonly<Record<string, Command>> = {
       print({ schema: 'urn:repometry:schema:prepare-result:1', subject: report.subject, worktree, files });
     },
   },
-  plugins: { description: 'List plugins and supported formats.', run() {
-    print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: builtInPlugins, importers: importerIds,
-      reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
-  } },
+  plugins: { description: 'List effective plugins and supported formats.', options: configOptions,
+    async run(input) {
+      const { root } = await context(input);
+      const config = await readConfig(root, input);
+      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: [...builtInPlugins, ...config.plugins.map(describePlugin)],
+        importers: importerIds, reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
+    },
+  },
   cache: {
     description: 'Find or clear the system cache.', parameters: 'path|clear', min: 1, max: 1,
     options: { sources: flag('Clear only source blobs.') },
@@ -166,14 +171,14 @@ async function analyze(input: Invocation): Promise<number> {
   const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
-  const worker = input.text('worker');
+  const executor = analysisExecutor(input, config.plugins);
   const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
     : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-      lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore,
+      lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins: config.plugins,
       findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined },
-    worker === undefined ? undefined : remoteExecutor(worker, workerToken(), defaultLanguages.isSource));
+    executor);
   if (github) await writeGitHubResult(report);
   const requested = input.many('report');
   const reports = await outputReports(root, store, requested.length ? requested : config.reports, input, config);
@@ -193,9 +198,21 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (config.imports.length) process.stderr.write('Imports from the config describe one checkout and are skipped for a range.\n');
   const { base, head, commits } = await firstParentRange(root, range.base, range.head);
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
-  const worker = input.text('worker');
-  const executor = worker === undefined ? undefined : remoteExecutor(worker, workerToken(), defaultLanguages.isSource);
+  const executor = analysisExecutor(input, config.plugins);
   const exclude = [...config.exclude, ...input.many('exclude')];
+  const inspectCommit = (id: string) => inspect({ directory, output, source: { revision: id }, exclude,
+    ignore: config.ignore, plugins: config.plugins }, executor);
+  const skip = input.flag('skip-saved') ? (id: string) => isSaved(output, id) : undefined;
+  const { interrupted, ...results } = await analyzeCommits(commits, inspectCommit, skip);
+  const requested = input.many('report');
+  const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
+  print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
+    ...results, store: output, reports });
+  return interrupted ? 130 : results.failed.length || results.partial.length ? 2 : 0;
+}
+
+async function analyzeCommits(commits: readonly string[], inspectCommit: (id: string) => Promise<Report>,
+  skip?: (id: string) => Promise<boolean>) {
   const analyzed: string[] = [], partial: string[] = [], skipped: string[] = [];
   const failed: { commit: string; error: string }[] = [];
   let interrupted = false;
@@ -207,13 +224,13 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   try {
     for (const [index, id] of commits.entries()) {
       if (interrupted) break;
-      if (input.flag('skip-saved') && await isSaved(output, id)) {
+      if (skip !== undefined && await skip(id)) {
         skipped.push(id);
         progress(index, id, 'skipped');
         continue;
       }
       try {
-        const report = await inspect({ directory, output, source: { revision: id }, exclude, ignore: config.ignore }, executor);
+        const report = await inspectCommit(id);
         analyzed.push(id);
         if (report.status === 'partial') partial.push(id);
         progress(index, id, report.status === 'partial' ? 'partial' : 'analyzed');
@@ -227,11 +244,14 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   } finally {
     process.removeListener('SIGINT', stop);
   }
-  const requested = input.many('report');
-  const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
-  print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
-    analyzed, partial, skipped, failed, store: output, reports });
-  return interrupted ? 130 : failed.length || partial.length ? 2 : 0;
+  return { analyzed, partial, skipped, failed, interrupted };
+}
+
+function analysisExecutor(input: Invocation, plugins: readonly Plugin[]) {
+  const worker = input.text('worker');
+  if (worker === undefined) return undefined;
+  if (plugins.length) throw new Error('Configured process plugins require local analysis. Use --no-config with --worker.');
+  return remoteExecutor(worker, workerToken(), defaultLanguages.isSource);
 }
 
 async function isSaved(store: string, id: string): Promise<boolean> {
@@ -274,7 +294,7 @@ async function diffCoverage(input: Invocation): Promise<number> {
   const imports = input.many('import');
   const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   if (!lcov || (imports.length && findings.length)) throw new Error('diff-coverage requires --import lcov=PATH');
-  const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov,
+  const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, plugins: config.plugins,
     exclude: [...config.exclude, ...input.many('exclude')], minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage') });
   if (useGitHub(input)) await writeGitHubDiffCoverage(report);
   print(report);
@@ -302,7 +322,7 @@ async function review(input: Invocation): Promise<number> {
     },
   } : store.reader;
   const number = count(input.text('pull'), '--pull', 1);
-  const report = await reviewPull({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, exclude, number,
+  const report = await reviewPull({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, exclude, number, plugins: config.plugins,
     minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage'),
     minimumLines: count(input.text('min-lines') ?? config.minLines, '--min-lines'),
     maxCoverageDrop: percent(input.text('max-coverage-drop') ?? config.maxCoverageDrop, '--max-coverage-drop'),

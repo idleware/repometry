@@ -3,7 +3,8 @@
 import { element } from './viewer-dom.js';
 import { bridgeStates, hitLabel } from './viewer-line-coverage.js';
 import type { LineReading, LineState, SourceLayer } from './viewer-line-coverage.js';
-import { codeless, highlighter, runNodes, tokenizer } from './viewer-tokenizer.js';
+import { languageIdOf } from './viewer-languages.js';
+import { highlighter, runNodes, tokenizer } from './viewer-tokenizer.js';
 import type { Run } from './viewer-tokenizer.js';
 
 export interface SourceFunction {
@@ -50,10 +51,10 @@ function complexityBadge(start: SourceFunction): HTMLElement {
  * called; a miss's red says it. Nothing runs on a blank or comment line: where a tool counts one anyway, or it sits
  * inside a run of one state, it keeps the strip's tint and says nothing.
  */
-function coverageCell(own: LineReading | undefined, bridged: LineState | undefined, runs: readonly Run[]): HTMLElement[] {
+function coverageCell(own: LineReading | undefined, bridged: LineState | undefined): HTMLElement[] {
   const state = own?.state ?? bridged;
   if (!state) return [];
-  if (!own || codeless(runs)) {
+  if (!own) {
     const silent = element('span', `src-cov src-cov-mark-${state}`);
     silent.setAttribute('aria-hidden', 'true');
     return [silent];
@@ -75,10 +76,10 @@ function noteBox(note: SourceNote): HTMLElement {
 export function renderSource(container: HTMLElement, text: string, options: SourceOptions): (line: number) => void {
   const lines = sourceLines(text);
   // Tokenized up front, in order, since a comment's state carries from line to line.
-  const tokenize = tokenizer(options.path);
+  const tokenize = tokenizer(languageIdOf(options.path));
   const tokens = lines.map(line => tokenize(line));
   const states = new Map([...options.coverage ?? []].map(([line, reading]) => [line, reading.state]));
-  const bridged = options.coverage ? bridgeStates(states, tokens.map(codeless)) : new Map<number, LineState>();
+  const bridged = bridgeStates(states);
   const starts = new Map(options.functions.map(entry => [entry.line, entry]));
   const notes = new Map<number, SourceNote[]>();
   for (const note of options.notes) notes.set(note.line, [...notes.get(note.line) ?? [], note]);
@@ -103,7 +104,7 @@ export function renderSource(container: HTMLElement, text: string, options: Sour
     const mark = element('span', 'src-mark');
     const start = starts.get(number);
     if (start) mark.append(complexityBadge(start));
-    mark.append(...coverageCell(options.coverage?.get(number), bridged.get(number), runs));
+    mark.append(...coverageCell(options.coverage?.get(number), bridged.get(number)));
     const anchor = element('a', 'src-number', String(number));
     anchor.href = `#L${number}`;
     anchor.addEventListener('click', event => {

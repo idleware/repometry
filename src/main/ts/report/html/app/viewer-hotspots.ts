@@ -3,7 +3,7 @@ import type { InspectionDetails } from '../../json/wire/inspection-details-model
 import { renderSunburst } from './viewer-code-map.js';
 import { choice, navigationButtons } from './viewer-controls.js';
 import { basename, collator, count, element, inside, link, parentPath } from './viewer-dom.js';
-import { fileHref, hotspotScore } from './viewer-file-figures.js';
+import { fileHref, hotspotScore, scorePeak } from './viewer-file-figures.js';
 import type { BuiltinHotspot, HotspotMetric, Metrics, Navigation, Preferences } from './viewer-inspection.js';
 import { localValue, measured } from './viewer-inspection.js';
 import { breadcrumbs, liftToTitle } from './viewer-layout.js';
@@ -65,10 +65,11 @@ function rankRow(entry: Metrics, metric: HotspotMetric, navigation: Navigation, 
   const row = element('li');
   const title = link(fileHref(navigation, entry.path), basename(entry.path), 'fx-rank-link');
   title.append(element('span', 'fx-rank-path', parentPath(entry.path) || '/'));
-  const value = hotspotScore(entry, metric) ?? 0;
+  const value = hotspotScore(entry, metric);
   const mark = element('span', 'fx-rank-mark');
-  mark.style.setProperty('--length', `${value / peak * 100}%`);
-  mark.dataset.band = String(band(entry, metric, value, peak, limits));
+  // An unmeasured file has no bar and no band: a zero-length bar would read as a measured zero.
+  mark.style.setProperty('--length', `${(value ?? 0) / peak * 100}%`);
+  if (value !== null) mark.dataset.band = String(band(entry, metric, value, peak, limits));
   mark.setAttribute('aria-hidden', 'true');
   row.append(title, mark, element('strong', 'fx-rank-score', count(value)));
   return row;
@@ -92,7 +93,7 @@ function rankFiles(entries: readonly Metrics[], metric: HotspotMetric, navigatio
   const pages = navigationButtons('Ranking pages', () => { page--; render(); }, () => { page++; render(); });
   pages.section.hidden = entries.length <= maxRanked;
   // The longest bar is the highest value, whichever end of the scale the list starts from.
-  const peak = entries.reduce((max, entry) => Math.max(max, hotspotScore(entry, metric) ?? 0), 0) || 1;
+  const peak = scorePeak(entries.map(entry => hotspotScore(entry, metric)));
   let page = 0;
   function render(): void {
     const offset = page * maxRanked;

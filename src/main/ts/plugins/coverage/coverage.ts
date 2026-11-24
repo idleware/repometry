@@ -14,6 +14,7 @@ export interface CoverageInput {
   readonly root: string;
   readonly sourceLines: ReadonlyMap<string, number>;
   readonly codeLines?: ReadonlyMap<string, ReadonlySet<number>>;
+  readonly unclassified?: ReadonlySet<string>;
   readonly functionBodies?: ReadonlyMap<string, readonly SourceLineRange[]>;
   readonly excludes?: (path: string) => boolean;
 }
@@ -29,6 +30,7 @@ export const lcovInput: DataContract<CoverageInput> = {
   accepts: (value): value is CoverageInput => isRecord(value) && typeof value.text === 'string'
     && typeof value.root === 'string' && value.sourceLines instanceof Map
     && (value.codeLines === undefined || value.codeLines instanceof Map)
+    && (value.unclassified === undefined || value.unclassified instanceof Set)
     && (value.functionBodies === undefined || value.functionBodies instanceof Map)
     && (value.excludes === undefined || typeof value.excludes === 'function'),
 };
@@ -80,7 +82,7 @@ export const coverage: Plugin = {
   }],
 };
 
-export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: CoverageInput) {
+export function mapCoverage({ text, root, sourceLines, codeLines, unclassified, excludes }: CoverageInput) {
   const files = new Map<string, Map<number, number>>();
   // Branches by line, block and branch. Functions by name and its occurrence in the record: tools such as c8 repeat a
   // name for different functions and list FNDA in FN order.
@@ -107,20 +109,14 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
       ignored = excludes?.(active) ?? false;
       if (ignored) continue;
       if (!sourceLines.has(active)) gaps.set(active, 'LCOV source is outside the inspected file set');
-      else if (codeLines && !codeLines.has(active)) gaps.set(active, 'LCOV source has no classified code lines');
+      else if (codeLines && !codeLines.has(active) && !unclassified?.has(active)) {
+        gaps.set(active, 'LCOV source has no classified code lines');
+      }
       else fileRecords(files, active);
     } else if (line.startsWith('DA:')) {
       if (active === undefined) throw new Error(`LCOV line data outside a source record at line ${index + 1}`);
-      if (ignored) continue;
-      const match = /^DA:([1-9]\d*),(\d+)(?:,[^,]+)?$/.exec(line);
-      const number = Number(match?.[1]);
-      const hits = Number(match?.[2]);
-      if (!Number.isSafeInteger(number) || !Number.isSafeInteger(hits)) throw new Error(`Invalid LCOV line data at line ${index + 1}`);
-      const file = files.get(active);
-      const limit = sourceLines.get(active);
-      if (limit !== undefined && number > limit) gaps.set(active, 'LCOV refers to a line outside the inspected source');
-      else if (file && (!codeLines || codeLines.get(active)?.has(number))) addHits(file, number, hits, index + 1);
-    } else if (line.startsWith('BRDA:') || line.startsWith('FN:') || line.startsWith('FNDA:')) {
+      if (!ignored) readLine(active, line, index + 1);
+    } else if (/^(?:BRDA|FN|FNDA):/.test(line)) {
       if (active === undefined) throw new Error(`LCOV data outside a source record at line ${index + 1}`);
       if (ignored || !files.has(active)) continue;
       readDetails(active, line, index + 1);
@@ -131,19 +127,35 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
   }
   if (active !== undefined) throw new Error('Unterminated LCOV source record');
   if (!sawSource && text.trim() !== '') throw new Error('LCOV contains no source records');
-  // The declaration map can now hold the hit totals. Keep the declared lines for the gutter.
-  const functionCalls = new Map<string, readonly FunctionCallCount[]>();
-  for (const [path, declarations] of functions) {
-    const hits = called.get(path);
-    const counts: FunctionCallCount[] = [];
-    for (const [key, first] of declarations) {
-      const count = hits?.get(key);
-      declarations.set(key, count ?? 0);
-      if (count !== undefined && first <= sourceLines.get(path)!) counts.push([first, count]);
+  return { files, branches, functions, functionCalls: countFunctionCalls(), gaps };
+
+  function countFunctionCalls(): Map<string, readonly FunctionCallCount[]> {
+    // The declaration map can now hold hit totals. Keep the declared lines for the gutter.
+    const functionCalls = new Map<string, readonly FunctionCallCount[]>();
+    for (const [path, declarations] of functions) {
+      const hits = called.get(path);
+      const counts: FunctionCallCount[] = [];
+      for (const [key, first] of declarations) {
+        const count = hits?.get(key);
+        declarations.set(key, count ?? 0);
+        if (count !== undefined && first <= sourceLines.get(path)!) counts.push([first, count]);
+      }
+      if (counts.length) functionCalls.set(path, counts.sort(([left], [right]) => left - right));
     }
-    if (counts.length) functionCalls.set(path, counts.sort(([left], [right]) => left - right));
+    return functionCalls;
   }
-  return { files, branches, functions, functionCalls, gaps };
+
+  function readLine(path: string, line: string, record: number): void {
+    const match = /^DA:([1-9]\d*),(\d+)(?:,[^,]+)?$/.exec(line);
+    const number = Number(match?.[1]);
+    const hits = Number(match?.[2]);
+    if (!Number.isSafeInteger(number) || !Number.isSafeInteger(hits)) throw new Error(`Invalid LCOV line data at line ${record}`);
+    const file = files.get(path);
+    const limit = sourceLines.get(path);
+    const classified = codeLines?.get(path);
+    if (limit !== undefined && number > limit) gaps.set(path, 'LCOV refers to a line outside the inspected source');
+    else if (file && (!classified || classified.has(number))) addHits(file, number, hits, record);
+  }
 
   function readDetails(path: string, line: string, record: number): void {
     const branch = /^BRDA:([1-9]\d*),([^,]+),([^,]+),(\d+|-)$/.exec(line);
@@ -172,7 +184,6 @@ function fileRecords<Key>(files: Map<string, Map<Key, number>>, path: string): M
   const records = new Map<Key, number>();
   files.set(path, records);
   return records;
-
 }
 
 function addHits<Key>(hits: Map<Key, number>, key: Key, count: number, record: number): void {
@@ -187,7 +198,9 @@ function importCoverage(input: CoverageInput): CoverageResult {
   const lines = hitRows(files, gaps, lineMetrics, (path, hits) => {
     const hitLines: number[] = [], missedLines: number[] = [];
     for (const [line, hit] of hits) (hit ? hitLines : missedLines).push(line);
-    const partialHits = partiallyCoveredLines(branches.get(path), input.sourceLines.get(path)!, input.codeLines?.get(path));
+    const lastLine = input.sourceLines.get(path)!;
+    const classified = input.codeLines?.get(path);
+    const partialHits = partiallyCoveredLines(branches.get(path), lastLine, classified);
     const partial = mergedRanges([...partialHits.keys()]);
     const calls = functionCalls.get(path);
     const bodies = input.functionBodies?.get(path);

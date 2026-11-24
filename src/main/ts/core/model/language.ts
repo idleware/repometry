@@ -1,3 +1,4 @@
+import type { StructureMeasure } from './code-structure.js';
 import { isRecord } from './plugin-data.js';
 
 export interface LanguageDisplay {
@@ -14,6 +15,7 @@ export interface LanguageLookup {
 export interface ProvidedLanguage extends LanguageDisplay {
   readonly extensions?: readonly string[];
   readonly globs?: readonly string[];
+  readonly measures?: readonly StructureMeasure[];
 }
 
 export function isLanguageDisplay(value: unknown): value is LanguageDisplay {

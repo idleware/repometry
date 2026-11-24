@@ -86,21 +86,7 @@ function scan(path: string, text: string): Finding[] {
   for (const instruction of instructions) {
     const { keyword } = instruction;
     if (keyword === 'FROM') {
-      const [reference = '', as, name] = words(instruction.args, escape).filter(item => !item.startsWith('--'));
-      const image = expand(reference, globals);
-      const parent = names.get((image ?? reference).toLowerCase());
-      const external = parent === undefined && image !== undefined && image.toLowerCase() !== 'scratch';
-      if (external) {
-        const pinning = pinningOf(image);
-        if (pinning === 'none') {
-          report('unpinned-base-image', instruction,
-            `Base image ${image} has no tag or digest, so every build pulls whatever latest points to; pin a version tag or a digest.`);
-        } else if (pinning === 'latest') {
-          report('unpinned-base-image', instruction, `Base image ${image} uses the mutable latest tag; pin a version tag or a digest.`);
-        }
-      }
-      stages.push({ from: instruction, image: parent === undefined ? image : undefined, parent, users: [] });
-      if (as?.toUpperCase() === 'AS' && name) names.set(name.toLowerCase(), stages.length - 1);
+      startStage(instruction);
     } else if (keyword === 'USER') {
       stages.at(-1)?.users.push(instruction);
     } else if (keyword === 'ENV' || keyword === 'ARG') {
@@ -117,38 +103,62 @@ function scan(path: string, text: string): Finding[] {
           'ADD downloads a remote URL without checksum verification; fetch it with curl and verify a checksum, or COPY a local file.');
       }
     } else if (keyword === 'RUN') {
-      const script = runScript(instruction);
-      const commands = pipelines(script);
-      if (substitutedDownload.test(script) || commands.some(pipesDownloadToShell)) {
-        report('pipe-to-shell', instruction,
-          'RUN pipes a curl or wget download straight into a shell; download to a file and verify its checksum before running it.');
-      }
-      if (commands.flat().some(upgradesAllPackages)) {
-        report('apt-unpinned-upgrade', instruction,
-          'RUN upgrades every installed package with apt, which makes the build unreproducible; use a newer base image or pin packages.');
-      }
-      if (commands.flat().some(item => command(item).sudo)) {
-        report('sudo-usage', instruction,
-          'RUN uses sudo, which behaves unpredictably in containers; run the step before switching USER or use gosu instead.');
-      }
+      checkRun(instruction);
     }
   }
 
-  const final = stages.length - 1;
-  if (final >= 0) {
-    const { user, image } = effectiveUser(stages, final);
-    if (user !== undefined) {
-      const account = (words(user.args, escape)[0] ?? '').split(':')[0];
-      if (account === 'root' || account === '0') {
-        report('runs-as-root', user, 'The final stage runs as root because its last USER is root; switch to an unprivileged user.');
-      }
-    } else if (image === undefined || !/nonroot/i.test(image)) {
-      report('runs-as-root', stages[final]!.from,
-        'The final stage never sets USER, so the container runs as root; add a USER with an unprivileged account.');
-    }
-  }
+  checkFinalStage();
   return findings.sort((left, right) => left.line! - right.line! || left.endLine! - right.endLine!
     || left.rule.localeCompare(right.rule));
+
+  function startStage(instruction: Instruction): void {
+    const [reference = '', as, name] = words(instruction.args, escape).filter(item => !item.startsWith('--'));
+    const image = expand(reference, globals);
+    const parent = names.get((image ?? reference).toLowerCase());
+    if (parent === undefined && image !== undefined && image.toLowerCase() !== 'scratch') {
+      const pinning = pinningOf(image);
+      if (pinning === 'none') {
+        report('unpinned-base-image', instruction,
+          `Base image ${image} has no tag or digest, so every build pulls whatever latest points to; pin a version tag or a digest.`);
+      } else if (pinning === 'latest') {
+        report('unpinned-base-image', instruction, `Base image ${image} uses the mutable latest tag; pin a version tag or a digest.`);
+      }
+    }
+    stages.push({ from: instruction, image: parent === undefined ? image : undefined, parent, users: [] });
+    if (as?.toUpperCase() === 'AS' && name) names.set(name.toLowerCase(), stages.length - 1);
+  }
+
+  function checkRun(instruction: Instruction): void {
+    const script = runScript(instruction);
+    const commands = pipelines(script);
+    const steps = commands.flat();
+    if (substitutedDownload.test(script) || commands.some(pipesDownloadToShell)) {
+      report('pipe-to-shell', instruction,
+        'RUN pipes a curl or wget download straight into a shell; download to a file and verify its checksum before running it.');
+    }
+    if (steps.some(upgradesAllPackages)) {
+      report('apt-unpinned-upgrade', instruction,
+        'RUN upgrades every installed package with apt, which makes the build unreproducible; use a newer base image or pin packages.');
+    }
+    if (steps.some(item => command(item).sudo)) {
+      report('sudo-usage', instruction,
+        'RUN uses sudo, which behaves unpredictably in containers; run the step before switching USER or use gosu instead.');
+    }
+  }
+
+  function checkFinalStage(): void {
+    const final = stages.at(-1);
+    if (final === undefined) return;
+    const { user, image } = effectiveUser(stages, stages.length - 1);
+    if (user === undefined) {
+      if (image === undefined || !/nonroot/i.test(image)) report('runs-as-root', final.from,
+        'The final stage never sets USER, so the container runs as root; add a USER with an unprivileged account.');
+      return;
+    }
+    const account = (words(user.args, escape)[0] ?? '').split(':')[0];
+    if (account === 'root' || account === '0') report('runs-as-root', user,
+      'The final stage runs as root because its last USER is root; switch to an unprivileged user.');
+  }
 }
 
 function parseDockerfile(text: string): { readonly escape: string; readonly instructions: readonly Instruction[] } {

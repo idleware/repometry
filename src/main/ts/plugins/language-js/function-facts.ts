@@ -68,12 +68,11 @@ function walk(node: Node, visit: (node: Node) => void): void {
   for (const child of children(node)) walk(child, visit);
 }
 
-export function functionName(node: BabelFunction): string {
+export function functionName(node: BabelFunction): string | undefined {
   if ('id' in node && node.id && isIdentifier(node.id)) return node.id.name;
   if ('key' in node) {
     if (isIdentifier(node.key)) return node.key.name;
     if (isStringLiteral(node.key)) return node.key.value;
     if (node.key.type === 'PrivateName') return `#${node.key.id.name}`;
   }
-  return '(anonymous)';
 }

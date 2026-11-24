@@ -4,11 +4,15 @@ import { pickerStatus } from '../../main/ts/report/html/app/viewer-commit-picker
 import { chosenLabel } from '../../main/ts/report/html/app/viewer-controls.js';
 import { ignoreRecord, literalPath } from '../../main/ts/report/html/app/viewer-issue-group.js';
 import { toggleLanguage } from '../../main/ts/report/html/app/viewer-language-bar.js';
-import { coverageGrade } from '../../main/ts/report/html/app/viewer-metrics.js';
+import { coverageGrade, gradeScope } from '../../main/ts/report/html/app/viewer-metrics.js';
 import { tableSummary } from '../../main/ts/report/html/app/viewer-profile-table.js';
 import { href, readRoute } from '../../main/ts/report/html/app/viewer-route.js';
 import { excerptRange } from '../../main/ts/report/html/app/viewer-source-view.js';
 import { spokenList } from '../../main/ts/report/html/app/viewer-table-cells.js';
+import { hotspotScore, scorePeak } from '../../main/ts/report/html/app/viewer-file-figures.js';
+import { languageShares } from '../../main/ts/report/html/app/viewer-languages.js';
+import { partialNote } from '../../main/ts/report/html/app/viewer-totals.js';
+import type { Metrics } from '../../main/ts/report/html/app/viewer-inspection.js';
 
 const sha = 'a'.repeat(40);
 const older = 'b'.repeat(40);
@@ -72,4 +76,42 @@ test('an excerpt shows a line of context and the head of the range, and counts t
   assert.deepEqual(excerptRange(100, { line: 10, endLine: 40 }), { from: 9, to: 14, end: 40 });
   assert.deepEqual(excerptRange(100, { line: 1 }), { from: 1, to: 1, end: 1 });
   assert.deepEqual(excerptRange(12, { line: 10, endLine: 40 }), { from: 9, to: 12, end: 12 });
+});
+
+const measured = (path: string, quality: Record<string, unknown> | undefined, complexity: unknown = null) =>
+  ({ path, lines: 10, functions: 1, complexity, lineCoverage: null, diagnosticCount: 0, ...quality ? { quality } : {} }) as unknown as Metrics;
+
+test('an unknown score stays unknown; a file measured without functions scores zero', () => {
+  assert.equal(hotspotScore(measured('a.go', { codeLines: 9 }), 'cognitive'), null);
+  assert.equal(hotspotScore(measured('a.ts', { cognitiveComplexity: 0 }), 'cognitive'), 0);
+  assert.equal(hotspotScore(measured('b.py', {}, { sum: 0, maximum: null, measuredFunctions: 0 }), 'complexity'), 0);
+  assert.equal(hotspotScore(measured('c.py', {}), 'complexity'), null);
+  assert.equal(scorePeak([null, 3, null, 7]), 7);
+  assert.equal(scorePeak([null, 0]), 1);
+});
+
+test('a total says it is partial only where some files with code measures lack the counter', () => {
+  const cognitive = (entry: Metrics) => entry.quality?.cognitiveComplexity !== undefined;
+  const ts = measured('a.ts', { codeLines: 9, cognitiveComplexity: 4 });
+  const go = measured('b.go', { codeLines: 9 });
+  // A workflow only a scanner read has no code measures and is not expected to carry any.
+  const workflow = measured('.github/ci.yaml', undefined);
+  assert.equal(partialNote([ts, go, workflow], cognitive), 'Measured in 1 of 2 files');
+  assert.equal(partialNote([ts, workflow], cognitive), undefined);
+  assert.equal(partialNote([go], cognitive), undefined);
+});
+
+test('the language bar weighs code lines only where every file has them', () => {
+  const file = (path: string, codeLines?: number) => ({ path, lines: 20, ...codeLines === undefined ? {} : { quality: { codeLines } } });
+  assert.equal(languageShares([file('a.ts', 10), file('b.ts', 12)]).measure, 'code-lines');
+  assert.equal(languageShares([file('a.ts', 10), file('b.go')]).measure, 'lines');
+});
+
+test('a grade over only some files says how many; a grade over all of them says nothing more', () => {
+  const quality = (gradeCoverage?: { measuredFiles: number; totalFiles: number }) =>
+    ({ maintainability: { smells: 0, effortMinutes: 0, debtRatio: .02, grade: 'A', ...gradeCoverage ? { gradeCoverage } : {} } }) as never;
+  assert.equal(gradeScope(quality({ measuredFiles: 1, totalFiles: 2 })), 'Graded on 1 of 2 files');
+  assert.equal(gradeScope(quality({ measuredFiles: 2, totalFiles: 2 })), undefined);
+  assert.equal(gradeScope(quality()), undefined);
+  assert.equal(gradeScope(undefined), undefined);
 });

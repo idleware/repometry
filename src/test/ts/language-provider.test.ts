@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
 import { processPlugin } from '../../main/ts/api/process/plugin.js';
-import { inspect } from '../../main/ts/compose/inspect.js';
+import { analyzeSnapshot, inspect } from '../../main/ts/compose/inspect.js';
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
@@ -14,11 +14,13 @@ import type { Plugin } from '../../main/ts/core/engine/plugin.js';
 import { codeStructure, codeStructures } from '../../main/ts/core/model/code-structure.js';
 import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
-import { sourceFile, sourceFiles } from '../../main/ts/core/model/snapshot.js';
+import { sourceFile, sourceFiles, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
 import type { ToolRunner } from '../../main/ts/core/ports/tool-runner.js';
 import { compareInspections } from '../../main/ts/core/usecases/compare.js';
 import { fileQuality, maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
 import { structure } from '../../main/ts/plugins/structure/structure.js';
+import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
+import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';
 
@@ -146,6 +148,11 @@ async function inspectFixtureLanguage(t: TestContext, docker?: ToolRunner) {
   assert.deepEqual(metrics.languages?.find(language => language.id === 'toy'),
     { id: 'toy', label: 'Toy Language', color: '#123456', analysed: true });
   assert.equal(metrics.files.find(file => file.path === paths[0])?.provider, 'batch-fixture/read');
+  const profile = inspectionDetails(readReport(JSON.parse(JSON.stringify(report)))).profile;
+  const recorded = profile?.languages;
+  assert.deepEqual(recorded?.find(language => language.id === 'toy'), {
+    plugin: 'batch-fixture', id: 'toy', label: 'Toy Language', extensions: ['.fixture'], globs: [],
+  });
   const projected = fileMetrics(report, { id: () => 'unknown',
     catalog: [{ id: 'toy', label: 'Renamed Toy Language', color: '#ffffff' }] });
   const index = projected.files.find(file => file.path === paths[0])?.language;
@@ -155,3 +162,50 @@ async function inspectFixtureLanguage(t: TestContext, docker?: ToolRunner) {
     { operation: 'batch-fixture/read', path: paths[0], state: 'partial' as const, message: 'Parse issue' }] };
   assert.equal(compareInspections(report, failed).metrics.physicalLines.current.status, 'partial');
 }
+
+test('a partial language provider omits unsupported measures and keeps LCOV data', async () => {
+  const path = 'partial.fixture';
+  const facts = { path, lines: 2, functions: 1, cyclomaticFunctions: [{ line: 1, value: 2 }] };
+  assert.ok(codeStructure.accepts(facts));
+  const languages = [{ id: 'partial', label: 'Partial', extensions: ['.fixture'],
+    measures: ['functions', 'cyclomaticComplexity'] as const }];
+  const provider: Plugin = {
+    id: 'partial-provider', version: '1.0.0', api: pluginApi, kinds: ['language'], providesLanguages: languages,
+    produces: [{ contract: codeStructure.id, persistence: 'transient' }],
+    operations: [{ id: 'read', role: 'provider', inputs: { source: sourceFile }, output: codeStructure,
+      execute: () => ({ ...facts, classes: 0, commentLines: 0, cognitiveComplexity: 0 }) }],
+  };
+  const report = readReport(JSON.parse(JSON.stringify(await analyzeSnapshot({
+    snapshot: workingSnapshot([
+      { path, bytes: Buffer.from('choose\nreturn\n') },
+      { path: 'native.js', bytes: Buffer.from('export function native() { return 1; }\n[1].map(x => x + 1);\n') },
+    ]),
+    excludedOutput: null, coverage: { text: `SF:${path}\nDA:1,0\nend_of_record`, sourceRoot: '/repo' },
+  }, [provider]))));
+  assert.equal(report.status, 'complete');
+  const measured = report.measurements.filter(row => row.path === path).map(row => row.definition);
+  for (const id of [definitions.classes, definitions.comments, definitions.cognitiveComplexity, definitions.duplicatedLines]) {
+    assert.ok(!measured.includes(id), id);
+  }
+  const details = inspectionDetails(report);
+  assert.deepEqual(details.lineCoverage?.[path]?.uncovered, [[1, 1]]);
+  assert.equal(details.functions.find(item => item.path === path)?.name, '(anonymous)');
+  assert.equal(details.functions.find(item => item.path === 'native.js' && item.line === 2)?.name, '(anonymous)');
+  const anonymous = report.measurements.find(row => row.path === 'native.js' && row.line === 2 && row.definition === definitions.complexity);
+  assert.ok(anonymous);
+  assert.ok(!Object.hasOwn(anonymous, 'name'));
+  const summary = commitSummary(report);
+  const cognitive = summary.metrics?.findIndex(metric => metric.id === definitions.cognitiveComplexity);
+  assert.ok(cognitive !== undefined && cognitive >= 0);
+  assert.equal(summary.values?.[cognitive], null);
+  assert.equal(summary.quality?.cognitiveComplexity, null);
+  assert.equal(summary.quality?.maintainability?.grade, 'A');
+  assert.deepEqual(summary.quality?.maintainability?.gradeCoverage, { measuredFiles: 1, totalFiles: 2 });
+  const file = details.metrics.files.find(item => item.path === path);
+  assert.equal(file?.quality?.cognitiveComplexity, undefined);
+  const detailCognitive = details.metrics.catalog?.findIndex(metric => metric.id === definitions.cognitiveComplexity);
+  assert.ok(detailCognitive !== undefined && detailCognitive >= 0);
+  assert.equal(file?.values?.[detailCognitive], null);
+  assert.equal(details.metrics.directories.find(item => item.path === '')?.quality?.cognitiveComplexity, undefined);
+  assert.ok(report.ruleSkips?.some(skip => skip.path === path && skip.plugin === 'maintainability' && skip.reason === 'unmeasured'));
+});

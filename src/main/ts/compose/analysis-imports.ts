@@ -24,8 +24,9 @@ export async function inspectDuplication(files: FileAnalysis, results: AnalysisR
 export async function importAnalysisCoverage({ coverage: input, excludedPaths = [], snapshot }: AnalysisInput,
   sources: AnalysisSources, files: FileAnalysis, results: AnalysisResults, cache?: OperationCacheOptions): Promise<void> {
   if (input === undefined) return;
+  const unclassified = new Set([...results.unmeasured].filter(([, missing]) => missing.includes('codeLines')).map(([path]) => path));
   const value = { text: input.text, root: input.sourceRoot, sourceLines: sourceLineCounts(sources.sourceFiles),
-    codeLines: new Map(files.cloneSources.map(({ path, codeLines }) => [path, new Set(codeLines)])), functionBodies: files.functionBodies,
+    codeLines: files.codeLines, unclassified, functionBodies: files.functionBodies,
     excludes: sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded) };
   const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]), cache);
   for (const task of coveragePlan) {

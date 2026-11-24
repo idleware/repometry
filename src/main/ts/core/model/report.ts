@@ -28,6 +28,7 @@ export interface Report {
   readonly measurements: readonly Measurement[];
   readonly diagnostics: readonly Diagnostic[];
   readonly findings?: readonly Finding[];
+  readonly ruleSkips?: readonly { readonly path: string; readonly plugin: string; readonly rules: readonly string[]; readonly reason: 'unmeasured' }[];
   readonly ignoredFindings?: readonly IgnoredFinding[];
   readonly pluginData?: PluginData;
 }

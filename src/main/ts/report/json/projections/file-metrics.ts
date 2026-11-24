@@ -51,7 +51,8 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   }
 
   const duplicatedLines = collectMeasurements(report.measurements, file, pluginMetrics !== undefined);
-  addFileQuality(byPath, duplicatedLines, report.findings);
+  const skipped = new Set(report.ruleSkips?.map(({ path }) => path));
+  addFileQuality(byPath, duplicatedLines, report.findings, skipped);
 
   let unassignedDiagnostics = 0;
   for (const diagnostic of report.diagnostics) {
@@ -72,7 +73,7 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
       const values = pluginMetrics.values(entry.path);
       if (Object.keys(values).length) entry.values = values;
     }
-    if (entry.functions === 0 && !entry.complexity) {
+    if (entry.functions === 0 && !entry.complexity && pluginMetrics?.isAvailable(definitions.complexity, entry.path) !== false) {
       entry.complexity = { sum: 0, maximum: null, measuredFunctions: 0 };
     }
     let path = entry.path;
@@ -90,6 +91,7 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
     for (const entry of directories.values()) {
       const values = pluginMetrics.values(entry.path, true);
       if (Object.keys(values).length) entry.values = values;
+      applyDirectoryAvailability(entry, pluginMetrics.isAvailable);
     }
   }
   const complexity = files.filter(entry => entry.complexity?.maximum != null)
@@ -141,14 +143,24 @@ function collectMeasurements(rows: readonly Measurement[], file: (path: string) 
   return duplicated;
 }
 
-function addFileQuality(byPath: ReadonlyMap<string, Metrics>, duplicated: ReadonlyMap<string, number>, findings: Report['findings']): void {
+function applyDirectoryAvailability(entry: DirectoryMetrics, available: NonNullable<ReturnType<typeof metricProjection>>['isAvailable']): void {
+  const known = (id: string) => available(id, entry.path, true);
+  if (!known(definitions.functions)) entry.functions = null;
+  if (!known(definitions.complexity)) entry.complexity = null;
+  if (!entry.quality) return;
+  for (const [id, field] of qualityFields) if (!known(id)) delete entry.quality[field];
+  if (!known(definitions.duplicatedLines) || !known(definitions.codeLines)) delete entry.quality.duplication;
+}
+
+function addFileQuality(byPath: ReadonlyMap<string, Metrics>, duplicated: ReadonlyMap<string, number>,
+  findings: Report['findings'], skipped: ReadonlySet<string>): void {
   for (const [path, duplicatedLines] of duplicated) {
     const entry = byPath.get(path);
     const codeLines = entry?.quality?.codeLines;
     if (!entry || codeLines === undefined || duplicatedLines > codeLines) continue;
     const result = quality(entry);
     result.duplication = { duplicatedLines, codeLines };
-    if (findings !== undefined) result.maintainability = { smells: 0, effortMinutes: 0 };
+    if (findings !== undefined && !skipped.has(path)) result.maintainability = { smells: 0, effortMinutes: 0 };
   }
   for (const finding of findings ?? []) {
     if (!finding.path || (finding.category !== 'structure' && finding.category !== 'duplication')) continue;

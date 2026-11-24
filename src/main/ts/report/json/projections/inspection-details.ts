@@ -1,15 +1,19 @@
+import { javascriptType, typescriptType } from '../../../core/model/file-types.js';
+import { isRecord } from '../../../core/model/plugin-data.js';
+import { legacySyntaxPlugin } from '../../../core/model/report.js';
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import { lcovLines } from '../../../core/model/line-coverage.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
 import { fileMetrics } from './file-metrics.js';
 import { inspectionContext } from './inspection-context.js';
+import { isLanguageDisplay } from '../../../core/model/language.js';
 import type { LanguageLookup } from '../../../core/model/language.js';
 import type { ComplexFunction } from '../wire/public-history-model.js';
 import { componentFiles } from './components.js';
 import type { Component } from './components.js';
 
-import type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
+import type { InspectionAsset, InspectionDetails, ProfileLanguage, ProfileSettings } from '../wire/inspection-details-model.js';
 
 export interface InspectionOptions {
   readonly components?: readonly Component[];
@@ -39,36 +43,48 @@ export function inspectionDetails(report: Report, { components = [], languages }
 
 /** The applied configuration, field by field; whatever is missing or malformed is left out rather than guessed. */
 export function profileSettings(applied: unknown): ProfileSettings | undefined {
-  if (!record(applied)) return undefined;
-  const source = record(applied.source) ? applied.source : {};
-  const maintainability = record(applied.maintainability) ? applied.maintainability : {};
-  const rules = record(maintainability.structuralRules) ? Object.entries(maintainability.structuralRules).flatMap(([rule, value]) =>
-    record(value) && finite(value.limit) && finite(value.minutesPerExcess)
+  if (!isRecord(applied)) return undefined;
+  const source = isRecord(applied.source) ? applied.source : {};
+  const maintainability = isRecord(applied.maintainability) ? applied.maintainability : {};
+  const rules = isRecord(maintainability.structuralRules) ? Object.entries(maintainability.structuralRules).flatMap(([rule, value]) =>
+    isRecord(value) && finite(value.limit) && finite(value.minutesPerExcess)
       ? [{ plugin: 'maintainability', rule, limit: value.limit, minutesPerExcess: value.minutesPerExcess }] : []) : [];
   const duplication = maintainability.duplication;
   const model = maintainability.debtModel;
   const churn = applied.churn;
+  const plugins = Array.isArray(applied.plugins) ? applied.plugins.filter(isRecord) : [];
+  const languages = profileLanguages(plugins, new Set(strings(source.extensions)));
   return {
     id: typeof applied.profile === 'string' ? applied.profile : null,
-    extensions: strings(source.extensions),
+    ...(languages.length ? { languages } : {}),
     excludedPaths: [...new Set([...strings(source.defaultExclusions), ...strings(source.excludedPaths), ...strings(source.generatedExcluded)])],
     excludedDirectories: strings(source.excludedDirectories),
     rules,
-    duplication: record(duplication) && finite(duplication.minCodeLines) && finite(duplication.minNodes) && finite(duplication.minutesPerRepeatedLine)
+    duplication: isRecord(duplication) && finite(duplication.minCodeLines) && finite(duplication.minNodes) && finite(duplication.minutesPerRepeatedLine)
       ? { minCodeLines: duplication.minCodeLines, minNodes: duplication.minNodes, minutesPerRepeatedLine: duplication.minutesPerRepeatedLine } : null,
-    debtModel: record(model) && typeof model.name === 'string' && finite(model.scale) && finite(model.exponent) && finite(model.minutesPerPersonMonth)
+    debtModel: isRecord(model) && typeof model.name === 'string' && finite(model.scale) && finite(model.exponent) && finite(model.minutesPerPersonMonth)
       ? { name: model.name, scale: model.scale, exponent: model.exponent, minutesPerPersonMonth: model.minutesPerPersonMonth } : null,
-    churn: record(churn) && finite(churn.lookbackDays) && finite(churn.maxCommits) ? { lookbackDays: churn.lookbackDays, maxCommits: churn.maxCommits } : null,
-    ignore: Array.isArray(applied.findingIgnore) ? applied.findingIgnore.flatMap(entry => record(entry) ? [Object.fromEntries(
+    churn: isRecord(churn) && finite(churn.lookbackDays) && finite(churn.maxCommits) ? { lookbackDays: churn.lookbackDays, maxCommits: churn.maxCommits } : null,
+    ignore: Array.isArray(applied.findingIgnore) ? applied.findingIgnore.flatMap(entry => isRecord(entry) ? [Object.fromEntries(
       (['tool', 'rule', 'path', 'reason'] as const).flatMap(key => typeof entry[key] === 'string' ? [[key, entry[key]]] : []))] : []) : [],
-    analyzers: Array.isArray(applied.plugins) ? applied.plugins.flatMap(plugin => record(plugin) && typeof plugin.id === 'string' && typeof plugin.version === 'string'
-      ? [{ id: plugin.id, version: plugin.version, tools: record(plugin.tools)
-        ? Object.fromEntries(Object.entries(plugin.tools).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {} }] : []) : [],
+    analyzers: plugins.flatMap(({ id, version, tools }) => typeof id === 'string' && typeof version === 'string'
+      ? [{ id, version, tools: isRecord(tools)
+        ? Object.fromEntries(Object.entries(tools).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {} }] : []),
   };
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function profileLanguages(plugins: readonly Record<string, unknown>[], recordedExtensions: ReadonlySet<string>): ProfileLanguage[] {
+  const recorded = plugins.flatMap(({ id: plugin, providesLanguages }) => {
+    if (typeof plugin !== 'string' || !Array.isArray(providesLanguages)) return [];
+    return providesLanguages.flatMap(language => isRecord(language) && isLanguageDisplay(language)
+      ? [{ plugin, id: language.id, label: language.label, extensions: strings(language.extensions), globs: strings(language.globs) }]
+      : []);
+  });
+  if (recorded.length) return recorded;
+  return [javascriptType, typescriptType].flatMap(({ id, label, extensions }) => {
+    const selected = extensions.filter(ext => recordedExtensions.has(ext));
+    return selected.length ? [{ plugin: legacySyntaxPlugin, id, label, extensions: selected, globs: [] }] : [];
+  });
 }
 
 function finite(value: unknown): value is number {

@@ -24,7 +24,7 @@ export interface InspectionDetails {
 /** What the inspection read and how it scored it: a projection of the report's applied configuration. */
 export interface ProfileSettings {
   readonly id: string | null;
-  readonly extensions: readonly string[];
+  readonly languages?: readonly ProfileLanguage[];
   readonly excludedPaths: readonly string[];
   readonly excludedDirectories: readonly string[];
   /** Every check the profile applies, each named with the plugin that runs it. */
@@ -35,6 +35,14 @@ export interface ProfileSettings {
   readonly churn: { readonly lookbackDays: number; readonly maxCommits: number } | null;
   readonly ignore: readonly { readonly tool?: string; readonly rule?: string; readonly path?: string; readonly reason?: string }[];
   readonly analyzers: readonly { readonly id: string; readonly version: string; readonly tools: Readonly<Record<string, string>> }[];
+}
+
+export interface ProfileLanguage {
+  readonly plugin: string;
+  readonly id: string;
+  readonly label: string;
+  readonly extensions: readonly string[];
+  readonly globs: readonly string[];
 }
 
 export interface ProfileRule {

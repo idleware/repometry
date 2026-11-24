@@ -134,6 +134,15 @@
             "debtRatio": {
               "$ref": "#/$defs/ratio"
             },
+            "gradeCoverage": {
+              "type": "object",
+              "required": ["measuredFiles", "totalFiles"],
+              "properties": {
+                "measuredFiles": { "type": "integer", "minimum": 0 },
+                "totalFiles": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
             "grade": {
               "enum": [
                 "A",

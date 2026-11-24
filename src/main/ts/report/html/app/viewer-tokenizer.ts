@@ -1,6 +1,8 @@
 // Light highlighting for JavaScript and TypeScript: a scanner, not a parser, that colours comments, strings, regular
-// expressions, numbers and keywords. Other languages come back as plain text.
+// expressions, numbers and keywords. A file is read by its language as the inspection names it; any other language comes
+// back as plain text, never in another language's colours.
 import { element } from './viewer-dom.js';
+import { languageIdOf } from './viewer-languages.js';
 
 export type TokenKind = '' | 'c' | 's' | 'n' | 'k';
 export type Run = [TokenKind, string];
@@ -8,6 +10,9 @@ export type Run = [TokenKind, string];
 const keywords = new Set(('abstract as async await break case catch class const continue debugger declare default delete do else enum export '
   + 'extends false finally for from function get if implements import in instanceof interface let new null of package private protected '
   + 'public readonly return satisfies set static super switch this throw true try type typeof undefined var void while with yield').split(' '));
+
+/** The languages this scanner was written for. */
+const scanned: ReadonlySet<string | undefined> = new Set(['javascript', 'typescript']);
 
 /** Words after which a slash opens a regular expression rather than divides. */
 const beforeRegex = new Set('return typeof instanceof in of new delete void throw case do else yield await'.split(' '));
@@ -164,8 +169,8 @@ function runs() {
  * before the slash. State carries across lines, so a block comment or a template literal stays coloured to its end.
  * Other languages come back as plain text.
  */
-export function tokenizer(path: string): (line: string) => Run[] {
-  if (!/\.(m|c)?[jt]sx?$/.test(path)) return line => [['', line]];
+export function tokenizer(language: string | undefined): (line: string) => Run[] {
+  if (!scanned.has(language)) return line => [['', line]];
   const state: ScanState = { open: '', regexAllowed: true };
   return line => {
     const collected = runs();
@@ -179,22 +184,13 @@ export function tokenizer(path: string): (line: string) => Run[] {
   };
 }
 
-/** A line with no code: blank, or nothing but comment. */
-export function codeless(lineRuns: readonly (readonly [TokenKind, string])[]): boolean {
-  return lineRuns.every(([kind, value]) => kind === 'c' || !value.trim());
-}
-
 /** A line's runs as nodes: coloured spans and plain text. */
 export function runNodes(lineRuns: readonly Run[]): Node[] {
   return lineRuns.map(([kind, value]) => kind ? element('span', `tok-${kind}`, value) : document.createTextNode(value));
 }
 
+/** Highlights a file's lines, or a snippet of them, by the file's language. */
 export function highlighter(path: string): (line: string) => Node[] {
-  const tokenize = tokenizer(path);
+  const tokenize = tokenizer(languageIdOf(path));
   return line => runNodes(tokenize(line));
-}
-
-/** A single line of code, coloured as the source view colours it; for a snippet that stands on its own. */
-export function highlightCode(path: string, line: string): Node[] {
-  return highlighter(path)(line);
 }

@@ -14,7 +14,7 @@ export interface TrendData {
   readonly context: Record<string, InspectionContext> | null;
   readonly compact: boolean;
   /** How many pull request reviews are saved: changed-line coverage is a series only where there are some. */
-  readonly reviews?: number | undefined;
+  readonly reviews: number;
   /** Link to the Trends page for a commit, keeping or replacing the view and period. */
   readonly link: (sha: string, view?: TrendView, period?: Period) => string;
 }
@@ -84,7 +84,7 @@ export function trendValue(data: Pick<TrendData, 'quality' | 'context'>, report:
  */
 export function availableViews(data: TrendData): TrendView[] {
   const has = (metric: Metric) => data.reports.some(report => trendValue(data, report, metric) !== null);
-  const shown = (view: TrendView) => view === 'diff-coverage' ? (data.reviews ?? 0) > 0 : has(view === 'debt-changes' ? 'effort' : view);
+  const shown = (view: TrendView) => view === 'diff-coverage' ? data.reviews > 0 : has(view === 'debt-changes' ? 'effort' : view);
   return groups().flatMap(([, views]) => views).filter(shown);
 }
 

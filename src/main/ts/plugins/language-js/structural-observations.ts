@@ -37,11 +37,12 @@ export function structuralObservations(ast: Node) {
       const start = node.loc?.start;
       cognitiveFunctions.push({ line: start?.line,
         column: start === undefined ? undefined : start.column + 1, name, value: own.cognitive });
+      const label = name ?? '(anonymous)';
       cognitive += own.cognitive;
-      observe('function-parameters', node.params.length, `${name} · Parameters`, node);
-      observe('return-statements', own.returns, `${name} · Return statements`, node);
-      observe('function-complexity', own.cognitive, `${name} · Cognitive complexity`, node);
-      if (own.nestedRange !== undefined) observe('nested-control-flow', own.maxNesting, `${name} · Control-flow depth`, own.nestedRange);
+      observe('function-parameters', node.params.length, `${label} · Parameters`, node);
+      observe('return-statements', own.returns, `${label} · Return statements`, node);
+      observe('function-complexity', own.cognitive, `${label} · Cognitive complexity`, node);
+      if (own.nestedRange !== undefined) observe('nested-control-flow', own.maxNesting, `${label} · Control-flow depth`, own.nestedRange);
       return;
     }
     if (node.type === 'ReturnStatement') frame.returns++;

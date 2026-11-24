@@ -105,11 +105,11 @@ export function spreadLevels(files: ReadonlyMap<string, number>): Map<string, nu
  * The top of a relative colour scale, per level: files against files, folders against the folders at their depth. One
  * scale for both would let a folder's sum outshine every file in it, and the map would read hot folders over pale files.
  */
-export function relativePeaks(entries: readonly { readonly path: string; readonly folder: boolean; readonly score: number }[]):
+export function relativePeaks(entries: readonly { readonly path: string; readonly folder: boolean; readonly score: number | null }[]):
   (path: string, folder: boolean) => number {
   const level = (path: string, folder: boolean) => folder ? `folder:${path.split('/').length}` : 'file';
   const peaks = new Map<string, number>();
-  for (const { path, folder, score } of entries) peaks.set(level(path, folder), Math.max(peaks.get(level(path, folder)) ?? 1, score));
+  for (const { path, folder, score } of entries) peaks.set(level(path, folder), Math.max(peaks.get(level(path, folder)) ?? 1, score ?? 0));
   return (path, folder) => peaks.get(level(path, folder)) ?? 1;
 }
 

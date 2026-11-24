@@ -4,7 +4,8 @@ import type { Plugin } from '../core/engine/plugin.js';
 import { ReportProducts } from '../core/engine/report-products.js';
 import type { Finding } from '../core/model/finding.js';
 import type { Measurement } from '../core/model/measurement.js';
-import type { Diagnostic } from '../core/model/report.js';
+import type { StructureMeasure } from '../core/model/code-structure.js';
+import type { Diagnostic, Report } from '../core/model/report.js';
 import { inspectionKeys } from './analysis-sources.js';
 
 export class AnalysisResults {
@@ -12,6 +13,8 @@ export class AnalysisResults {
   readonly findings: Finding[] = [];
   readonly diagnostics: Diagnostic[];
   readonly parsed = new Set<string>();
+  readonly ruleSkips: NonNullable<Report['ruleSkips']>[number][] = [];
+  readonly unmeasured = new Map<string, readonly StructureMeasure[]>();
   readonly inspected = new Set<string>();
   completedInspection = false;
 
@@ -79,6 +82,7 @@ export class AnalysisResults {
 
 export function operationProvenance(task: PlannedOperation, syntaxProvider?: string) {
   return { key: task.key, inputs: Object.fromEntries(task.inputs),
+    ...(task.operation.implementation === undefined ? {} : { implementation: task.operation.implementation }),
     ...(task.operation.scope === 'repository' ? { scope: task.operation.scope } : {}),
     ...(syntaxProvider === undefined ? {} : { syntaxProvider }) };
 }

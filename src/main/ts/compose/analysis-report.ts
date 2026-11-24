@@ -17,7 +17,7 @@ const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
   [definitions.functions]: 'Babel function nodes with bodies, including nested functions and methods.',
   [definitions.complexity]: 'One plus branches in the function body: if, ternary, loops, catch, non-default switch cases and logical operators. Nested functions are measured separately. Line and column are 1-based and columns count UTF-16 units.',
-  [definitions.coverage]: 'Distinct covered code lines divided by the distinct code lines listed in LCOV DA records. Hit counts are summed across records. A zero denominator has no ratio.',
+  [definitions.coverage]: 'Distinct covered lines divided by the distinct lines listed in LCOV DA records, filtered to code where classifications are available. Hit counts are summed across records. A zero denominator has no ratio.',
   [definitions.codeLines]: 'Nonblank physical lines after removing Babel comment spans and the interpreter directive. A line containing both code and a comment counts as code.',
   [definitions.comments]: 'Physical lines containing only a Babel comment or interpreter directive.',
   [definitions.classes]: 'Babel class declaration and expression nodes.',
@@ -41,6 +41,7 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
     measurements: results.measurements,
     diagnostics: results.diagnostics,
     findings: results.findings,
+    ...(results.ruleSkips.length === 0 ? {} : { ruleSkips: results.ruleSkips }),
     ...(pluginData === undefined ? {} : { pluginData: { ...pluginData, languages: sources.languages.catalog,
       inventory: reportInventory(snapshot, sources, results) } }),
   };
@@ -57,7 +58,8 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
     parser: defaultProvider.plugin.settings,
     maintainability: { structuralRules, duplication: duplicationSettings, debtModel, remediation: 'nonoverlapping-complexity/v1' },
     coverage: coverage === undefined ? null : { inputDigest: digest(coverage.text), pathBase: coverage.sourceRoot,
-      merge: 'any-hit', hitCounts: 'sum', lines: 'code-only' },
+      merge: 'any-hit', hitCounts: 'sum',
+      lines: [...results.unmeasured.values()].some(measures => measures.includes('codeLines')) ? 'code-when-classified' : 'code-only' },
     ...(securityScanners.length ? { securityScanners } : {}),
     plugins: plugins.map(pluginProvenance),
     operations: results.operationRecords(),
@@ -82,7 +84,9 @@ function reportInventory(snapshot: SourceSnapshot, sources: AnalysisSources, res
   }
   return [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, { lines, bytes }]) => {
     const provider = sources.providersByPath.get(path);
+    const unmeasured = results.unmeasured.get(path);
     return { path, lines, ...(bytes === undefined ? {} : { bytes }), language: provider?.language(path) ?? fileTypeId(path),
-      analysed: results.parsed.has(path) || results.inspected.has(path), ...(provider === undefined ? {} : { provider: provider.key }) };
+      analysed: results.parsed.has(path) || results.inspected.has(path), ...(provider === undefined ? {} : { provider: provider.key }),
+      ...(unmeasured === undefined ? {} : { unmeasured }) };
   });
 }

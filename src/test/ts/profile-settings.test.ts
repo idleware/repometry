@@ -7,7 +7,7 @@ import type { PublicHistoryEntry } from '../../main/ts/report/json/wire/public-h
 test('the applied profile is projected field by field, and malformed parts are left out', () => {
   const profile = profileSettings({
     profile: 'js-ts/v2',
-    source: { extensions: ['.ts', 7], excludedDirectories: ['node_modules'], excludedPaths: ['.yarn/releases'] },
+    source: { extensions: ['.ts', '.js', '.mts', '.py', '.ts', 7], excludedDirectories: ['node_modules'], excludedPaths: ['.yarn/releases'] },
     maintainability: {
       structuralRules: { 'function-complexity': { limit: 15, minutesPerExcess: 10 }, broken: { limit: 'x' } },
       duplication: { minCodeLines: 12, minNodes: 50, minutesPerRepeatedLine: 2 },
@@ -18,7 +18,11 @@ test('the applied profile is projected field by field, and malformed parts are l
     plugins: [{ id: 'structure', version: '1.0.0', tools: { '@babel/types': '7.29.15' } }, { id: 7 }],
   });
   assert.equal(profile?.id, 'js-ts/v2');
-  assert.deepEqual(profile?.extensions, ['.ts']);
+  assert.deepEqual(profile?.languages, [
+    { plugin: 'babel-syntax', id: 'javascript', label: 'JavaScript', extensions: ['.js'], globs: [] },
+    { plugin: 'babel-syntax', id: 'typescript', label: 'TypeScript', extensions: ['.ts', '.mts'], globs: [] },
+  ]);
+  assert.ok(profile && !Object.hasOwn(profile, 'extensions'));
   assert.deepEqual(profile?.rules, [{ plugin: 'maintainability', rule: 'function-complexity', limit: 15, minutesPerExcess: 10 }]);
   assert.deepEqual(profile?.ignore, [{ tool: 'repometry', rule: 'identical-code', path: 'a.ts' }]);
   assert.deepEqual(profile?.analyzers, [{ id: 'structure', version: '1.0.0', tools: { '@babel/types': '7.29.15' } }]);

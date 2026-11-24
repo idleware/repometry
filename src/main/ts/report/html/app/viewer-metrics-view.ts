@@ -9,7 +9,6 @@ import type { Clause, FileFacts } from './viewer-filter.js';
 import type { Metrics, Navigation, Preferences } from './viewer-inspection.js';
 import { pageSize } from './viewer-inspection.js';
 import { renderLanguages } from './viewer-language-bar.js';
-import { isLockfile } from './viewer-languages.js';
 import { breadcrumbs, splitter } from './viewer-layout.js';
 import { findingIndex } from './viewer-locations.js';
 import { labelOf } from './viewer-metrics.js';
@@ -138,9 +137,7 @@ export function metricsView(details: InspectionDetails, navigation: Navigation, 
   function showAside(files: readonly Metrics[], filtering: boolean): void {
     const next = selectedFile
       ? fileDetails(details, selectedFile, { ...navigation, href: (target, options) => target === 'metrics' ? linkTo(options) : navigation.href(target, options) })
-      : directorySummary(aggregate(directory, files), { analysed: files.filter(entry => entry.analysed !== false).length,
-        lockfiles: files.filter(entry => isLockfile(entry.path)).length,
-        selection: filtering ? `${count(files.length)} of ${count(scopeFiles.length)} files selected` : undefined });
+      : directorySummary(aggregate(directory, files), files, filtering ? `${count(files.length)} of ${count(scopeFiles.length)} files selected` : undefined);
     aside.replaceWith(next);
     aside = next;
   }

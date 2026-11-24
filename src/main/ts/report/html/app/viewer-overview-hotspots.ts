@@ -3,7 +3,7 @@ import type { InspectionDetails } from '../../json/wire/inspection-details-model
 import { renderSunburst } from './viewer-code-map.js';
 import type { SunburstOptions } from './viewer-code-map.js';
 import { byId, count, notice, parentPath, quantity } from './viewer-dom.js';
-import { hotspotScore } from './viewer-file-figures.js';
+import { hotspotScore, scorePeak } from './viewer-file-figures.js';
 import { securityCategories } from './viewer-files.js';
 import type { BuiltinHotspot, Metrics } from './viewer-inspection.js';
 import { band, bandLimits } from './viewer-map-scale.js';
@@ -104,7 +104,7 @@ export function renderOverviewHotspots(details: InspectionDetails, sha: string, 
   overviewMap(details, sha, { metric });
   allLink(href({ page: 'hotspots', sha }), true);
   const top = rankedFiles(details, metric);
-  const peak = Math.max(1, ...top.map(item => item.value ?? 0));
+  const peak = scorePeak(top.map(item => item.value));
   const rows = top.map(({ path, value, entry }) => {
     const score = document.createElement('span');
     score.className = 'chip';

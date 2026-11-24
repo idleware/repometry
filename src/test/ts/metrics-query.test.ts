@@ -7,12 +7,12 @@ import { size } from '../../main/ts/report/html/app/viewer-metrics.js';
 import type { FileFacts } from '../../main/ts/report/html/app/viewer-filter.js';
 
 // The inspection names its languages, and each file points to one by index, as an export carries them.
-useLanguages([
+useLanguages({ files: [], languages: [
   { id: 'typescript', label: 'TypeScript', color: '#3178c6', analysed: true },
   { id: 'javascript', label: 'JavaScript', color: '#f1e05a', analysed: true },
   { id: 'markdown', label: 'Markdown', color: '#768390', analysed: false },
   { id: 'other', label: 'Other', analysed: false },
-]);
+] });
 /** The index the inspection's language list gives a file of this extension; anything else is Other. */
 function indexOf(path: string): number {
   const found = ['.ts', '.js', '.md'].findIndex(extension => path.endsWith(extension));

@@ -4,6 +4,7 @@ import { duplicationContext } from './viewer-file-figures.js';
 import { isLockfile, languageColor, languageOf } from './viewer-languages.js';
 import type { Directory, Metrics } from './viewer-inspection.js';
 import type { Group, Row, RowKind } from './viewer-table-rows.js';
+import { partialNote } from './viewer-totals.js';
 
 export interface RowContext {
   readonly group: Group;
@@ -49,10 +50,15 @@ function entryIcon(row: Row): HTMLElement {
   return icon;
 }
 
-function cell(entry: Metrics, column: MetricColumn): HTMLTableCellElement {
+function cell(entry: Metrics, column: MetricColumn, files: readonly Metrics[] | undefined): HTMLTableCellElement {
   const result = element('td', 'numeric', column.display(entry));
   if (column.value(entry) === 0) result.classList.add('fx-zero');
   if (column.label === 'Duplication') result.title = duplicationContext(entry) ?? '';
+  const partial = files && column.present ? partialNote(files, column.present) : undefined;
+  if (partial) {
+    result.classList.add('fx-partial');
+    result.title = partial;
+  }
   return result;
 }
 
@@ -72,7 +78,7 @@ export function metricsRow(row: Row, context: RowContext, open?: () => void): HT
   name.append(anchor);
   if (kind === 'file' && isLockfile(entry.path)) name.append(element('span', 'fx-entry-tag', 'Lockfile'));
   if (kind !== 'file' && 'files' in entry) name.append(element('span', 'fx-entry-count', count((entry as Directory).files)));
-  result.append(name, ...context.columns.map(column => cell(entry, column)));
+  result.append(name, ...context.columns.map(column => cell(entry, column, row.files)));
   return result;
 }
 

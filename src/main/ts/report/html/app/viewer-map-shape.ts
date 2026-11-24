@@ -5,12 +5,12 @@ import type { Metrics } from './viewer-inspection.js';
 /** Rings (a sunburst) or tiles (a treemap); the last choice is remembered for this viewer. */
 export type MapShape = 'rings' | 'tiles';
 
-/** A file or folder on the map: its area, and the score its colour is read from. */
+/** A file or folder on the map: its area, and the score its colour is read from; null where it was not measured. */
 export interface Branch {
   readonly entry: Metrics;
   readonly folder: boolean;
   readonly area: number;
-  readonly score: number;
+  readonly score: number | null;
 }
 
 /** What the ring and tile layouts draw with. */

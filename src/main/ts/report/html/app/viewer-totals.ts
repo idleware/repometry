@@ -1,4 +1,5 @@
 import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
+import { count } from './viewer-dom.js';
 import { sized } from './viewer-languages.js';
 import type { Directory, Metrics } from './viewer-inspection.js';
 import { localCatalog } from './viewer-inspection.js';
@@ -70,6 +71,17 @@ export function aggregate(path: string, files: readonly Metrics[]): Directory {
     // A partial sum would understate the size: only a scope where every file has one gets a total.
     ...(sized(files) ? { bytes: zeroSum(files, entry => entry.bytes) } : {}),
   };
+}
+
+/**
+ * Where only some of the files whose code was measured carry a measure, their total is partial and says so; a total
+ * that all of them carry, or none, says nothing more. A file only a scanner read (a workflow, a manifest) has no code
+ * measures and is not expected to carry one.
+ */
+export function partialNote(files: readonly Metrics[], present: (entry: Metrics) => boolean): string | undefined {
+  const read = files.filter(entry => entry.quality !== undefined);
+  const measured = read.filter(present).length;
+  return measured > 0 && measured < read.length ? `Measured in ${count(measured)} of ${count(read.length)} files` : undefined;
 }
 
 /** The folders all of whose files are only counted, found in one pass over the files. */

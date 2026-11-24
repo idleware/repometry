@@ -1,3 +1,4 @@
+import type { StructureMeasure } from './code-structure.js';
 import type { MetricDescriptor, PluginConfigSchema, RuleDescriptor } from '../engine/plugin.js';
 import type { InventoryFile } from './source.js';
 import type { LanguageDisplay } from './language.js';
@@ -31,5 +32,5 @@ export interface PluginData {
   readonly products: Readonly<Record<string, readonly PersistedProduct[]>>;
   readonly contracts?: Readonly<Record<string, PluginConfigSchema>>;
   readonly languages?: readonly LanguageDisplay[];
-  readonly inventory?: readonly (InventoryFile & { readonly language: string; readonly analysed: boolean; readonly provider?: string })[];
+  readonly inventory?: readonly (InventoryFile & { readonly language: string; readonly analysed: boolean; readonly provider?: string; readonly unmeasured?: readonly StructureMeasure[] })[];
 }

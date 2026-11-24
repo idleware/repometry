@@ -129,7 +129,6 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "extensions",
         "excludedPaths",
         "excludedDirectories",
         "rules",
@@ -146,10 +145,19 @@
             "null"
           ]
         },
-        "extensions": {
+        "languages": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["plugin", "id", "label", "extensions", "globs"],
+            "properties": {
+              "plugin": { "type": "string" },
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "extensions": { "type": "array", "items": { "type": "string" } },
+              "globs": { "type": "array", "items": { "type": "string" } }
+            }
           }
         },
         "excludedPaths": {

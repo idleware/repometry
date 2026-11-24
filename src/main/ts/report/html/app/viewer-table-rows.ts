@@ -1,5 +1,5 @@
 import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
-import { count, parentPath } from './viewer-dom.js';
+import { count, inside, parentPath } from './viewer-dom.js';
 import { compareEntries } from './viewer-file-figures.js';
 import type { Directory, Metrics } from './viewer-inspection.js';
 import { pageSize } from './viewer-inspection.js';
@@ -10,6 +10,8 @@ export type RowKind = 'folder' | 'file' | 'component';
 export interface Row {
   readonly entry: Metrics;
   readonly kind: RowKind;
+  /** The files a folder's or a component's total is made of. */
+  readonly files?: readonly Metrics[];
 }
 /** A row of the table, or the fold that stands for the ignored ones. */
 export type DisplayRow = Row | { readonly kind: 'unread' };
@@ -28,17 +30,19 @@ const fileRow = (entry: Metrics): Row => ({ entry, kind: 'file' });
 export function componentRows(components: NonNullable<InspectionDetails['components']>, files: readonly Metrics[], filtering: boolean): Row[] {
   const chosen = new Map(files.map(entry => [entry.path, entry]));
   const rows = components.map(({ component, paths }): Row => ({
-    entry: aggregate(component.name, paths.flatMap(path => chosen.get(path) ?? [])), kind: 'component' }))
+    entry: aggregate(component.name, paths.flatMap(path => chosen.get(path) ?? [])), kind: 'component',
+    files: paths.flatMap(path => chosen.get(path) ?? []) }))
     .filter(row => !filtering || (row.entry as Directory).files > 0);
   const assigned = new Set(components.flatMap(({ paths }) => paths));
   const rest = files.filter(entry => !assigned.has(entry.path));
-  if (rest.length) rows.push({ entry: aggregate(notInComponent, rest), kind: 'component' });
+  if (rest.length) rows.push({ entry: aggregate(notInComponent, rest), kind: 'component', files: rest });
   return rows;
 }
 
 /** A folder's own listing: the folders right under it with their recorded totals, then its files. */
 export function folderRows(directories: readonly Directory[], files: readonly Metrics[], directory: string): Row[] {
-  return [...directories.filter(entry => entry.path && parentPath(entry.path) === directory).map(folderRow),
+  const under = (entry: Metrics): Row => ({ ...folderRow(entry), files: files.filter(file => inside(file.path, entry.path)) });
+  return [...directories.filter(entry => entry.path && parentPath(entry.path) === directory).map(under),
     ...files.filter(entry => parentPath(entry.path) === directory).map(fileRow)];
 }
 
@@ -56,7 +60,7 @@ export function filteredFolderRows(files: readonly Metrics[], directory: string)
       below.set(folder, [...below.get(folder) ?? [], entry]);
     }
   }
-  return [...[...below].map(([path, entries]) => folderRow(aggregate(path, entries))), ...here.map(fileRow)];
+  return [...[...below].map(([path, entries]) => ({ ...folderRow(aggregate(path, entries)), files: entries })), ...here.map(fileRow)];
 }
 
 /** Sorts in place by a column; sorted by path, folders come before files. */

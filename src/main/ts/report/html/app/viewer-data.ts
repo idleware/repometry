@@ -13,7 +13,8 @@ export interface ViewerData {
   readonly quality: QualityHistory['reports'];
   readonly context: Record<string, InspectionContext>;
   readonly counts: Record<string, InspectionCounts | undefined>;
-  readonly pullReviewCount?: number;
+  /** How many pull request reviews are saved; the summary counts them, so no page loads them to find out. */
+  readonly pullReviewCount: number;
   /** The branch whose first-parent history the commits are, when the configuration names it. */
   readonly branch?: string;
   /** The metrics the history's plugins declare; each commit's values are indexed by it. */
@@ -43,7 +44,7 @@ export async function loadViewerData(mode: string | undefined): Promise<ViewerDa
       exclusions: null, boundary: commit.profileBoundary ?? null, security: commit.counts?.security,
     }])),
     counts,
-    pullReviewCount: summary.pullReviewCount,
+    pullReviewCount: summary.pullReviewCount ?? 0,
     ...(Array.isArray(summary.metrics) ? { metrics: summary.metrics } : {}),
     ...(() => {
       const sources = sourceLocator(summary.sources);

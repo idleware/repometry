@@ -3,16 +3,17 @@ import { resolve } from 'node:path';
 import { isRecord } from '../core/engine/plugin.js';
 import { normalizeProfile } from '../core/profile/profile.js';
 import type { Invocation } from './arguments.js';
+import { readProcessPlugins } from '../compose/process-plugins.js';
 import { invocationDirectory } from './store.js';
 
 const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
-  'minCoverage', 'minLines', 'maxCoverageDrop', 'maxNewIssues']);
+  'minCoverage', 'minLines', 'maxCoverageDrop', 'maxNewIssues', 'plugins']);
 
 function parseConfig(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
   string(value.$schema, '$schema');
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
-  return { ...profile, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
+  return { ...profile, plugins: readProcessPlugins(value.plugins), imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
     sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
     minCoverage: number(value.minCoverage, 'minCoverage'), minLines: number(value.minLines, 'minLines'),
     maxCoverageDrop: number(value.maxCoverageDrop, 'maxCoverageDrop'), maxNewIssues: number(value.maxNewIssues, 'maxNewIssues') };

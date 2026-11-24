@@ -33,7 +33,8 @@ export function selectAnalysisSources(snapshot: SourceSnapshot, additional: read
   const sources: SelectedSource[] = snapshot.files.map(file => ({ file, provider: languages.select(file.path) }));
   const providersByPath = new Map(sources.flatMap(({ file, provider }) => provider ? [[file.path, provider] as const] : []));
   const sourceFiles = sources.flatMap(({ file, provider }) => provider ? [file] : []);
-  const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional];
+  const bound = new Map(languages.providers.map(({ plugin }) => [plugin.id, plugin]));
+  const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional.map(plugin => bound.get(plugin.id) ?? plugin)];
   const plugins = [defaultProvider.plugin, ...structuralInspections, duplication, ...(withCoverage ? [coverage] : []), ...claimedPlugins];
   validateRegistration(plugins, additional, withCoverage);
   const claims: ClaimedPlugin[] = claimedPlugins.map(plugin => ({ plugin, matches: plugin.kinds.includes('language')

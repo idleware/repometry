@@ -3,7 +3,7 @@ import type { QualitySummary } from '../../json/wire/domain-types.js';
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 import { byId, count, percent, quantity } from './viewer-dom.js';
 import { codeSmellCategories, securityCategories } from './viewer-files.js';
-import { coverageGrade, formatMetric, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
+import { coverageGrade, formatMetric, gradeScope, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
 import type { Metric } from './viewer-metrics.js';
 import { href } from './viewer-route.js';
 
@@ -92,6 +92,9 @@ export function renderQuality(report: PublicHistoryEntry, quality: QualitySummar
   grade.dataset.grade = maintainability?.grade ?? 'none';
   if (!maintainability) detailText('maintainability-detail', 'Not measured');
   else detailText('maintainability-detail', quantity(maintainability.smells, 'code smell'), maintainability.smells > 0 ? smellsLink(report.sha) : undefined);
+  const scope = byId('maintainability-scope');
+  scope.textContent = gradeScope(quality) ?? '';
+  scope.hidden = !scope.textContent;
 }
 
 type Security = NonNullable<InspectionContext['security']>;

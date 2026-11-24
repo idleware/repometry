@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { bandLabels, bandOf, bandScale, compareValues, difference, firstSortAscending, format } from '../../main/ts/report/html/app/viewer-metric-format.js';
-import { byKey, catalogIndex, commitValue, entryValue, isBuiltin, metricSpecs, rollUp, trendGroups } from '../../main/ts/report/html/app/viewer-metric-registry.js';
+import { byKey, catalogIndex, commitValue, entryValue, isBuiltin, metricSpecs, rollUp } from '../../main/ts/report/html/app/viewer-metric-registry.js';
 import type { MetricDescriptor, MetricSpec, MetricValues } from '../../main/ts/report/html/app/viewer-metric-registry.js';
 
 interface Row { readonly path: string; readonly analysed?: boolean; readonly values?: MetricValues }
@@ -38,12 +38,9 @@ test('a metric without a better is listed but neither shown first nor ranked, an
 test('built-in metrics keep their query words and plugin metrics group under the plugin after the curated groups', () => {
   assert.equal(spec('repometry.cyclomatic-complexity/v1').key, 'complexity');
   assert.equal(coverage.key, 'coverage');
-  assert.deepEqual(trendGroups(specs).map(([group, members]) => [group, members.map(member => member.key)]), [
-    ['Maintainability', ['complexity', 'remediation-minutes']],
-    ['Coverage', ['coverage']],
-    ['Size', ['lines']],
-    ['fixture', ['todo-count']],
-  ]);
+  // Each trended metric joins the group its descriptor names, or one of its plugin's own.
+  assert.deepEqual(specs.filter(member => member.trend).map(member => `${member.group}: ${member.key}`).sort(), [
+    'Coverage: coverage', 'Maintainability: complexity', 'Maintainability: remediation-minutes', 'Size: lines', 'fixture: todo-count']);
 });
 
 test('two plugins naming the same metric keep their plugin in the key, as does a reserved word; two versions share it', () => {

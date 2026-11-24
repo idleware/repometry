@@ -5,6 +5,7 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { LanguageDisplay } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
+import { restrictStructureMeasures } from './structure-measures.js';
 import { babelProvider } from '../plugins/language-js/babel-provider.js';
 
 export interface LanguageProvider {
@@ -44,7 +45,9 @@ export function languageRegistry(plugins: readonly Plugin[]): {
       }
       return found;
     }
-    const provider = { plugin, operation, key: `${plugin.id}/${operation.id}`, batch: operation.scope === 'repository', language };
+    const bound = restrictStructureMeasures(operation, declared, language);
+    const executable = bound === operation ? plugin : { ...plugin, operations: plugin.operations.map(item => item === operation ? bound : item) };
+    const provider = { plugin: executable, operation: bound, key: `${plugin.id}/${operation.id}`, batch: operation.scope === 'repository', language };
     const claims: readonly FileClaims[] = declared.length ? declared : [plugin.claims!];
     return { provider, claims, matches: declared.length ? (path: string) => language(path) !== undefined : claimMatcher(plugin.claims) };
   });

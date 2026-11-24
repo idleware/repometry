@@ -76,3 +76,26 @@ test('file complexity does not re-charge excess already attributed to one functi
   assert.equal(remembered['file-complexity'], 0);
   assert.equal(qualitySummary(report).maintainability?.effortMinutes, 450);
 });
+
+test('a language with fewer measures leaves repository totals unknown and stays outside the debt grade', async () => {
+  const body = Array.from({ length: 60 }, () => 'if (value) value += 1;').join('\n');
+  const before = await scan({ 'complete.js': `function complex(value) {\n${body}\nreturn value;\n}` });
+  const path = 'partial.py';
+  const selected = { files: before.scope.files + 1, parsed: before.scope.parsed + 1 };
+  const partial = { ...before, scope: selected,
+    ruleSkips: [{ path, plugin: 'duplication', rules: ['identical-code'], reason: 'unmeasured' as const }],
+    measurements: [...before.measurements,
+    { definition: definitions.lines, target: 'file' as const, path, value: 10 },
+    { definition: definitions.functions, target: 'file' as const, path, value: 1 },
+    { definition: definitions.complexity, target: 'function' as const, path, value: 2 },
+  ] };
+  const quality = qualitySummary(partial);
+  assert.equal(quality.cognitiveComplexity, null);
+  assert.equal(quality.classes, null);
+  assert.equal(quality.comments, null);
+  assert.equal(quality.duplication, null);
+  assert.deepEqual(quality.maintainability, {
+    ...qualitySummary(before).maintainability,
+    gradeCoverage: { measuredFiles: 1, totalFiles: 2 },
+  });
+});

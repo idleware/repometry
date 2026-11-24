@@ -6,7 +6,7 @@ import { allLocations, formatLocation } from './viewer-locations.js';
 import type { Location } from './viewer-locations.js';
 import { duration } from './viewer-metrics.js';
 import { lineSnippet, renderExcerpt } from './viewer-source-view.js';
-import { highlightCode } from './viewer-tokenizer.js';
+import { highlighter } from './viewer-tokenizer.js';
 
 export const issueCategories: Readonly<Record<string, string>> = {
   structure: 'Structure', duplication: 'Duplication', lint: 'Lint', security: 'Security',
@@ -121,7 +121,7 @@ function excerpt(finding: Finding, place: Location & { readonly line: number }, 
     const snippet = lineSnippet(text, place.line, 48);
     if (!snippet || !finding.message.startsWith('(anonymous)')) return;
     const name = element('code', 'fx-occurrence-name');
-    name.append(...highlightCode(place.path, snippet));
+    name.append(...highlighter(place.path)(snippet));
     message.replaceChildren(name, finding.message.slice('(anonymous)'.length));
   });
   return slot;

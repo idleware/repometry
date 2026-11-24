@@ -1,7 +1,14 @@
 import type { MetricDescriptor, MetricValues } from '../wire/summary-model.js';
 import type { Measurement } from '../../../core/model/measurement.js';
-import { canonicalMetricId } from '../../../core/model/measurement.js';
+import type { StructureMeasure } from '../../../core/model/code-structure.js';
+import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import type { Report } from '../../../core/model/report.js';
+
+const structureMetricIds: Partial<Record<StructureMeasure, string>> = {
+  functions: definitions.functions, cyclomaticComplexity: definitions.complexity,
+  cognitiveComplexity: definitions.cognitiveComplexity, classes: definitions.classes,
+  commentLines: definitions.comments, codeLines: definitions.codeLines, duplication: definitions.duplicatedLines,
+};
 
 export function metricProjection(report: Report) {
   const metadata = report.pluginData;
@@ -17,13 +24,35 @@ export function metricProjection(report: Report) {
     else rows.set(id, [row]);
   }
 
+  const unavailable = new Map<string, Set<string>>();
+  for (const { path, unmeasured } of metadata.inventory ?? []) {
+    for (const measure of unmeasured ?? []) {
+      const id = structureMetricIds[measure];
+      if (id === undefined) continue;
+      let files = unavailable.get(id);
+      if (!files) unavailable.set(id, files = new Set());
+      files.add(path);
+    }
+  }
+
+  function isAvailable(id: string, path?: string, directory = false): boolean {
+    const files = unavailable.get(id);
+    if (!files) return true;
+    if (path === undefined || (directory && path === '')) return false;
+    if (!directory) return !files.has(path);
+    for (const file of files) if (file.startsWith(path + '/')) return false;
+    return true;
+  }
+
   function values(path?: string, directory = false): MetricValues {
     const result: Record<number, number | null> = {};
     for (const [index, metric] of metrics.entries()) {
       if (path !== undefined && metric.scope === 'repository') continue;
       const rowValues = (id: string) => rows.get(id) ?? [];
       let value: number | null;
-      if (metric.ratio) {
+      if (!isAvailable(metric.id, path, directory)) {
+        value = null;
+      } else if (metric.ratio) {
         const numerator = rollup(rowValues(metric.ratio.of), 'sum', path, directory);
         const denominator = rollup(rowValues(metric.ratio.over), 'sum', path, directory);
         value = denominator && numerator !== null ? numerator / denominator : null;
@@ -36,7 +65,7 @@ export function metricProjection(report: Report) {
   }
 
   const privateMetrics = metadata.privateMetrics?.map(canonicalMetricId).filter(id => measured.has(id));
-  return { catalog: metrics, privateMetrics: privateMetrics?.length ? privateMetrics : undefined, values };
+  return { catalog: metrics, privateMetrics: privateMetrics?.length ? privateMetrics : undefined, values, isAvailable };
 }
 
 export function canonicalMetricDescriptor(metric: MetricDescriptor): MetricDescriptor {

@@ -12,8 +12,14 @@ export const structuralCheckIds = [
 
 export type StructuralCheck = typeof structuralCheckIds[number];
 
+export const structureMeasures = ['functions', 'cyclomaticComplexity', 'cognitiveComplexity', 'classes',
+  'commentLines', 'codeLines', 'duplication', 'structuralRules'] as const;
+
+export type StructureMeasure = typeof structureMeasures[number];
+
 export interface FunctionComplexity {
-  readonly name: string;
+  /** Functions without a name omit this field. Reports display them as (anonymous). */
+  readonly name?: string;
   readonly line?: number;
   readonly column?: number;
   readonly value: number;
@@ -30,16 +36,17 @@ export interface StructuralObservation {
 export interface CodeStructure {
   readonly path: string;
   readonly lines: number;
-  readonly functions: number;
-  readonly classes: number;
-  readonly cognitiveComplexity: number;
-  readonly commentLines: number;
-  readonly cyclomaticFunctions: readonly FunctionComplexity[];
-  readonly cognitiveFunctions: readonly FunctionComplexity[];
+  readonly functions?: number;
+  readonly classes?: number;
+  readonly cognitiveComplexity?: number;
+  readonly commentLines?: number;
+  readonly cyclomaticFunctions?: readonly FunctionComplexity[];
+  readonly cognitiveFunctions?: readonly FunctionComplexity[];
   /** Sorted, merged lines containing code inside a function body. An empty list means the provider found none. */
   readonly functionBodies?: readonly SourceLineRange[];
-  readonly observations: readonly StructuralObservation[];
-  readonly clones: CloneSource;
+  readonly observations?: readonly StructuralObservation[];
+  readonly codeLines?: readonly number[];
+  readonly clones?: CloneSource;
 }
 
 const checkIds = new Set<string>(structuralCheckIds);
@@ -53,7 +60,7 @@ function isPosition(value: unknown): value is number | undefined {
 }
 
 function isFunctionComplexity(value: unknown): value is FunctionComplexity {
-  return isRecord(value) && typeof value.name === 'string' && isCount(value.value)
+  return isRecord(value) && (value.name === undefined || typeof value.name === 'string') && isCount(value.value)
     && isPosition(value.line) && isPosition(value.column);
 }
 
@@ -65,15 +72,28 @@ function isObservation(value: unknown): value is StructuralObservation {
 export const codeStructure: DataContract<CodeStructure> = {
   id: 'repometry.code-structure/v1',
   accepts: (value): value is CodeStructure => isRecord(value)
-    && typeof value.path === 'string' && isCount(value.lines) && isCount(value.functions) && isCount(value.classes)
-    && isCount(value.cognitiveComplexity) && isCount(value.commentLines)
-    && Array.isArray(value.cyclomaticFunctions) && value.cyclomaticFunctions.every(isFunctionComplexity)
-    && Array.isArray(value.cognitiveFunctions) && value.cognitiveFunctions.every(isFunctionComplexity)
-    && (value.functionBodies === undefined
-      || isMergedLineRanges(value.functionBodies) && (value.functionBodies.at(-1)?.[1] ?? 0) <= value.lines)
-    && Array.isArray(value.observations) && value.observations.every(isObservation)
-    && isCloneSource(value.clones) && value.clones.path === value.path,
+    && typeof value.path === 'string' && isCount(value.lines)
+    && [value.functions, value.classes, value.cognitiveComplexity, value.commentLines].every(count => count === undefined || isCount(count))
+    && (value.cyclomaticFunctions === undefined || Array.isArray(value.cyclomaticFunctions) && value.cyclomaticFunctions.every(isFunctionComplexity))
+    && (value.cognitiveFunctions === undefined || Array.isArray(value.cognitiveFunctions) && value.cognitiveFunctions.every(isFunctionComplexity))
+    && (value.functionBodies === undefined || isMergedLineRanges(value.functionBodies) && (value.functionBodies.at(-1)?.[1] ?? 0) <= value.lines)
+    && (value.observations === undefined || Array.isArray(value.observations) && value.observations.every(isObservation))
+    && (value.codeLines === undefined || Array.isArray(value.codeLines) && isCodeLines(value.codeLines, value.lines))
+    && (value.clones === undefined || isCloneSource(value.clones) && value.clones.path === value.path),
 };
+
+function isCodeLines(lines: readonly unknown[], lastLine: number): boolean {
+  let previous = 0;
+  for (const line of lines) {
+    if (!isCount(line) || line <= previous || line > lastLine) return false;
+    previous = line;
+  }
+  return true;
+}
+
+export function structureCodeLines(value: CodeStructure): readonly number[] | undefined {
+  return value.codeLines ?? value.clones?.codeLines;
+}
 
 /** A repository provider returns at most one structure per input path. */
 export const codeStructures: DataContract<readonly CodeStructure[]> = {

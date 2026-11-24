@@ -15,6 +15,7 @@ export interface QualitySummary {
     readonly effortMinutes: number;
     readonly debtRatio: number | null;
     readonly grade: Grade | null;
+    readonly gradeCoverage?: { readonly measuredFiles: number; readonly totalFiles: number };
   } | null;
 }
 
@@ -28,35 +29,61 @@ interface DebtModel {
 export const debtModel: DebtModel = { name: 'basic-cocomo-organic', scale: 2.4, exponent: 1.05, minutesPerPersonMonth: 9600 };
 
 export function qualitySummary(report: Report): QualitySummary {
-  const totals = new Map<string, number>();
-  let codeMeasuredFiles = 0;
-  let duplicationMeasuredFiles = 0;
-  for (const item of report.measurements) {
-    if (item.target !== 'file' || item.value === null || !Number.isSafeInteger(item.value) || item.value < 0) continue;
-    const id = canonicalMetricId(item.definition);
-    if (id === definitions.codeLines) codeMeasuredFiles++;
-    if (id === definitions.duplicatedLines) duplicationMeasuredFiles++;
-    totals.set(id, (totals.get(id) ?? 0) + item.value);
-  }
-  const codeLines = totals.get(definitions.codeLines) ?? null;
-  const duplicatedLines = totals.get(definitions.duplicatedLines) ?? null;
-  const smells = report.findings?.filter(finding => finding.category === 'duplication' || finding.category === 'structure');
-  const effortMinutes = smells?.reduce((sum, finding) => sum + (finding.effortMinutes ?? 0), 0) ?? 0;
-  const hasCompleteData = codeMeasuredFiles === report.scope.files && duplicationMeasuredFiles === report.scope.files;
-  const savedConfig = report.appliedConfig.maintainability;
-  const model = isRecord(savedConfig) ? readDebtModel(savedConfig.debtModel) : null;
-  const debtRatio = !hasCompleteData || codeLines === null || model === null || smells?.some(finding => finding.effortMinutes === undefined)
-    ? null : technicalDebtRatio(effortMinutes, codeLines, model);
+  const files = collectFileMeasures(report);
+  const totalFiles = report.scope.files;
+  const completeTotal = (id: string) => totalMeasured(files.get(id), totalFiles);
+  const codeLines = completeTotal(definitions.codeLines);
+  const duplicatedLines = completeTotal(definitions.duplicatedLines);
   return {
     codeLines,
-    comments: totals.get(definitions.comments) ?? null,
-    classes: totals.get(definitions.classes) ?? null,
-    cognitiveComplexity: totals.get(definitions.cognitiveComplexity) ?? null,
-    duplication: duplicatedLines === null || codeLines === null || codeMeasuredFiles !== duplicationMeasuredFiles
-      ? null : { duplicatedLines, codeLines, ratio: codeLines === 0 || duplicatedLines > codeLines ? null : duplicatedLines / codeLines },
-    maintainability: smells === undefined || codeLines === null ? null : { smells: smells.length, effortMinutes, debtRatio,
-      grade: debtRatio === null ? null : maintainabilityGrade(debtRatio) },
+    comments: completeTotal(definitions.comments),
+    classes: completeTotal(definitions.classes),
+    cognitiveComplexity: completeTotal(definitions.cognitiveComplexity),
+    duplication: duplicatedLines === null || codeLines === null ? null
+      : { duplicatedLines, codeLines, ratio: codeLines === 0 || duplicatedLines > codeLines ? null : duplicatedLines / codeLines },
+    maintainability: gradeMeasuredFiles(report, files.get(definitions.codeLines), files.get(definitions.duplicatedLines)),
   };
+}
+
+function collectFileMeasures(report: Report): Map<string, Map<string, number>> {
+  const files = new Map<string, Map<string, number>>();
+  for (const { target, path, definition, value } of report.measurements) {
+    if (target !== 'file' || path === undefined || value === null || !Number.isSafeInteger(value) || value < 0) continue;
+    const id = canonicalMetricId(definition);
+    let measured = files.get(id);
+    if (!measured) files.set(id, measured = new Map());
+    measured.set(path, (measured.get(path) ?? 0) + value);
+  }
+  return files;
+}
+
+function totalMeasured(values: ReadonlyMap<string, number> | undefined, expected: number): number | null {
+  if (values?.size !== expected) return null;
+  let total = 0;
+  for (const value of values.values()) total += value;
+  return total;
+}
+
+function gradeMeasuredFiles(report: Report, code: ReadonlyMap<string, number> | undefined,
+  duplication: ReadonlyMap<string, number> | undefined): QualitySummary['maintainability'] {
+  if (report.findings === undefined || code === undefined) return null;
+  const skipped = new Set(report.ruleSkips?.filter(({ plugin }) => plugin === 'maintainability' || plugin === 'duplication')
+    .map(({ path }) => path));
+  const measured = new Map([...code].filter(([path]) => duplication?.has(path) && !skipped.has(path)));
+  const smells = report.findings.filter(finding => finding.category === 'duplication' || finding.category === 'structure');
+  const totalFiles = report.scope.files;
+  const complete = measured.size === totalFiles;
+  const eligible = complete ? smells : smells.filter(({ path }) => path !== undefined && measured.has(path));
+  const effortMinutes = eligible.reduce((sum, finding) => sum + (finding.effortMinutes ?? 0), 0);
+  const config = report.appliedConfig.maintainability;
+  const model = isRecord(config) ? readDebtModel(config.debtModel) : null;
+  const sized = totalMeasured(measured, measured.size);
+  const canGrade = complete || (report.scope.parsed === totalFiles
+    && measured.size + skipped.size === totalFiles);
+  const debtRatio = !canGrade || !sized || model === null || eligible.some(finding => finding.effortMinutes === undefined)
+    ? null : technicalDebtRatio(effortMinutes, sized, model);
+  return { smells: smells.length, effortMinutes, debtRatio, grade: debtRatio === null ? null : maintainabilityGrade(debtRatio),
+    ...(!complete && debtRatio !== null ? { gradeCoverage: { measuredFiles: measured.size, totalFiles } } : {}) };
 }
 
 export function technicalDebtRatio(effortMinutes: number, codeLines: number, model = debtModel): number | null {
