@@ -1,3 +1,13 @@
+## [0.8.0](https://github.com/idleware/repometry/compare/v0.7.0...v0.8.0) (2026-11-24)
+
+### Features
+* feat: store each file's results once across commits ([d8c0871](https://github.com/idleware/repometry/commit/d8c08712fb0b738fd8bedd0fbf5dd931f204896c))
+* feat: analyse go and python with the local toolchain ([f6eef25](https://github.com/idleware/repometry/commit/f6eef25cca7c14f7a0ff9c4643f1489a5b4538ef))
+
+### Fixes & improvements
+* perf: reuse unchanged files' results when analysing history ([f40e6dd](https://github.com/idleware/repometry/commit/f40e6dd393d1b8b0b25321e2cc42eb6db8a4a0c4))
+* refactor: keep every function within the complexity target ([4c06f1b](https://github.com/idleware/repometry/commit/4c06f1bbfe327305c0dddcb62494b79034d396f9))
+
 ## [0.7.0](https://github.com/idleware/repometry/compare/v0.6.2...v0.7.0) (2026-11-24)
 
 ### Features
