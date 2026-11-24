@@ -50,7 +50,10 @@ function identity(profile) {
     section.append(facts);
     return section;
 }
-/** The languages the plugins claim, each with the patterns of the files it reads; an older inspection did not record them. */
+/**
+ * The languages the plugins claim, each with the patterns of the files it reads; an older inspection did not record
+ * them. A language whose tool could not run says why, e.g. "go not found on PATH": its files were not analysed.
+ */
 function claims(languages) {
     if (!languages)
         return none('Not recorded for this inspection');
@@ -59,7 +62,11 @@ function claims(languages) {
     const list = element('ul', 'profile-claims');
     list.append(...languages.map(language => {
         const item = element('li');
-        item.append(element('span', 'profile-claim', language.label), chips([...language.extensions.map(extension => `**/*${extension}`), ...language.globs]));
+        const patterns = element('div', 'profile-claim-patterns');
+        patterns.append(chips([...language.extensions.map(extension => `**/*${extension}`), ...language.globs]));
+        if (language.unavailableReason)
+            patterns.append(none(`Not analysed: ${language.unavailableReason}`));
+        item.append(element('span', 'profile-claim', language.label), patterns);
         return item;
     }));
     return list;

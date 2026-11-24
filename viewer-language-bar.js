@@ -27,6 +27,10 @@ export function toggleLanguage(clauses, language) {
         return clauses.filter(other => other.kind !== clause.kind);
     return clauses.filter(other => !(other.kind === 'lang' && other.value.toLowerCase() === language.toLowerCase()));
 }
+/** A share too small to round to 0.1% still reads as present, not as 0%. */
+export function shareText(ratio) {
+    return ratio > 0 && ratio < 0.0005 ? `<${percent(0.001)}` : percent(ratio);
+}
 function chip(language, share, color, pressed) {
     const category = categories.get(language);
     const toggle = element('button', category ? `fx-language ${category.className}` : 'fx-language');
@@ -62,7 +66,7 @@ export function renderLanguages(container, files, clauses, set) {
         segment.style.flexGrow = String(weight);
         segment.style.background = color;
         bar.append(segment);
-        const toggle = chip(language, percent(weight / total), color, pressed);
+        const toggle = chip(language, shareText(weight / total), color, pressed);
         toggle.addEventListener('click', () => set(toggleLanguage(clauses, language)));
         legend.append(toggle);
     }
