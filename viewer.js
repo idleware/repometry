@@ -102,13 +102,7 @@ function start(data) {
             updateTabs(page, row.findingCount, row.diagnosticCount);
         else if (cachedDetail)
             updateDetailsTabs(page, cachedDetail);
-        if (pullReviewCount !== undefined)
-            showTab('pulls', pullReviewCount > 0 || page === 'pulls');
-        else
-            void loadPulls().then(records => {
-                if (version === revision)
-                    showTab('pulls', Boolean(records?.length) || page === 'pulls');
-            });
+        showTab('pulls', pullReviewCount > 0 || page === 'pulls');
         void detail?.then(asset => {
             if (!asset || version !== revision)
                 return;

@@ -50,11 +50,25 @@ function identity(profile) {
     section.append(facts);
     return section;
 }
+/** The languages the plugins claim, each with the patterns of the files it reads; an older inspection did not record them. */
+function claims(languages) {
+    if (!languages)
+        return none('Not recorded for this inspection');
+    if (!languages.length)
+        return none('No language plugin');
+    const list = element('ul', 'profile-claims');
+    list.append(...languages.map(language => {
+        const item = element('li');
+        item.append(element('span', 'profile-claim', language.label), chips([...language.extensions.map(extension => `**/*${extension}`), ...language.globs]));
+        return item;
+    }));
+    return list;
+}
 /** What the inspection reads and what it leaves out, as the patterns the profile states. */
 function files(profile) {
     const section = block('Files');
     const facts = element('dl', 'profile-facts');
-    facts.append(row('Included', profile.extensions.length ? chips(profile.extensions.map(extension => `**/*${extension}`)) : none('Every file')));
+    facts.append(row('Included', claims(profile.languages)));
     facts.append(row('Excluded paths', profile.excludedPaths.length ? chips(profile.excludedPaths) : none()));
     facts.append(row('Excluded directories', profile.excludedDirectories.length
         ? chips(profile.excludedDirectories.map(directory => `**/${directory}/`)) : none()));

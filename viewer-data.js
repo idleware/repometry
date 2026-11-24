@@ -20,7 +20,7 @@ export async function loadViewerData(mode) {
                 exclusions: null, boundary: commit.profileBoundary ?? null, security: commit.counts?.security,
             }])),
         counts,
-        pullReviewCount: summary.pullReviewCount,
+        pullReviewCount: summary.pullReviewCount ?? 0,
         ...(Array.isArray(summary.metrics) ? { metrics: summary.metrics } : {}),
         ...(() => {
             const sources = sourceLocator(summary.sources);

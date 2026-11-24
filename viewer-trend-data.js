@@ -54,7 +54,7 @@ export function trendValue(data, report, metric) {
  */
 export function availableViews(data) {
     const has = (metric) => data.reports.some(report => trendValue(data, report, metric) !== null);
-    const shown = (view) => view === 'diff-coverage' ? (data.reviews ?? 0) > 0 : has(view === 'debt-changes' ? 'effort' : view);
+    const shown = (view) => view === 'diff-coverage' ? data.reviews > 0 : has(view === 'debt-changes' ? 'effort' : view);
     return groups().flatMap(([, views]) => views).filter(shown);
 }
 /** The whole curve by default; only a very long history opens on its last hundred inspections. */

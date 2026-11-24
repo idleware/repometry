@@ -1,4 +1,4 @@
-import { count, parentPath } from './viewer-dom.js';
+import { count, inside, parentPath } from './viewer-dom.js';
 import { compareEntries } from './viewer-file-figures.js';
 import { pageSize } from './viewer-inspection.js';
 import { aggregate } from './viewer-totals.js';
@@ -13,18 +13,20 @@ const fileRow = (entry) => ({ entry, kind: 'file' });
 export function componentRows(components, files, filtering) {
     const chosen = new Map(files.map(entry => [entry.path, entry]));
     const rows = components.map(({ component, paths }) => ({
-        entry: aggregate(component.name, paths.flatMap(path => chosen.get(path) ?? [])), kind: 'component'
+        entry: aggregate(component.name, paths.flatMap(path => chosen.get(path) ?? [])), kind: 'component',
+        files: paths.flatMap(path => chosen.get(path) ?? [])
     }))
         .filter(row => !filtering || row.entry.files > 0);
     const assigned = new Set(components.flatMap(({ paths }) => paths));
     const rest = files.filter(entry => !assigned.has(entry.path));
     if (rest.length)
-        rows.push({ entry: aggregate(notInComponent, rest), kind: 'component' });
+        rows.push({ entry: aggregate(notInComponent, rest), kind: 'component', files: rest });
     return rows;
 }
 /** A folder's own listing: the folders right under it with their recorded totals, then its files. */
 export function folderRows(directories, files, directory) {
-    return [...directories.filter(entry => entry.path && parentPath(entry.path) === directory).map(folderRow),
+    const under = (entry) => ({ ...folderRow(entry), files: files.filter(file => inside(file.path, entry.path)) });
+    return [...directories.filter(entry => entry.path && parentPath(entry.path) === directory).map(under),
         ...files.filter(entry => parentPath(entry.path) === directory).map(fileRow)];
 }
 /** Filtered folders hold only what passes the query, and their totals count only that. */
@@ -42,7 +44,7 @@ export function filteredFolderRows(files, directory) {
             below.set(folder, [...below.get(folder) ?? [], entry]);
         }
     }
-    return [...[...below].map(([path, entries]) => folderRow(aggregate(path, entries))), ...here.map(fileRow)];
+    return [...[...below].map(([path, entries]) => ({ ...folderRow(aggregate(path, entries)), files: entries })), ...here.map(fileRow)];
 }
 /** Sorts in place by a column; sorted by path, folders come before files. */
 export function sortRows(rows, byPath, value, ascending) {

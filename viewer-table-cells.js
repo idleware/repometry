@@ -1,6 +1,7 @@
 import { basename, count, element, link, parentPath } from './viewer-dom.js';
 import { duplicationContext } from './viewer-file-figures.js';
 import { isLockfile, languageColor, languageOf } from './viewer-languages.js';
+import { partialNote } from './viewer-totals.js';
 const icons = { file: 'fx-file-icon', folder: 'fx-folder-icon', component: 'fx-component-icon' };
 /** In the flat list the folder is context and the file name is the subject; a long folder wraps after a slash. */
 function flatLabel(path) {
@@ -38,12 +39,17 @@ function entryIcon(row) {
         icon.style.color = isLockfile(row.entry.path) ? 'var(--lockfile)' : languageColor(languageOf(row.entry));
     return icon;
 }
-function cell(entry, column) {
+function cell(entry, column, files) {
     const result = element('td', 'numeric', column.display(entry));
     if (column.value(entry) === 0)
         result.classList.add('fx-zero');
     if (column.label === 'Duplication')
         result.title = duplicationContext(entry) ?? '';
+    const partial = files && column.present ? partialNote(files, column.present) : undefined;
+    if (partial) {
+        result.classList.add('fx-partial');
+        result.title = partial;
+    }
     return result;
 }
 /** One row of the Metrics table: its name, with what it is and how many files it holds, then its figures. */
@@ -65,7 +71,7 @@ export function metricsRow(row, context, open) {
         name.append(element('span', 'fx-entry-tag', 'Lockfile'));
     if (kind !== 'file' && 'files' in entry)
         name.append(element('span', 'fx-entry-count', count(entry.files)));
-    result.append(name, ...context.columns.map(column => cell(entry, column)));
+    result.append(name, ...context.columns.map(column => cell(entry, column, row.files)));
     return result;
 }
 function counted(total, one, many) {

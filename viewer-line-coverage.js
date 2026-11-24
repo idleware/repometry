@@ -90,32 +90,19 @@ export function lineReadings(coverage) {
         readings.set(line, callReading(counts));
     return readings;
 }
-/** The last line of the gap of codeless, unmeasured lines that starts at `line`. */
-function gapEnd(states, codeless, line) {
-    let end = line;
-    while (end < codeless.length && !states.has(end + 1) && codeless[end])
-        end += 1;
-    return end;
-}
 /**
- * The tint a gap of blank and comment lines takes so the strip has no breaks: the state of the measured line above it,
- * which the gap closes, or for a gap at the file's start, of the line below. A gap beside a line that was not measured
- * takes its other neighbour, and one with no measured neighbour stays plain.
+ * The tint the lines without a coverage record take so the strip has no breaks. Coverage records only code, so such a
+ * line is a blank, a comment or a declaration no test can run: between two records it takes the state above, the block
+ * it closes; before the first record, the state below. After the last record the strip ends.
  */
-export function bridgeStates(states, codeless) {
+export function bridgeStates(states) {
+    const lines = [...states.keys()].sort((a, b) => a - b);
     const bridged = new Map();
-    let line = 1;
-    while (line <= codeless.length) {
-        if (states.has(line) || !codeless[line - 1]) {
-            line += 1;
-            continue;
-        }
-        const end = gapEnd(states, codeless, line);
-        const state = states.get(line - 1) ?? states.get(end + 1);
-        if (state)
-            for (let at = line; at <= end; at++)
-                bridged.set(at, state);
-        line = end + 1;
-    }
+    const fill = (from, to, state) => { for (let at = from; at < to; at++)
+        bridged.set(at, state); };
+    if (lines.length)
+        fill(1, lines[0], states.get(lines[0]));
+    for (const [index, line] of lines.slice(0, -1).entries())
+        fill(line + 1, lines[index + 1], states.get(line));
     return bridged;
 }

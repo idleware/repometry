@@ -1,6 +1,6 @@
 import { renderSunburst } from './viewer-code-map.js';
 import { byId, count, notice, parentPath, quantity } from './viewer-dom.js';
-import { hotspotScore } from './viewer-file-figures.js';
+import { hotspotScore, scorePeak } from './viewer-file-figures.js';
 import { securityCategories } from './viewer-files.js';
 import { band, bandLimits } from './viewer-map-scale.js';
 import { mapStub } from './viewer-map-shape.js';
@@ -88,7 +88,7 @@ export function renderOverviewHotspots(details, sha, area, scanned) {
     overviewMap(details, sha, { metric });
     allLink(href({ page: 'hotspots', sha }), true);
     const top = rankedFiles(details, metric);
-    const peak = Math.max(1, ...top.map(item => item.value ?? 0));
+    const peak = scorePeak(top.map(item => item.value));
     const rows = top.map(({ path, value, entry }) => {
         const score = document.createElement('span');
         score.className = 'chip';

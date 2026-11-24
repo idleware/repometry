@@ -7,7 +7,7 @@ import { firstSortAscending, format } from './viewer-metric-format.js';
 import { labelOf, pluginMetrics, size } from './viewer-metrics.js';
 /** A column of counts, shown with a dash where the file has none. */
 function counted(label, read, extra = {}) {
-    return { label, value: entry => read(entry) ?? null, display: entry => count(read(entry)), ...extra };
+    return { label, value: entry => read(entry) ?? null, display: entry => count(read(entry)), present: entry => read(entry) != null, ...extra };
 }
 /** Offered where the folder's totals have this quality measure. */
 function hasQuality(key) {
@@ -23,12 +23,15 @@ const builtinColumns = [
     { label: 'Size', value: entry => entry.bytes ?? null, display: entry => size(entry.bytes),
         available: directory => directory?.bytes !== undefined, defaultVisible: (_, scope) => scope.sized },
     counted('Functions', entry => entry.functions, { defaultVisible: hidden }),
-    counted(labelOf('complexity'), entry => entry.complexity?.maximum),
+    // A file measured without functions has no peak, and is measured all the same.
+    counted(labelOf('complexity'), entry => entry.complexity?.maximum, { present: entry => entry.complexity != null }),
     counted(labelOf('cognitive'), entry => entry.quality?.cognitiveComplexity, { available: hasQuality('cognitiveComplexity') }),
     { label: labelOf('coverage'), value: coverageRatio, display: coverageText, available: directory => !directory || coverageRatio(directory) !== null },
-    { label: 'Duplication', value: duplicationRatio, display: duplicationText, available: hasQuality('duplication') },
+    { label: 'Duplication', value: duplicationRatio, display: duplicationText, available: hasQuality('duplication'),
+        present: entry => entry.quality?.duplication !== undefined },
     { label: labelOf('effort'), value: entry => entry.quality?.maintainability?.effortMinutes ?? null,
-        display: entry => effortText(entry.quality?.maintainability?.effortMinutes), available: hasQuality('maintainability') },
+        display: entry => effortText(entry.quality?.maintainability?.effortMinutes), available: hasQuality('maintainability'),
+        present: entry => entry.quality?.maintainability !== undefined },
     counted('Git changes', entry => entry.quality?.churn, { available: hasQuality('churn'), defaultVisible: hidden }),
     counted('Diagnostics', entry => entry.diagnosticCount, { defaultVisible: hidden }),
 ];
@@ -41,6 +44,8 @@ function pluginColumns(specs) {
         available: () => measured(spec.descriptor),
         defaultVisible: () => spec.column,
         ascending: firstSortAscending(spec),
+        // A ratio is no sum: a file without branches has no branch coverage, and the folder's ratio is complete.
+        ...spec.descriptor.unit === 'ratio' ? {} : { present: (entry) => localValue(entry, spec) !== null },
     }));
 }
 /**

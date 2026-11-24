@@ -1,5 +1,5 @@
 import { element } from './viewer-dom.js';
-import { coverageGrade, formatMetric } from './viewer-metrics.js';
+import { coverageGrade, formatMetric, gradeScope } from './viewer-metrics.js';
 import { groups, trendValue, viewLabel, viewMetric } from './viewer-trend-data.js';
 function gradeLabel(text, grade) {
     const label = element('span', 'trend-reading trend-reading-grade', text);
@@ -43,7 +43,8 @@ function groupBlock({ data, selected, current, period }, group, present) {
         title.append(reading);
     const list = element('ul');
     list.append(...present.map(view => seriesLink(data, selected, view, view === current, period)));
-    block.append(title, list);
+    const scope = group === 'Maintainability' ? gradeScope(data.quality[selected.sha]) : undefined;
+    block.append(title, ...scope ? [element('p', 'trend-group-note', scope)] : [], list);
     return block;
 }
 /** The series list, and a select with the same series for a narrow screen. */

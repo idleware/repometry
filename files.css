@@ -553,6 +553,10 @@ code.fx-function-name { font-size: .75rem; color: var(--secondary); }
 .profile-facts dt { color: var(--secondary); font-size: .875rem; }
 .profile-facts dd { margin: 0; }
 .profile-facts code { font-size: .8125rem; }
+/* Each language on its own line: its name, then the patterns of the files its plugin reads. */
+.profile-claims { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.profile-claims > li { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: .75rem; align-items: baseline; }
+.profile-claim { font-size: .875rem; color: var(--ink); }
 .profile-chips { display: flex; flex-wrap: wrap; gap: .375rem; margin: 0; padding: 0; list-style: none; }
 .profile-chips li { padding: .0625rem .5rem; border-radius: 5px; background: var(--surface-2); color: var(--ink); font: .8125rem/1.6 var(--mono); overflow-wrap: anywhere; }
 .profile-rule { font-size: .8125rem; font-weight: 600; }
@@ -607,3 +611,5 @@ code.fx-function-name { font-size: .75rem; color: var(--secondary); }
 .fx-source-meta .fx-source-forge:hover { color: var(--accent-strong); }
 .fx-occurrence-away { padding: .375rem 0 0; font-size: .8125rem; }
 .fx-occurrence-away .fx-source-forge { color: var(--secondary); }
+/* A total over files that do not all carry the measure: the title says in how many it was measured. */
+.fx-table .fx-partial { text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; }

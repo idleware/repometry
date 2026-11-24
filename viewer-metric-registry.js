@@ -27,7 +27,6 @@ const reserved = new Set(['lang', 'language', 'component', 'path', 'in', 'has', 
     'coverable-lines', 'covered-lines', 'uncovered-lines', 'security-high', 'security-medium', 'security-low',
     ...Object.values(builtinKeys)]);
 /** Curated groups first, in this order; groups named by plugins follow in catalog order. */
-export const curatedGroups = ['Maintainability', 'Coverage', 'Security', 'Size'];
 /** The metrics the viewer draws from their typed fields; a Repometry metric it has no code for goes by its descriptor. */
 export function isBuiltin(descriptor) {
     return handDrawn.has(descriptor.id);
@@ -79,14 +78,6 @@ export function byKey(specs, index) {
             keys.set(spec.key, spec);
     }
     return keys;
-}
-/** The Trends groups: the curated ones in their order, then each plugin's, with the specs that have a trend. */
-export function trendGroups(specs) {
-    const groups = new Map(curatedGroups.map(group => [group, []]));
-    for (const spec of specs)
-        if (spec.trend)
-            groups.set(spec.group, [...groups.get(spec.group) ?? [], spec]);
-    return [...groups].filter(([, members]) => members.length > 0);
 }
 /** The id whose presence says a metric was measured: a ratio is measured where its denominator is. */
 function measuredId(spec) {

@@ -1,6 +1,6 @@
 import { byId, count, percent, quantity } from './viewer-dom.js';
 import { codeSmellCategories, securityCategories } from './viewer-files.js';
-import { coverageGrade, formatMetric, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
+import { coverageGrade, formatMetric, gradeScope, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
 import { href } from './viewer-route.js';
 /** Coverage kinds beyond lines, by their registry keys, in the words the Overview card uses for them. */
 const coverageKinds = [['branch-coverage', 'Branches'], ['function-coverage', 'Functions']];
@@ -86,6 +86,9 @@ export function renderQuality(report, quality) {
         detailText('maintainability-detail', 'Not measured');
     else
         detailText('maintainability-detail', quantity(maintainability.smells, 'code smell'), maintainability.smells > 0 ? smellsLink(report.sha) : undefined);
+    const scope = byId('maintainability-scope');
+    scope.textContent = gradeScope(quality) ?? '';
+    scope.hidden = !scope.textContent;
 }
 /** The words of the five steps, as every grade has them: clear A, low B, medium C, high D, critical F. */
 const severities = ['clear', 'low', 'medium', 'high', 'critical'];

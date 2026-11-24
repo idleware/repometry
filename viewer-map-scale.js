@@ -96,7 +96,7 @@ export function relativePeaks(entries) {
     const level = (path, folder) => folder ? `folder:${path.split('/').length}` : 'file';
     const peaks = new Map();
     for (const { path, folder, score } of entries)
-        peaks.set(level(path, folder), Math.max(peaks.get(level(path, folder)) ?? 1, score));
+        peaks.set(level(path, folder), Math.max(peaks.get(level(path, folder)) ?? 1, score ?? 0));
     return (path, folder) => peaks.get(level(path, folder)) ?? 1;
 }
 function swatches() {

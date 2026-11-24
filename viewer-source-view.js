@@ -2,7 +2,8 @@
 // on the lines they describe, or the tests' coverage in the gutter; and the short excerpt a finding shows.
 import { element } from './viewer-dom.js';
 import { bridgeStates, hitLabel } from './viewer-line-coverage.js';
-import { codeless, highlighter, runNodes, tokenizer } from './viewer-tokenizer.js';
+import { languageIdOf } from './viewer-languages.js';
+import { highlighter, runNodes, tokenizer } from './viewer-tokenizer.js';
 function sourceLines(text) {
     return text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
 }
@@ -18,11 +19,11 @@ function complexityBadge(start) {
  * called; a miss's red says it. Nothing runs on a blank or comment line: where a tool counts one anyway, or it sits
  * inside a run of one state, it keeps the strip's tint and says nothing.
  */
-function coverageCell(own, bridged, runs) {
+function coverageCell(own, bridged) {
     const state = own?.state ?? bridged;
     if (!state)
         return [];
-    if (!own || codeless(runs)) {
+    if (!own) {
         const silent = element('span', `src-cov src-cov-mark-${state}`);
         silent.setAttribute('aria-hidden', 'true');
         return [silent];
@@ -42,10 +43,10 @@ function noteBox(note) {
 export function renderSource(container, text, options) {
     const lines = sourceLines(text);
     // Tokenized up front, in order, since a comment's state carries from line to line.
-    const tokenize = tokenizer(options.path);
+    const tokenize = tokenizer(languageIdOf(options.path));
     const tokens = lines.map(line => tokenize(line));
     const states = new Map([...options.coverage ?? []].map(([line, reading]) => [line, reading.state]));
-    const bridged = options.coverage ? bridgeStates(states, tokens.map(codeless)) : new Map();
+    const bridged = bridgeStates(states);
     const starts = new Map(options.functions.map(entry => [entry.line, entry]));
     const notes = new Map();
     for (const note of options.notes)
@@ -73,7 +74,7 @@ export function renderSource(container, text, options) {
         const start = starts.get(number);
         if (start)
             mark.append(complexityBadge(start));
-        mark.append(...coverageCell(options.coverage?.get(number), bridged.get(number), runs));
+        mark.append(...coverageCell(options.coverage?.get(number), bridged.get(number)));
         const anchor = element('a', 'src-number', String(number));
         anchor.href = `#L${number}`;
         anchor.addEventListener('click', event => {

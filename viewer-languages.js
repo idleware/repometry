@@ -1,13 +1,20 @@
-/** The inspection's languages, which its files point to by index, and the colour of each by its name. */
+/** The inspection's languages, which its files point to by index, the colour of each by its name, and each file's id. */
 let languages = [];
 let colors = new Map();
+let ids = new Map();
 function nameOf(language) {
     return language.label ?? language.id;
 }
 /** Takes the languages of the inspection on screen: their names, and the colours the plugins and the catalog give them. */
-export function useLanguages(list) {
-    languages = list ?? [];
+export function useLanguages(metrics) {
+    languages = metrics.languages ?? [];
     colors = new Map(languages.flatMap(language => language.color ? [[nameOf(language), language.color]] : []));
+    ids = new Map(metrics.files.flatMap(file => file.language === undefined || !languages[file.language] ? []
+        : [[file.path, languages[file.language].id]]));
+}
+/** The id of a file's language, as the inspection gives it: what decides how its source is read. */
+export function languageIdOf(path) {
+    return ids.get(path);
 }
 /**
  * Dependency lockfiles, by exact file name. They are generated, often the largest files in a repository, and no
@@ -36,17 +43,17 @@ export function sized(files) {
 const weights = {
     bytes: entry => entry.bytes,
     lines: entry => entry.lines,
-    'code-lines': entry => entry.quality?.codeLines ?? entry.lines,
+    'code-lines': entry => entry.quality?.codeLines,
 };
 /**
  * Size in bytes when every file has it: one measure for code, lockfiles and ignored files alike, untouched by
- * formatting. Without sizes, physical lines where any file is only counted (the one line measure all files have),
- * otherwise code lines.
+ * formatting. Without sizes, code lines where every file was read and has them, otherwise physical lines, the one line
+ * measure all files have: one bar never adds the two.
  */
 function shareMeasure(files) {
     if (sized(files))
         return 'bytes';
-    return files.some(entry => entry.analysed === false || isLockfile(entry.path)) ? 'lines' : 'code-lines';
+    return files.every(entry => entry.analysed !== false && entry.quality?.codeLines !== undefined) ? 'code-lines' : 'lines';
 }
 /** Where a file's weight goes on the bar: its language, or one of the two categories. */
 function shareOf(entry) {

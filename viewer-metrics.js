@@ -120,6 +120,11 @@ const readers = {
     'security-medium': (_, __, context) => context?.security?.medium,
     'security-low': (_, __, context) => context?.security?.low,
 };
+/** Where the maintainability grade covers only some files, as in a repository some plugins cannot measure, it says so. */
+export function gradeScope(quality) {
+    const scope = quality?.maintainability?.gradeCoverage;
+    return scope && scope.measuredFiles < scope.totalFiles ? `Graded on ${count(scope.measuredFiles)} of ${count(scope.totalFiles)} files` : undefined;
+}
 /** A metric's value at a commit; null where the commit has no such measurement. */
 export function metricValue(report, metric, quality, context) {
     const spec = pluginSpec(metric);

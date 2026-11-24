@@ -9,7 +9,7 @@ let local = { catalog: undefined, index: new Map() };
 export function useDetails(details) {
     const catalog = details.metrics.catalog;
     extendCatalog(catalog);
-    useLanguages(details.metrics.languages);
+    useLanguages(details.metrics);
     local = { catalog, index: catalogIndex(catalog) };
     usePluginMeasures(pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && measured(spec.descriptor)).map(spec => [spec.key, {
             label: spec.label, percent: spec.descriptor.unit === 'ratio', minutes: spec.descriptor.unit === 'minutes',

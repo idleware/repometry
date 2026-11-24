@@ -32,7 +32,8 @@ export function effortText(minutes) {
     return minutes == null ? '—' : duration(minutes);
 }
 const builtinScores = {
-    complexity: entry => entry.complexity?.maximum,
+    // A file measured without functions has nothing to score; one with no record was not measured.
+    complexity: entry => entry.complexity && (entry.complexity.maximum ?? 0),
     cognitive: entry => entry.quality?.cognitiveComplexity,
     duplication: entry => entry.quality?.duplication?.duplicatedLines,
     churn: entry => entry.quality?.churn,
@@ -45,6 +46,10 @@ export function hotspotScore(entry, metric) {
         return localValue(entry, plugin);
     // A name that is neither a plugin's nor one of the rankings reads as uncovered lines, the last of them.
     return (builtinScores[metric] ?? builtinScores.missedLines)(entry) ?? null;
+}
+/** The top of a ranking's bars: its highest measured score, and 1 where none is above zero. */
+export function scorePeak(scores) {
+    return scores.reduce((max, score) => score === null ? max : Math.max(max, score), 0) || 1;
 }
 /** Orders two entries by a column, unmeasured last whichever way the column sorts, and by path between equals. */
 export function compareEntries(a, b, measurement, ascending) {
