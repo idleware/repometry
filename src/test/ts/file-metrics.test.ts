@@ -45,7 +45,7 @@ test('file metrics roll up known counts and distinguish uncovered from missing f
     complexity: { sum: 16, maximum: 7, measuredFunctions: 3 }, diagnosticCount: 1,
   });
   assert.deepEqual(output.files.find(file => file.path === 'src/bad.js'), {
-    path: 'src/bad.js', lines: null, functions: null, complexity: null, lineCoverage: null, diagnosticCount: 1,
+    path: 'src/bad.js', lines: null, functions: null, complexity: null, lineCoverage: null, diagnosticCount: 1, language: 0,
   });
   assert.equal(output.files.find(file => file.path === 'src/c.js')?.lineCoverage, null);
   assert.deepEqual(output.files.find(file => file.path === 'src/nested/b.js')?.lineCoverage, { covered: 0, total: 5 });

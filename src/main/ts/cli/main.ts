@@ -255,7 +255,7 @@ async function show(input: Invocation) {
       || !('code' in error) || error.code !== 'ENOENT') throw error;
     report = await store.reader.read({ kind: 'working-tree', id: ref });
   }
-  print(input.flag('files') ? fileMetrics(report) : report);
+  print(input.flag('files') ? fileMetrics(report, defaultLanguages) : report);
 }
 
 async function compare(input: Invocation) {

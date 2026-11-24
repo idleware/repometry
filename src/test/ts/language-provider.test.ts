@@ -146,6 +146,10 @@ async function inspectFixtureLanguage(t: TestContext, docker?: ToolRunner) {
   assert.deepEqual(metrics.languages?.find(language => language.id === 'toy'),
     { id: 'toy', label: 'Toy Language', color: '#123456', analysed: true });
   assert.equal(metrics.files.find(file => file.path === paths[0])?.provider, 'batch-fixture/read');
+  const projected = fileMetrics(report, { id: () => 'unknown',
+    catalog: [{ id: 'toy', label: 'Renamed Toy Language', color: '#ffffff' }] });
+  const index = projected.files.find(file => file.path === paths[0])?.language;
+  assert.equal(projected.languages?.[index!]?.label, 'Toy Language');
   assert.equal(compareInspections(report, report).metrics.physicalLines.delta, 0);
   const failed = { ...report, diagnostics: [...report.diagnostics,
     { operation: 'batch-fixture/read', path: paths[0], state: 'partial' as const, message: 'Parse issue' }] };

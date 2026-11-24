@@ -45,7 +45,7 @@ function entryAnchor(row: Row, context: RowContext, flat: boolean, open?: () => 
 function entryIcon(row: Row): HTMLElement {
   const icon = element('span', icons[row.kind]);
   icon.setAttribute('aria-hidden', 'true');
-  if (row.kind === 'file') icon.style.color = isLockfile(row.entry.path) ? 'var(--lockfile)' : languageColor(languageOf(row.entry.path));
+  if (row.kind === 'file') icon.style.color = isLockfile(row.entry.path) ? 'var(--lockfile)' : languageColor(languageOf(row.entry));
   return icon;
 }
 

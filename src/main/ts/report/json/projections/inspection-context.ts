@@ -15,25 +15,10 @@ export function inspectionProfileDigest(report: Report): string | undefined {
     ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => comparePaths(a, b))) : value)) : undefined;
 }
 
-/** Reports arrive in the same newest-first order as the public history. */
-export function inspectionHistory(reports: readonly Report[]): Record<string, InspectionContext> {
-  const entries = reports.filter(report => report.subject.kind === 'commit')
-    .map(report => ({ report, profile: readProfile(report.appliedConfig) }));
-  return Object.fromEntries(entries.map(({ report, profile }, index) => {
-    const previous = entries[index + 1];
-    let boundary: InspectionContext['boundary'] = null;
-    if (previous) {
-      if (!profile || !previous.profile) boundary = 'unavailable';
-      else if (!isDeepStrictEqual(profile.settings, previous.profile.settings)) boundary = 'changed';
-    }
-    const context: InspectionContext = {
-      exclusions: profile?.exclusions ?? null,
-      boundary,
-      ...scannerContext(report),
-      ...ignoreContext(report),
-    };
-    return [report.subject.id, context];
-  }));
+export function inspectionContext(report: Report): InspectionContext | undefined {
+  if (report.subject.kind !== 'commit') return undefined;
+  return { exclusions: readProfile(report.appliedConfig)?.exclusions ?? null, boundary: null,
+    ...scannerContext(report), ...ignoreContext(report) };
 }
 
 function ignoreContext(report: Report): Pick<InspectionContext, 'ignores'> {

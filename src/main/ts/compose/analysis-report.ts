@@ -11,7 +11,7 @@ import type { AnalysisInput } from '../core/usecases/inspect.js';
 import { parserDefaults } from '../plugins/language-js/babel-provider.js';
 import type { AnalysisResults } from './analysis-results.js';
 import type { AnalysisSources } from './analysis-sources.js';
-import { languageId } from './languages.js';
+import { fileTypeId } from '../core/model/file-types.js';
 
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
@@ -82,7 +82,7 @@ function reportInventory(snapshot: SourceSnapshot, sources: AnalysisSources, res
   }
   return [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, { lines, bytes }]) => {
     const provider = sources.providersByPath.get(path);
-    return { path, lines, ...(bytes === undefined ? {} : { bytes }), language: provider?.language(path) ?? languageId(path),
+    return { path, lines, ...(bytes === undefined ? {} : { bytes }), language: provider?.language(path) ?? fileTypeId(path),
       analysed: results.parsed.has(path) || results.inspected.has(path), ...(provider === undefined ? {} : { provider: provider.key }) };
   });
 }

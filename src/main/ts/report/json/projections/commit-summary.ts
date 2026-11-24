@@ -1,4 +1,5 @@
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
+import { isRecord } from '../../../core/model/plugin-data.js';
 import { qualitySummary } from '../../../core/model/quality-summary.js';
 import { securityCounts } from './security-summary.js';
 import { compareHistoryEntries } from '../wire/public-history-model.js';
@@ -110,7 +111,9 @@ export function historyEntry(report: Report): PublicHistoryEntry {
       lineCoverage = { covered: item.covered, total: item.total };
     }
   }
-  const committedAt = Date.parse(report.committedAt ?? '');
+  const window = report.appliedConfig.churnWindow;
+  const endingAt = isRecord(window) && typeof window.endingAt === 'string' ? window.endingAt : '';
+  const committedAt = Date.parse(report.committedAt ?? endingAt);
   const generatedAt = Date.parse(report.generatedAt);
   return { sha: report.subject.id, generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : '',
     ...(Number.isFinite(committedAt) ? { committedAt: new Date(committedAt).toISOString() } : {}), status: report.status,

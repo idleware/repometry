@@ -3,8 +3,8 @@ import { lcovLines } from '../../../core/model/line-coverage.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
 import { fileMetrics } from './file-metrics.js';
-import { inspectionHistory } from './inspection-context.js';
-import type { InspectionContext } from './inspection-context.js';
+import { inspectionContext } from './inspection-context.js';
+import type { LanguageLookup } from '../../../core/model/language.js';
 import type { ComplexFunction } from '../wire/public-history-model.js';
 import { componentFiles } from './components.js';
 import type { Component } from './components.js';
@@ -12,14 +12,18 @@ import type { Component } from './components.js';
 import type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
 export type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
 
-export function inspectionAsset(report: Report, components: readonly Component[] | undefined,
-  context = inspectionHistory([report])[report.subject.id]): InspectionAsset {
-  return { schema: 'urn:repometry:schema:viewer-inspection:1', sha: report.subject.id,
-    context, inspection: inspectionDetails(report, components) };
+export interface InspectionOptions {
+  readonly components?: readonly Component[];
+  readonly languages?: LanguageLookup;
 }
 
-export function inspectionDetails(report: Report, components: readonly Component[] = []): InspectionDetails {
-  const metrics = fileMetrics(report);
+export function inspectionAsset(report: Report, options?: InspectionOptions): InspectionAsset {
+  return { schema: 'urn:repometry:schema:viewer-inspection:1', sha: report.subject.id,
+    context: inspectionContext(report), inspection: inspectionDetails(report, options) };
+}
+
+export function inspectionDetails(report: Report, { components = [], languages }: InspectionOptions = {}): InspectionDetails {
+  const metrics = fileMetrics(report, languages);
   const lineCoverage = report.pluginData?.products[lcovLines.id]?.[0]?.value;
   const profile = profileSettings(report.appliedConfig);
   const ruleCatalog = report.pluginData?.rules.flatMap(({ plugin, rules }) => rules.map(rule => ({

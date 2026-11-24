@@ -40,7 +40,7 @@ function sourceName(path: string): HTMLElement {
 }
 
 function sourceMeta(file: Metrics): HTMLElement {
-  const language = languageOf(file.path);
+  const language = languageOf(file);
   const dot = element('span', 'fx-language-dot');
   dot.style.background = languageColor(language);
   const meta = element('span', 'fx-source-meta');

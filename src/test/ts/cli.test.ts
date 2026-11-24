@@ -203,6 +203,9 @@ test('export writes the whole store without working trees and refuses to overwri
       [definitions.complexity]: 'Cyclomatic complexity', 'private/rule': 'private-rule' },
     diagnostics: [{ operation: 'test', state: 'failed', message: 'private-diagnostic' }], measurements: [
       { definition: definitions.lines, target: 'file', path: 'private-filename.ts', value: 11 },
+      { definition: definitions.lines, target: 'file', path: 'examples/Dockerfile.dev.test', value: 4 },
+      { definition: definitions.lines, target: 'file', path: 'readme.md', value: 7 },
+      { definition: definitions.lines, target: 'file', path: 'deps/foo.qqx', value: 3 },
       { definition: definitions.complexity, target: 'function', path: 'private-filename.ts', name: 'private-function', line: 4, value: 3 },
       { definition: 'private/rule', target: 'file', path: 'private-filename.ts', value: 1 },
       { definition: definitions.coverage, target: 'repository', value: 0.5, covered: 2, total: 4 },
@@ -259,6 +262,14 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.ok(validInspection(unpackJson(JSON.parse(rawFirstDetail))), JSON.stringify(validInspection.errors));
   const detail = unpackJson(JSON.parse(rawFirstDetail)) as InspectionAsset;
   assert.deepEqual(detail.context?.exclusions?.paths, ['private-path/**']);
+  const { files, languages } = detail.inspection.metrics;
+  const display = (path: string) => languages?.[files.find(file => file.path === path)!.language!];
+  assert.deepEqual(display('private-filename.ts'), { id: 'typescript', label: 'TypeScript', color: '#3178c6', analysed: true });
+  assert.deepEqual(display('examples/Dockerfile.dev.test'), { id: 'dockerfile', label: 'Dockerfile', color: '#4f9a94', analysed: true });
+  assert.deepEqual(display('readme.md'), { id: 'markdown', label: 'Markdown', color: '#768390', analysed: true });
+  assert.deepEqual(display('deps/foo.qqx'), { id: 'qqx', label: 'QQX', analysed: true });
+  assert.ok(files.every(file => file.analysed === undefined));
+  assert.deepEqual(await store.read(report.subject), report);
   assert.deepEqual(detail.inspection.components?.map(entry => entry.paths), [['private-filename.ts'], []]);
   assert.equal(detail.inspection.diagnostics[0]?.message, 'private-diagnostic');
   await store.save({ ...report, generatedAt: '2026-11-21T00:00:00.000Z', diagnostics: [] });

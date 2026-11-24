@@ -2,6 +2,7 @@ import type { FileMetricsReport } from '../../json/wire/file-metrics-model.js';
 import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
 import type { MetricDescriptor } from '../../json/wire/summary-model.js';
 import { usePluginMeasures } from './viewer-filter.js';
+import { useLanguages } from './viewer-languages.js';
 import { catalogIndex, entryValue } from './viewer-metric-registry.js';
 import type { MetricSpec, Valued } from './viewer-metric-registry.js';
 import { extendCatalog, pluginMetrics } from './viewer-metrics.js';
@@ -69,6 +70,7 @@ let local: { readonly catalog: readonly MetricDescriptor[] | undefined; readonly
 export function useDetails(details: InspectionDetails): void {
   const catalog = details.metrics.catalog;
   extendCatalog(catalog);
+  useLanguages(details.metrics.languages);
   local = { catalog, index: catalogIndex(catalog) };
   usePluginMeasures(pluginMetrics().filter(spec => spec.descriptor.scope === 'file' && measured(spec.descriptor)).map(spec => [spec.key, {
     label: spec.label, percent: spec.descriptor.unit === 'ratio', minutes: spec.descriptor.unit === 'minutes',

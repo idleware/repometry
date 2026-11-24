@@ -11,7 +11,7 @@ import { comparePaths, digest } from '../../../core/model/snapshot.js';
 import type { Report, ReportReader } from '../../json/validation/report.js';
 import { pullReviewsSchema } from '../../json/wire/pull-review-model.js';
 import type { PullReview } from '../../json/wire/pull-review-model.js';
-import type { Component } from '../../json/projections/components.js';
+import type { InspectionOptions } from '../../json/projections/inspection-details.js';
 import { badges } from './badges.js';
 
 const appDirectory = new URL('../app/', import.meta.url);
@@ -37,9 +37,8 @@ async function listAssets(directory: URL, include: (name: string) => boolean) {
     .map(({ name }) => [name, new URL(encodeURIComponent(name), directory)] as const);
 }
 
-export interface SiteOptions {
+export interface SiteOptions extends InspectionOptions {
   readonly title?: string;
-  readonly components?: readonly Component[];
   readonly pulls?: readonly PullReview[];
   readonly sources?: SourceLocator;
   readonly branch?: string;
@@ -78,7 +77,7 @@ export async function siteFiles(reports: readonly Report[], options: SiteOptions
   const details = new Map<string, string>();
   for (const report of commits) {
     const sha = report.subject.id;
-    const data = JSON.stringify(packJson(inspectionAsset(report, options.components))) + '\n';
+    const data = JSON.stringify(packJson(inspectionAsset(report, options))) + '\n';
     const name = `details/${sha}-${digest(data)}.json`;
     details.set(sha, name);
     files.set(name, Buffer.from(data));

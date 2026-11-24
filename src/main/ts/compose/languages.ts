@@ -1,11 +1,11 @@
 import { extname } from 'node:path';
 import type { FileClaims, Operation, Plugin } from '../core/engine/plugin.js';
+import { fileTypeId } from '../core/model/file-types.js';
 import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { LanguageDisplay } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
 import { babelProvider } from '../plugins/language-js/babel-provider.js';
-import { javaScriptExtensions, typeScriptExtensions } from '../plugins/language-js/extensions.js';
 
 export interface LanguageProvider {
   readonly plugin: Plugin;
@@ -56,7 +56,7 @@ export function languageRegistry(plugins: readonly Plugin[]): {
     id, label, ...(color === undefined ? {} : { color }),
   })));
   if (new Set(catalog.map(({ id }) => id)).size !== catalog.length) throw new Error('Duplicate provided language ID');
-  return { select, isSource: path => select(path) !== undefined, id: path => select(path)?.language(path) ?? languageId(path), extensions, globs,
+  return { select, isSource: path => select(path) !== undefined, id: path => select(path)?.language(path) ?? fileTypeId(path), extensions, globs,
     catalog, providers };
 
   function select(path: string): LanguageProvider | undefined {
@@ -71,22 +71,7 @@ export function languageRegistry(plugins: readonly Plugin[]): {
   }
 }
 
-const js = new Set<string>(javaScriptExtensions);
-const ts = new Set<string>(typeScriptExtensions);
-
-export function languageId(path: string): string {
-  const suffix = extname(path).toLowerCase();
-  if (js.has(suffix)) return 'javascript';
-  if (ts.has(suffix)) return 'typescript';
-  if (suffix === '.md' || suffix === '.mdx') return 'markdown';
-  if (suffix === '.yml') return 'yaml';
-  if (suffix === '.py') return 'python';
-  if (suffix === '.rs') return 'rust';
-  if (suffix === '.kt' || suffix === '.kts') return 'kotlin';
-  return suffix.slice(1) || 'other';
-}
-
-export function claimMatcher(claims: FileClaims | undefined, identify = languageId): (path: string) => boolean {
+export function claimMatcher(claims: FileClaims | undefined, identify = fileTypeId): (path: string) => boolean {
   const { extensions = [], globs = [], languages = [] } = claims ?? {};
   if (extensions.length === 0 && globs.length === 0 && languages.length === 0) return () => true;
   const glob = exclusionMatcher(globs);

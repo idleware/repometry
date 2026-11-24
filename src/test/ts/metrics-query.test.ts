@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { clauseLabel, formatQuery, matches, parseQuery } from '../../main/ts/report/html/app/viewer-filter.js';
-import { isLockfile, languageOf, languageShares } from '../../main/ts/report/html/app/viewer-languages.js';
+import { isLockfile, languageColor, languageOf, languageShares, useLanguages } from '../../main/ts/report/html/app/viewer-languages.js';
 import { suggest } from '../../main/ts/report/html/app/viewer-suggest.js';
 import { size } from '../../main/ts/report/html/app/viewer-metrics.js';
 import type { FileFacts } from '../../main/ts/report/html/app/viewer-filter.js';
 
+// The inspection names its languages, and each file points to one by index, as an export carries them.
+useLanguages([
+  { id: 'typescript', label: 'TypeScript', color: '#3178c6', analysed: true },
+  { id: 'javascript', label: 'JavaScript', color: '#f1e05a', analysed: true },
+  { id: 'markdown', label: 'Markdown', color: '#768390', analysed: false },
+  { id: 'other', label: 'Other', analysed: false },
+]);
+/** The index the inspection's language list gives a file of this extension; anything else is Other. */
+function indexOf(path: string): number {
+  const found = ['.ts', '.js', '.md'].findIndex(extension => path.endsWith(extension));
+  return found < 0 ? 3 : found;
+}
+
 const file = (path: string, maximum: number | null, coverage: [number, number] | null = null) => ({
-  path, lines: 10, functions: 1, complexity: maximum === null ? null : { sum: maximum, maximum, measuredFunctions: 1 },
+  path, language: indexOf(path), lines: 10, functions: 1, complexity: maximum === null ? null : { sum: maximum, maximum, measuredFunctions: 1 },
   lineCoverage: coverage ? { covered: coverage[0], total: coverage[1] } : null, diagnosticCount: 0,
 });
 const facts: FileFacts = { components: new Map([['src/core/a.ts', ['Core API']]]), findings: new Map([['src/util/b.js', 2]]) };
@@ -25,10 +38,8 @@ test('chips of one kind widen, of different kinds narrow, and conditions must al
   const a = file('src/core/a.ts', 12, [7, 10]);
   const b = file('src/util/b.js', 3);
   const c = file('docs/c.md', null);
-  assert.equal(languageOf(a.path), 'TypeScript');
-  assert.equal(languageOf(c.path), 'MD');
-  assert.deepEqual(['ci.yaml', '.github/x.yml', 'package.json', 'Dockerfile', 'docker/Dockerfile.dev', 'app.dockerfile', 'Containerfile', 'Makefile']
-    .map(languageOf), ['YAML', 'YAML', 'JSON', 'Dockerfile', 'Dockerfile', 'Dockerfile', 'Dockerfile', 'Other']);
+  assert.equal(languageOf(a), 'TypeScript');
+  assert.equal(languageOf(c), 'Markdown');
   const pick = (query: string) => [a, b, c].filter(entry => matches(entry, parseQuery(query), facts)).map(entry => entry.path);
   assert.deepEqual(pick('lang:TypeScript lang:JavaScript'), ['src/core/a.ts', 'src/util/b.js']);
   assert.deepEqual(pick('lang:JavaScript has:findings'), ['src/util/b.js']);
@@ -37,6 +48,16 @@ test('chips of one kind widen, of different kinds narrow, and conditions must al
   assert.deepEqual(pick('complexity>2 util'), ['src/util/b.js']);
   // A file without the measurement never passes a condition on it.
   assert.deepEqual(pick('coverage<100%'), ['src/core/a.ts']);
+});
+
+test("a file's language and its colour are the inspection's; a file it names none for is Other, in grey", () => {
+  assert.equal(languageOf({ language: 1 }), 'JavaScript');
+  assert.equal(languageOf({ language: 3 }), 'Other');
+  assert.equal(languageOf({ language: 9 }), 'Other');
+  assert.equal(languageOf({}), 'Other');
+  assert.equal(languageColor('TypeScript'), '#3178c6');
+  assert.equal(languageColor('Markdown'), '#768390');
+  assert.equal(languageColor('Other'), 'var(--neutral-2)');
 });
 
 test('files no plugin read are "ignored" on screen, and the query takes either word', () => {
@@ -68,7 +89,7 @@ test('lockfiles are known by their exact file name at any depth, and nothing lik
 
 test('the language bar weighs lockfiles apart from the languages and from the ignored files', () => {
   const entry = (path: string, lines: number, codeLines: number | undefined, analysed = true) =>
-    ({ path, lines, analysed, ...codeLines === undefined ? {} : { quality: { codeLines } } });
+    ({ path, language: indexOf(path), lines, analysed, ...codeLines === undefined ? {} : { quality: { codeLines } } });
   const files = [
     entry('src/a.ts', 300, 200), entry('src/b.js', 50, 40), entry('package-lock.json', 9575, undefined, false),
     entry('README.md', 160, undefined, false), entry('LICENSE', 21, undefined, false),
@@ -101,7 +122,7 @@ test('lockfile:yes selects lockfiles, and ignored:yes leaves them out', () => {
 
 test('with every file sized, the bar weighs bytes for code, lockfiles and ignored files alike', () => {
   const entry = (path: string, lines: number, bytes: number | undefined, analysed = true) =>
-    ({ path, lines, analysed, quality: { codeLines: lines - 10 }, ...bytes === undefined ? {} : { bytes } });
+    ({ path, language: indexOf(path), lines, analysed, quality: { codeLines: lines - 10 }, ...bytes === undefined ? {} : { bytes } });
   const files = [entry('src/zurk.ts', 155, 4902), entry('package-lock.json', 9575, 348651, false), entry('README.md', 160, 6100, false)];
   assert.deepEqual(languageShares(files), { measure: 'bytes', shares: [['TypeScript', 4902], ['Lockfiles', 348651], ['Ignored', 6100]] });
   // One file from an inspection without sizes sends the whole bar back to lines: no mixed measures.

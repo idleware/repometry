@@ -1,3 +1,5 @@
+import { fileTypeId, fileTypes } from '../../../core/model/file-types.js';
+import type { LanguageLookup } from '../../../core/model/language.js';
 import { isRecord } from '../../../core/engine/plugin.js';
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import type { Report } from '../validation/report.js';
@@ -10,12 +12,13 @@ import type { Complexity, DirectoryMetrics, FileMetricsReport, Maintainability, 
 export { fileMetricsSchema } from '../wire/file-metrics-model.js';
 export type { FileMetricsReport } from '../wire/file-metrics-model.js';
 
-export function fileMetrics(report: Report): FileMetricsReport {
+export function fileMetrics(report: Report, registry: LanguageLookup = { id: fileTypeId, catalog: [] }): FileMetricsReport {
   const byPath = new Map<string, Metrics>();
   const duplicatedLines = new Map<string, number>();
   const pluginMetrics = metricProjection(report);
   const languages: { id: string; label?: string; color?: string; analysed: boolean }[] = [];
-  const languageCatalog = new Map(report.pluginData?.languages?.map(language => [language.id, language]));
+  const recorded = new Map(report.pluginData?.languages?.map(item => [item.id, item]));
+  const languageCatalog = new Map([...fileTypes, ...registry.catalog, ...recorded.values()].map(item => [item.id, item]));
   const languageIndexes = new Map<string, number>();
   function file(path: string): Metrics {
     const existing = byPath.get(path);
@@ -25,19 +28,25 @@ export function fileMetrics(report: Report): FileMetricsReport {
     return metrics;
   }
 
-  for (const { path, lines, bytes, language, analysed, provider } of report.pluginData?.inventory ?? []) {
-    let index = languageIndexes.get(language);
-    if (index === undefined) {
-      index = languages.length;
-      languageIndexes.set(language, index);
-      languages.push({ id: language, ...languageCatalog.get(language), analysed });
-    } else if (analysed) {
-      languages[index]!.analysed = true;
+  function languageIndex(id: string, analysed: boolean): number {
+    const existing = languageIndexes.get(id);
+    if (existing !== undefined) {
+      if (analysed) languages[existing]!.analysed = true;
+      return existing;
     }
+    const index = languages.length;
+    languageIndexes.set(id, index);
+    const display = languageCatalog.get(id);
+    languages.push({ id, label: display?.label ?? (id === 'other' ? 'Other' : id.toUpperCase()),
+      ...(display?.color === undefined ? {} : { color: display.color }), analysed });
+    return index;
+  }
+
+  for (const { path, lines, bytes, language, analysed, provider } of report.pluginData?.inventory ?? []) {
     const entry = file(path);
     entry.lines = lines;
     if (bytes !== undefined) entry.bytes = bytes;
-    entry.language = index;
+    entry.language = languageIndex(provider !== undefined || recorded.has(language) ? language : fileTypeId(path, language), analysed);
     entry.analysed = analysed;
     if (provider !== undefined) entry.provider = provider;
   }
@@ -89,6 +98,9 @@ export function fileMetrics(report: Report): FileMetricsReport {
   const files = [...byPath.values()].sort(byName);
   const directories = new Map<string, DirectoryMetrics>();
   for (const entry of files) {
+    if (entry.language === undefined) {
+      entry.language = languageIndex(registry.id(entry.path), entry.lines !== null || entry.lineCoverage !== null || entry.functions !== null);
+    }
     if (pluginMetrics && entry.analysed !== false) {
       const values = pluginMetrics.values(entry.path);
       if (Object.keys(values).length) entry.values = values;

@@ -6,6 +6,11 @@ export interface LanguageDisplay {
   readonly color?: string;
 }
 
+export interface LanguageLookup {
+  readonly catalog: readonly LanguageDisplay[];
+  id(path: string): string;
+}
+
 export interface ProvidedLanguage extends LanguageDisplay {
   readonly extensions?: readonly string[];
   readonly globs?: readonly string[];

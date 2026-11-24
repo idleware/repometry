@@ -4,6 +4,7 @@ import { parse } from '@babel/parser';
 import type { ParserOptions } from '@babel/parser';
 import { pluginApi } from '../../core/engine/plugin.js';
 import type { Plugin } from '../../core/engine/plugin.js';
+import { javascriptType, typescriptType } from '../../core/model/file-types.js';
 import { codeStructure } from '../../core/model/code-structure.js';
 import type { CodeStructure } from '../../core/model/code-structure.js';
 import { physicalLines, sourceFile, utf8 } from '../../core/model/snapshot.js';
@@ -11,7 +12,7 @@ import { cloneCandidates } from './clone-candidates.js';
 import { classifyLines } from './code-lines.js';
 import { functionFacts } from './function-facts.js';
 import { structuralObservations } from './structural-observations.js';
-import { javaScriptExtensions, jsTsExtensions, typeScriptExtensions } from './extensions.js';
+import { jsTsExtensions } from './extensions.js';
 
 const require = createRequire(import.meta.url);
 export const parserDefaults = { sourceType: 'unambiguous', errorRecovery: false, attachComment: false } as const;
@@ -24,10 +25,7 @@ export const babelProvider: Plugin = {
   api: pluginApi,
   kinds: ['language'],
   claims: { extensions: jsTsExtensions, languages: ['javascript', 'typescript'] },
-  providesLanguages: [
-    { id: 'javascript', label: 'JavaScript', color: '#f1e05a', extensions: javaScriptExtensions },
-    { id: 'typescript', label: 'TypeScript', color: '#3178c6', extensions: typeScriptExtensions },
-  ],
+  providesLanguages: [javascriptType, typescriptType],
   settings: parserDefaults,
   produces: [{ contract: codeStructure.id, persistence: 'transient' }],
   tools: { '@babel/parser': require('@babel/parser/package.json').version as string },
@@ -41,7 +39,7 @@ export const babelProvider: Plugin = {
       const source = utf8(file.bytes);
       const ext = extname(file.path);
       const plugins: NonNullable<ParserOptions['plugins']> = [];
-      if (['.ts', '.mts', '.cts', '.tsx'].includes(ext)) {
+      if ((typescriptType.extensions as readonly string[]).includes(ext)) {
         plugins.push(['typescript', { dts: /\.d\.[cm]?ts$/.test(file.path), disallowAmbiguousJSXLike: ext === '.mts' || ext === '.cts' }]);
       }
       if (ext === '.jsx' || ext === '.tsx') plugins.push('jsx');

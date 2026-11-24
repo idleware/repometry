@@ -43,7 +43,7 @@ export async function serveSite(reader: ReportReader, port: number,
     if (versioned) {
       const inspection = await read(versioned[1]!);
       return inspection && reportRevision(inspection) === versioned[2]
-        ? Buffer.from(JSON.stringify(packJson(inspectionAsset(inspection, options.components)))) : undefined;
+        ? Buffer.from(JSON.stringify(packJson(inspectionAsset(inspection, options)))) : undefined;
     }
     return files.get(name);
   }

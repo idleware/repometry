@@ -49,7 +49,7 @@ function tallied(names: Iterable<string>): Map<string, number> {
 }
 
 function languageSuggestions(files: readonly FileEntry[], typing: Typing): Suggestion[] {
-  const counts = [...tallied(files.map(file => languageOf(file.path)))].sort((a, b) => b[1] - a[1]);
+  const counts = [...tallied(files.map(file => languageOf(file)))].sort((a, b) => b[1] - a[1]);
   return counts.flatMap(([language, total]) => {
     const clause: Clause = { kind: 'lang', value: language };
     if (typing.taken(clause) || !offered(typing, language, 'lang')) return [];

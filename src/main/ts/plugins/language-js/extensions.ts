@@ -1,3 +1,3 @@
-export const javaScriptExtensions = ['.js', '.mjs', '.cjs', '.jsx'] as const;
-export const typeScriptExtensions = ['.ts', '.mts', '.cts', '.tsx'] as const;
-export const jsTsExtensions = [...javaScriptExtensions, ...typeScriptExtensions] as const;
+import { javascriptType, typescriptType } from '../../core/model/file-types.js';
+
+export const jsTsExtensions = [...javascriptType.extensions, ...typescriptType.extensions] as const;

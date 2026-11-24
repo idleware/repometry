@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { axisLabels, tickLabels, timeTicks } from '../../main/ts/report/html/app/viewer-chart-time.js';
 import { stableWindow } from '../../main/ts/report/html/app/viewer-trend-data.js';
@@ -7,12 +8,18 @@ import { plantFlags } from '../../main/ts/report/html/app/viewer-trend-points.js
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
-test('commit summaries use the recorded commit time', () => {
-  const window = { endingAt: '2026-07-23T20:10:36.000Z', commits: 3, shallow: false, capReached: false };
-  const dated = commitSummary({ ...report('a', {}), committedAt: '2026-07-23T20:10:36.000Z' });
-  const undated = commitSummary(report('b', { churnWindow: window }));
-  assert.equal(dated.committedAt, '2026-07-23T20:10:36.000Z');
+test('commit summaries prefer the explicit commit time and recover it from saved churn windows', () => {
+  const endingAt = '2026-07-23T20:10:36.000Z';
+  const committedAt = '2026-07-24T20:10:36.000Z';
+  const config = { churnWindow: { endingAt, commits: 3, shallow: false, capReached: false } };
+  const dated = commitSummary({ ...report('a', config), committedAt });
+  const historical = commitSummary(report('b', config));
+  const undated = commitSummary(report('c', { churnWindow: { endingAt: 'invalid' } }));
+  assert.equal(dated.committedAt, committedAt);
+  assert.equal(historical.committedAt, endingAt);
   assert.ok(!('committedAt' in undated));
+  const summary = JSON.parse(siteSummary([historical, dated, undated], {}).toString());
+  assert.deepEqual(summary.commits.map(({ committedAt }: { committedAt?: string }) => committedAt), [committedAt, endingAt, undefined]);
 });
 
 test('time ticks follow the calendar and keep labels apart', () => {
