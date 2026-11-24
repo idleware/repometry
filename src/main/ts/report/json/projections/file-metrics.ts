@@ -30,7 +30,7 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   function languageIndex(id: string, analysed: boolean): number {
     const existing = languageIndexes.get(id);
     if (existing !== undefined) {
-      if (analysed) languages[existing]!.analysed = true;
+      languages[existing]!.analysed ||= analysed;
       return existing;
     }
     const index = languages.length;
@@ -55,8 +55,7 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   addFileQuality(byPath, duplicatedLines, report.findings, skipped);
 
   let unassignedDiagnostics = 0;
-  for (const diagnostic of report.diagnostics) {
-    const { path, operation } = diagnostic;
+  for (const { path, operation } of report.diagnostics) {
     const target = path === undefined ? undefined
       : operation === `${legacySyntaxPlugin}/parse` || operation.startsWith('structure/') ? file(path) : byPath.get(path);
     if (target) target.diagnosticCount++;
@@ -66,9 +65,8 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   const files = [...byPath.values()].sort(byName);
   const directories = new Map<string, DirectoryMetrics>();
   for (const entry of files) {
-    if (entry.language === undefined) {
-      entry.language = languageIndex(registry.id(entry.path), entry.lines !== null || entry.lineCoverage !== null || entry.functions !== null);
-    }
+    entry.language ??= languageIndex(registry.id(entry.path),
+      entry.lines !== null || entry.lineCoverage !== null || entry.functions !== null);
     if (pluginMetrics && entry.analysed !== false) {
       const values = pluginMetrics.values(entry.path);
       if (Object.keys(values).length) entry.values = values;
@@ -76,23 +74,10 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
     if (entry.functions === 0 && !entry.complexity && pluginMetrics?.isAvailable(definitions.complexity, entry.path) !== false) {
       entry.complexity = { sum: 0, maximum: null, measuredFunctions: 0 };
     }
-    let path = entry.path;
-    do {
-      path = path.slice(0, Math.max(0, path.lastIndexOf('/')));
-      let directory = directories.get(path);
-      if (!directory) {
-        directory = { ...emptyMetrics(path), files: 0, sizeMeasuredFiles: 0, coverageMeasuredFiles: 0 };
-        directories.set(path, directory);
-      }
-      addFile(directory, entry);
-    } while (path !== '');
+    rollUpFile(directories, entry);
   }
   if (pluginMetrics) {
-    for (const entry of directories.values()) {
-      const values = pluginMetrics.values(entry.path, true);
-      if (Object.keys(values).length) entry.values = values;
-      applyDirectoryAvailability(entry, pluginMetrics.isAvailable);
-    }
+    for (const entry of directories.values()) applyDirectoryProjection(entry, pluginMetrics);
   }
   const complexity = files.filter(entry => entry.complexity?.maximum != null)
     .sort((left, right) => right.complexity!.maximum! - left.complexity!.maximum!
@@ -143,8 +128,10 @@ function collectMeasurements(rows: readonly Measurement[], file: (path: string) 
   return duplicated;
 }
 
-function applyDirectoryAvailability(entry: DirectoryMetrics, available: NonNullable<ReturnType<typeof metricProjection>>['isAvailable']): void {
-  const known = (id: string) => available(id, entry.path, true);
+function applyDirectoryProjection(entry: DirectoryMetrics, projection: NonNullable<ReturnType<typeof metricProjection>>): void {
+  const values = projection.values(entry.path, true);
+  if (Object.keys(values).length) entry.values = values;
+  const known = (id: string) => projection.isAvailable(id, entry.path, true);
   if (!known(definitions.functions)) entry.functions = null;
   if (!known(definitions.complexity)) entry.complexity = null;
   if (!entry.quality) return;
@@ -180,22 +167,31 @@ function byName(left: Metrics, right: Metrics): number {
   return comparePaths(left.path, right.path);
 }
 
-function addFile(directory: DirectoryMetrics, file: Metrics): void {
-  directory.files++;
-  if (file.lines !== null) directory.sizeMeasuredFiles++;
-  directory.lines = sumKnown(directory.lines, file.lines);
-  if (file.bytes !== undefined) directory.bytes = (directory.bytes ?? 0) + file.bytes;
-  directory.functions = sumKnown(directory.functions, file.functions);
-  directory.complexity = addComplexity(directory.complexity, file.complexity);
-  if (file.lineCoverage) {
-    directory.coverageMeasuredFiles++;
-    directory.lineCoverage = {
-      covered: (directory.lineCoverage?.covered ?? 0) + file.lineCoverage.covered,
-      total: (directory.lineCoverage?.total ?? 0) + file.lineCoverage.total,
-    };
-  }
-  directory.diagnosticCount += file.diagnosticCount;
-  if (file.quality) addQuality(quality(directory), file.quality);
+function rollUpFile(directories: Map<string, DirectoryMetrics>, file: Metrics): void {
+  let path = file.path;
+  do {
+    path = path.slice(0, Math.max(0, path.lastIndexOf('/')));
+    let directory = directories.get(path);
+    if (!directory) {
+      directory = { ...emptyMetrics(path), files: 0, sizeMeasuredFiles: 0, coverageMeasuredFiles: 0 };
+      directories.set(path, directory);
+    }
+    directory.files++;
+    if (file.lines !== null) directory.sizeMeasuredFiles++;
+    directory.lines = sumKnown(directory.lines, file.lines);
+    if (file.bytes !== undefined) directory.bytes = (directory.bytes ?? 0) + file.bytes;
+    directory.functions = sumKnown(directory.functions, file.functions);
+    directory.complexity = addComplexity(directory.complexity, file.complexity);
+    if (file.lineCoverage) {
+      directory.coverageMeasuredFiles++;
+      directory.lineCoverage = {
+        covered: (directory.lineCoverage?.covered ?? 0) + file.lineCoverage.covered,
+        total: (directory.lineCoverage?.total ?? 0) + file.lineCoverage.total,
+      };
+    }
+    directory.diagnosticCount += file.diagnosticCount;
+    if (file.quality) addQuality(quality(directory), file.quality);
+  } while (path !== '');
 }
 
 function quality(entry: Metrics): Quality {

@@ -88,11 +88,10 @@ function indexOperations(plugins: PlanRequest['plugins']) {
     if (ids.has(plugin.id) || !plugin.id || plugin.id.includes('/')) throw new Error(`Invalid or duplicate plugin ID: ${plugin.id}`);
     ids.add(plugin.id);
     const products = manifestProducts(plugin);
-    if (plugin.settings !== undefined) {
-      if (!isJsonValue(plugin.settings)) throw new Error(`Plugin settings must be JSON data: ${plugin.id}`);
-      if (plugin.config !== undefined && !new Ajv2020().validate(plugin.config, plugin.settings)) {
-        throw new Error(`Plugin settings violate the configuration schema: ${plugin.id}`);
-      }
+    const hasSettings = plugin.settings !== undefined;
+    if (hasSettings && !isJsonValue(plugin.settings)) throw new Error(`Plugin settings must be JSON data: ${plugin.id}`);
+    if (hasSettings && plugin.config !== undefined && !new Ajv2020().validate(plugin.config, plugin.settings)) {
+      throw new Error(`Plugin settings violate the configuration schema: ${plugin.id}`);
     }
     for (const declaration of products.values()) {
       for (const metric of declaration.metrics ?? []) {

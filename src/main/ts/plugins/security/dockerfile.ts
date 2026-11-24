@@ -401,6 +401,7 @@ function pipelines(script: string): string[][][] {
     const char = script[index]!;
     const previous = script[index - 1];
     const next = script[index + 1];
+    const controlOperator = (char === '&' || char === '|') && previous !== '>' && previous !== '<' && next !== '>';
     if (quote !== '') {
       if (char === quote) quote = '';
       else if (char === '\\' && quote === '"' && next !== undefined) word += script[++index];
@@ -418,20 +419,12 @@ function pipelines(script: string): string[][][] {
       while (index + 1 < script.length && script[index + 1] !== '\n') index++;
     } else if (char === '\n' || char === ';') {
       endPipeline();
-    } else if ((char === '&' || char === '|') && (previous === '>' || previous === '<' || next === '>')) {
-      word += char;
-      started = true;
-    } else if (char === '&') {
+    } else if (controlOperator && char === '|' && next !== '|') {
       if (next === '&') index++;
+      endCommand();
+    } else if (controlOperator) {
+      if (next === char) index++;
       endPipeline();
-    } else if (char === '|') {
-      if (next === '|') {
-        index++;
-        endPipeline();
-      } else {
-        if (next === '&') index++;
-        endCommand();
-      }
     } else if (/\s/.test(char) || char === '(' || char === ')') {
       endWord();
     } else {
