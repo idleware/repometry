@@ -21,7 +21,7 @@ import type { Report } from '../../main/ts/report/json/validation/report.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import { unpackJson } from '../../main/ts/report/json/wire/compact-json.js';
 import type { RepositorySummary } from '../../main/ts/report/json/wire/summary-model.js';
-import type { InspectionAsset } from '../../main/ts/report/json/projections/inspection-details.js';
+import type { InspectionAsset } from '../../main/ts/report/json/wire/inspection-details-model.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
 

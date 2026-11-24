@@ -1,6 +1,7 @@
 import type { Measurement } from './measurement.js';
 import type { Finding } from './finding.js';
 import type { IgnoredFinding } from './ignore-rule.js';
+import { isRecord } from './plugin-data.js';
 import type { PluginData } from './plugin-data.js';
 import type { Subject } from './source.js';
 
@@ -33,4 +34,20 @@ export interface Report {
 
 export function validSubjectId(kind: Subject['kind'], id: string): boolean {
   return /^[a-f0-9]{64}$/.test(id) || (kind === 'commit' && /^[a-f0-9]{40}$/.test(id));
+}
+
+export const legacySyntaxPlugin = 'babel-syntax';
+
+// Keep history comparable when the parser starts recording its own tool versions.
+export function historicalPluginTools(plugins: unknown): unknown {
+  if (!Array.isArray(plugins)) return plugins;
+  const syntax = plugins.find(entry => isRecord(entry) && entry.id === legacySyntaxPlugin);
+  if (!isRecord(syntax?.tools)) return plugins;
+  const { '@babel/types': types, ...native } = syntax.tools;
+  if (typeof types !== 'string') return plugins;
+  return plugins.map(entry => {
+    if (entry === syntax) return { ...syntax, tools: native };
+    if (!isRecord(entry) || (entry.id !== 'structure' && entry.id !== 'maintainability') || !isRecord(entry.tools)) return entry;
+    return { ...entry, tools: { '@babel/types': types, ...entry.tools } };
+  });
 }

@@ -8,8 +8,8 @@ import type { SourceSnapshot } from '../core/model/source.js';
 import { defaultSourceExclusions, generatedSourcePolicy } from '../core/profile/exclusions.js';
 import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
 import type { AnalysisInput } from '../core/usecases/inspect.js';
-import { parserDefaults } from '../plugins/language-js/babel-provider.js';
 import type { AnalysisResults } from './analysis-results.js';
+import { defaultProvider } from './analysis-sources.js';
 import type { AnalysisSources } from './analysis-sources.js';
 import { fileTypeId } from '../core/model/file-types.js';
 
@@ -54,7 +54,7 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
     source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
-    parser: parserDefaults,
+    parser: defaultProvider.plugin.settings,
     maintainability: { structuralRules, duplication: duplicationSettings, debtModel, remediation: 'nonoverlapping-complexity/v1' },
     coverage: coverage === undefined ? null : { inputDigest: digest(coverage.text), pathBase: coverage.sourceRoot,
       merge: 'any-hit', hitCounts: 'sum', lines: 'code-only' },

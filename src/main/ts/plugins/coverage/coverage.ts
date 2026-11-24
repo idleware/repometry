@@ -1,7 +1,7 @@
 import { posix, win32 } from 'node:path';
 import reportSchema from '../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { isRecord, pluginApi } from '../../core/engine/plugin.js';
-import type { DataContract, Plugin } from '../../core/engine/plugin.js';
+import type { DataContract, MetricDescriptor, Plugin } from '../../core/engine/plugin.js';
 import { comparePaths } from '../../core/model/snapshot.js';
 import { definitions, measurements } from '../../core/model/measurement.js';
 import type { Measurement } from '../../core/model/measurement.js';
@@ -40,25 +40,28 @@ export const coverageResult: DataContract<CoverageResult> = {
     && lcovLines.accepts(value.lineCoverage),
 };
 
+const kinds = [
+  { ids: [definitions.coverage, definitions.coveredLines, definitions.coverableLines],
+    labels: ['Line coverage', 'Covered lines', 'Measured lines'], includeEmpty: true },
+  { ids: [definitions.branchCoverage, definitions.coveredBranches, definitions.coverableBranches],
+    labels: ['Branch coverage', 'Covered branches', 'Measured branches'] },
+  { ids: [definitions.functionCoverage, definitions.coveredFunctions, definitions.coverableFunctions],
+    labels: ['Function coverage', 'Covered functions', 'Measured functions'] },
+] as const;
+const [lineMetrics, branchMetrics, functionMetrics] = kinds;
+
 export const coverage: Plugin = {
   id: 'lcov',
   version: '1.2.0',
   api: pluginApi,
   kinds: ['coverage', 'import'],
-  produces: [{ contract: coverageResult.id, persistence: 'report', metrics: [
-    { id: definitions.coverage, label: 'Line coverage', unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
-      ratio: { of: definitions.coveredLines, over: definitions.coverableLines }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
-    { id: definitions.coveredLines, label: 'Covered lines', unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
-    { id: definitions.coverableLines, label: 'Measured lines', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
-    { id: definitions.branchCoverage, label: 'Branch coverage', unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
-      ratio: { of: definitions.coveredBranches, over: definitions.coverableBranches }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
-    { id: definitions.coveredBranches, label: 'Covered branches', unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
-    { id: definitions.coverableBranches, label: 'Measured branches', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
-    { id: definitions.functionCoverage, label: 'Function coverage', unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
-      ratio: { of: definitions.coveredFunctions, over: definitions.coverableFunctions }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
-    { id: definitions.coveredFunctions, label: 'Covered functions', unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
-    { id: definitions.coverableFunctions, label: 'Measured functions', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
-  ] }, { contract: lcovLines.id, persistence: 'report',
+  produces: [{ contract: coverageResult.id, persistence: 'report',
+    metrics: kinds.flatMap<MetricDescriptor>(({ ids: [id, of, over], labels }) => [
+      { id, label: labels[0], unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
+        ratio: { of, over }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
+      { id: of, label: labels[1], unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
+      { id: over, label: labels[2], unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
+    ]) }, { contract: lcovLines.id, persistence: 'report',
     schema: { ...reportSchema.$defs.lcovLines,
       $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges, lcovHitRuns: reportSchema.$defs.lcovHitRuns,
         lcovFunctionCalls: reportSchema.$defs.lcovFunctionCalls } } }],
@@ -82,7 +85,7 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
   // Branches by line, block and branch. Functions by name and its occurrence in the record: tools such as c8 repeat a
   // name for different functions and list FNDA in FN order.
   const branches = new Map<string, Map<string, number>>();
-  const declared = new Map<string, Map<string, number>>();
+  const functions = new Map<string, Map<string, number>>();
   const called = new Map<string, Map<string, number>>();
   const occurrences = { declared: new Map<string, number>(), called: new Map<string, number>() };
   const occurrence = (seen: Map<string, number>, name: string) => {
@@ -94,8 +97,7 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
   let active: string | undefined;
   let ignored = false;
   let sawSource = false;
-  const lines = text.split(/\r?\n/);
-  for (const [index, line] of lines.entries()) {
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
     if (line.startsWith('SF:')) {
       if (active !== undefined || line.length === 3) throw new Error(`Unexpected LCOV source at line ${index + 1}`);
       active = normalizeLcovPath(root, line.slice(3));
@@ -106,7 +108,7 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
       if (ignored) continue;
       if (!sourceLines.has(active)) gaps.set(active, 'LCOV source is outside the inspected file set');
       else if (codeLines && !codeLines.has(active)) gaps.set(active, 'LCOV source has no classified code lines');
-      else if (!files.has(active)) files.set(active, new Map());
+      else fileRecords(files, active);
     } else if (line.startsWith('DA:')) {
       if (active === undefined) throw new Error(`LCOV line data outside a source record at line ${index + 1}`);
       if (ignored) continue;
@@ -121,30 +123,7 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
     } else if (line.startsWith('BRDA:') || line.startsWith('FN:') || line.startsWith('FNDA:')) {
       if (active === undefined) throw new Error(`LCOV data outside a source record at line ${index + 1}`);
       if (ignored || !files.has(active)) continue;
-      const branch = /^BRDA:([1-9]\d*),([^,]+),([^,]+),(\d+|-)$/.exec(line);
-      const declaration = /^FN:([1-9]\d*)(?:,[1-9]\d*)?,(.+)$/.exec(line);
-      const call = /^FNDA:(\d+),(.+)$/.exec(line);
-      if (branch) {
-        const taken = branch[4] === '-' ? 0 : Number(branch[4]);
-        const key = `${branch[1]},${branch[2]},${branch[3]}`;
-        const file = branches.get(active) ?? new Map<string, number>();
-        addHits(file, key, taken, index + 1);
-        branches.set(active, file);
-      } else if (declaration) {
-        const number = Number(declaration[1]);
-        if (!Number.isSafeInteger(number)) throw new Error(`Invalid LCOV function line at line ${index + 1}`);
-        const key = occurrence(occurrences.declared, declaration[2]!);
-        const file = declared.get(active) ?? new Map<string, number>();
-        if (!file.has(key)) file.set(key, number);
-        declared.set(active, file);
-      } else if (call) {
-        const key = occurrence(occurrences.called, call[2]!);
-        const file = called.get(active) ?? new Map<string, number>();
-        addHits(file, key, Number(call[1]), index + 1);
-        called.set(active, file);
-      } else {
-        throw new Error(`Invalid LCOV data at line ${index + 1}`);
-      }
+      readDetails(active, line, index + 1);
     } else if (line === 'end_of_record') {
       if (active === undefined) throw new Error(`Unexpected LCOV record end at line ${index + 1}`);
       active = undefined;
@@ -152,19 +131,48 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
   }
   if (active !== undefined) throw new Error('Unterminated LCOV source record');
   if (!sawSource && text.trim() !== '') throw new Error('LCOV contains no source records');
-  const functions = new Map<string, Map<string, number>>();
+  // The declaration map can now hold the hit totals. Keep the declared lines for the gutter.
   const functionCalls = new Map<string, readonly FunctionCallCount[]>();
-  for (const [path, declarations] of declared) {
+  for (const [path, declarations] of functions) {
     const hits = called.get(path);
-    functions.set(path, new Map([...declarations.keys()].map(key => [key, hits?.get(key) ?? 0])));
     const counts: FunctionCallCount[] = [];
     for (const [key, first] of declarations) {
       const count = hits?.get(key);
+      declarations.set(key, count ?? 0);
       if (count !== undefined && first <= sourceLines.get(path)!) counts.push([first, count]);
     }
     if (counts.length) functionCalls.set(path, counts.sort(([left], [right]) => left - right));
   }
   return { files, branches, functions, functionCalls, gaps };
+
+  function readDetails(path: string, line: string, record: number): void {
+    const branch = /^BRDA:([1-9]\d*),([^,]+),([^,]+),(\d+|-)$/.exec(line);
+    if (branch) {
+      addHits(fileRecords(branches, path), `${branch[1]},${branch[2]},${branch[3]}`, branch[4] === '-' ? 0 : Number(branch[4]), record);
+      return;
+    }
+    const declaration = /^FN:([1-9]\d*)(?:,[1-9]\d*)?,(.+)$/.exec(line);
+    if (declaration) {
+      const number = Number(declaration[1]);
+      if (!Number.isSafeInteger(number)) throw new Error(`Invalid LCOV function line at line ${record}`);
+      const records = fileRecords(functions, path);
+      const key = occurrence(occurrences.declared, declaration[2]!);
+      if (!records.has(key)) records.set(key, number);
+      return;
+    }
+    const call = /^FNDA:(\d+),(.+)$/.exec(line);
+    if (!call) throw new Error(`Invalid LCOV data at line ${record}`);
+    addHits(fileRecords(called, path), occurrence(occurrences.called, call[2]!), Number(call[1]), record);
+  }
+}
+
+function fileRecords<Key>(files: Map<string, Map<Key, number>>, path: string): Map<Key, number> {
+  const existing = files.get(path);
+  if (existing) return existing;
+  const records = new Map<Key, number>();
+  files.set(path, records);
+  return records;
+
 }
 
 function addHits<Key>(hits: Map<Key, number>, key: Key, count: number, record: number): void {
@@ -175,12 +183,8 @@ function addHits<Key>(hits: Map<Key, number>, key: Key, count: number, record: n
 
 function importCoverage(input: CoverageInput): CoverageResult {
   const { files, branches, functions, functionCalls, gaps } = mapCoverage(input);
-  const rows: Measurement[] = [];
   const lineCoverage: [string, FileLineCoverage][] = [];
-  let totalCovered = 0;
-  let totalLines = 0;
-  for (const [path, hits] of [...files].sort(([left], [right]) => comparePaths(left, right))) {
-    if (gaps.has(path)) continue;
+  const lines = hitRows(files, gaps, lineMetrics, (path, hits) => {
     const hitLines: number[] = [], missedLines: number[] = [];
     for (const [line, hit] of hits) (hit ? hitLines : missedLines).push(line);
     const partialHits = partiallyCoveredLines(branches.get(path), input.sourceLines.get(path)!, input.codeLines?.get(path));
@@ -194,21 +198,10 @@ function importCoverage(input: CoverageInput): CoverageResult {
         ...(partial.length ? { partial } : {}), hits: mergedHits(measured),
         ...(calls === undefined ? {} : { functionCalls: calls }), ...(bodies === undefined ? {} : { functionBodies: bodies }) }]);
     }
-    const covered = hitLines.length;
-    totalCovered += covered;
-    totalLines += hits.size;
-    rows.push({ definition: definitions.coverage, target: 'file', path, covered, total: hits.size, value: ratio(covered, hits.size) });
-  }
-  rows.push({ definition: definitions.coverage, target: 'repository', covered: totalCovered, total: totalLines, value: ratio(totalCovered, totalLines) });
-  const counts = rows.flatMap(({ target, path, covered, total }): Measurement[] => [
-    { definition: definitions.coveredLines, target, path, value: covered ?? null },
-    { definition: definitions.coverableLines, target, path, value: total ?? null },
-  ]);
-  const extra = [
-    ...hitRows(branches, gaps, definitions.branchCoverage, definitions.coveredBranches, definitions.coverableBranches),
-    ...hitRows(functions, gaps, definitions.functionCoverage, definitions.coveredFunctions, definitions.coverableFunctions),
-  ];
-  return { measurements: [...rows, ...counts, ...extra], lineCoverage: Object.fromEntries(lineCoverage),
+    return hitLines.length;
+  });
+  const metrics = [...lines, ...hitRows(branches, gaps, branchMetrics), ...hitRows(functions, gaps, functionMetrics)];
+  return { measurements: metrics, lineCoverage: Object.fromEntries(lineCoverage),
     gaps: [...gaps].sort(([left], [right]) => comparePaths(left, right)).map(([path, reason]) => ({ path, reason })) };
 }
 
@@ -246,20 +239,22 @@ function mergedHits(hits: ReadonlyMap<number, number>): readonly HitRun[] {
 }
 
 /** Per-file and repository ratios with their counts, for a kind the LCOV reports; nothing when it reports none. */
-function hitRows(files: ReadonlyMap<string, ReadonlyMap<string, number>>, gaps: ReadonlyMap<string, string>,
-  ratioId: string, coveredId: string, totalId: string): Measurement[] {
+function hitRows<Key>(files: ReadonlyMap<string, ReadonlyMap<Key, number>>, gaps: ReadonlyMap<string, string>,
+  { ids: [ratioId, coveredId, totalId], includeEmpty = false }: { ids: readonly [string, string, string]; includeEmpty?: boolean },
+  coveredCount?: (path: string, hits: ReadonlyMap<Key, number>) => number): Measurement[] {
   const rows: Measurement[] = [];
   let totalCovered = 0;
   let totalCount = 0;
   for (const [path, hits] of [...files].sort(([left], [right]) => comparePaths(left, right))) {
-    if (gaps.has(path) || hits.size === 0) continue;
+    if (gaps.has(path) || (!hits.size && !includeEmpty)) continue;
     let covered = 0;
-    for (const hit of hits.values()) if (hit) covered++;
+    if (coveredCount) covered = coveredCount(path, hits);
+    else for (const hit of hits.values()) if (hit) covered++;
     totalCovered += covered;
     totalCount += hits.size;
     rows.push({ definition: ratioId, target: 'file', path, covered, total: hits.size, value: ratio(covered, hits.size) });
   }
-  if (totalCount === 0) return [];
+  if (totalCount === 0 && !includeEmpty) return [];
   rows.push({ definition: ratioId, target: 'repository', covered: totalCovered, total: totalCount, value: ratio(totalCovered, totalCount) });
   return [...rows, ...rows.flatMap(({ target, path, covered, total }): Measurement[] => [
     { definition: coveredId, target, path, value: covered ?? null },
@@ -275,6 +270,5 @@ function normalizeLcovPath(root: string, path: string): string {
   const platform = /^(?:[a-z]:[\\/]|\\\\)/i.test(root) ? win32 : posix;
   const candidate = platform.isAbsolute(path) ? platform.relative(root, path) : path;
   if (platform.isAbsolute(candidate)) return candidate;
-  if (platform === win32) return posix.normalize(candidate.replaceAll('\\', '/'));
-  return posix.normalize(candidate);
+  return posix.normalize(platform === win32 ? candidate.replaceAll('\\', '/') : candidate);
 }

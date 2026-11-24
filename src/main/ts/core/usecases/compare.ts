@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { isRecord } from '../engine/plugin.js';
 import { canonicalMetricId, definitions } from '../model/measurement.js';
 import type { Measurement } from '../model/measurement.js';
+import { historicalPluginTools, legacySyntaxPlugin } from '../model/report.js';
 import type { Report } from '../model/report.js';
 import { comparePaths } from '../model/snapshot.js';
 
@@ -100,7 +101,6 @@ function hasDiagnostic(report: Report, ...operations: string[]): boolean {
 
 function hasParserDiagnostic(report: Report): boolean {
   const references = parserReferences(report);
-  if (references.size === 0) return hasDiagnostic(report, 'babel-syntax/parse');
   const operations = new Set(references.values());
   return report.diagnostics.some(({ path, operation }) => path === undefined
     ? operations.has(operation) : references.get(path) === operation);
@@ -164,11 +164,11 @@ function structureMethod(report: Report, operation: string) {
   if (providerKeys.size === 0 || [...scopes].some(provider => !providerKeys.has(provider))) return null;
   const providerBindings = recordedEntries(operations, 'key', [...providerKeys].sort(comparePaths));
   const pluginIds = [...new Set([operation, ...providerKeys].map(key => key.slice(0, key.indexOf('/'))))].sort(comparePaths);
-  const toolchain = recordedEntries(plugins, 'id', pluginIds);
+  const toolchain = recordedEntries(historicalPluginTools(plugins), 'id', pluginIds);
   if (!providerBindings || !toolchain) return null;
   // The original reports carried the Babel configuration at report level.
   const configured = toolchain.map(({ id, version, api, tools, settings }) => ({
-    id, version, api, tools, settings: id === 'babel-syntax' && isRecord(parser) ? parser : settings ?? null,
+    id, version, api, tools, settings: id === legacySyntaxPlugin && isRecord(parser) ? parser : settings ?? null,
   }));
   return { toolchain: configured, bindings: [...providerBindings, ...bindings.sort((a, b) => comparePaths(JSON.stringify(a), JSON.stringify(b)))] };
 }

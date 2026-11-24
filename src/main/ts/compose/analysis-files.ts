@@ -109,5 +109,5 @@ function collectFileProducts(tasks: readonly PlannedOperation[], outcomes: Reado
 function cloneSource(outcome: Outcome, provider: LanguageProvider | undefined): CloneSource | undefined {
   if (outcome.state !== 'completed' || outcome.product.contract !== fileQuality.id || !fileQuality.accepts(outcome.product.value)) return;
   const source = outcome.product.value.cloneSource;
-  return provider && provider !== defaultProvider && source.scheme === undefined ? { ...source, scheme: provider.plugin.id } : source;
+  return provider && source.scheme === undefined ? { ...source, scheme: provider.plugin.id } : source;
 }

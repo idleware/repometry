@@ -3,11 +3,11 @@ import { isRecord } from '../../../core/engine/plugin.js';
 import { findingImportMethods } from '../../../core/model/scanner-import.js';
 import { nativeScanners, securityCounts } from './security-summary.js';
 import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
+import { historicalPluginTools, legacySyntaxPlugin } from '../../../core/model/report.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths, digest } from '../../../core/model/snapshot.js';
 
 import type { InspectionContext } from '../wire/inspection-context-model.js';
-export type { InspectionContext, ProfileBoundary, SourceExclusions } from '../wire/inspection-context-model.js';
 
 export function inspectionProfileDigest(report: Report): string | undefined {
   const profile = readProfile(report.appliedConfig);
@@ -56,12 +56,13 @@ function readProfile(config: Report['appliedConfig']) {
     coverage = settings;
   }
   const { churnWindow, securityScanners, ...settings } = config;
-  const plugins = Array.isArray(settings.plugins) ? settings.plugins.map(plugin => {
+  const toolchain = historicalPluginTools(settings.plugins);
+  const plugins = Array.isArray(toolchain) ? toolchain.map(plugin => {
     if (!isRecord(plugin)) return plugin;
     const { providesLanguages, ...entry } = plugin;
-    if (entry.id === 'babel-syntax' && isDeepStrictEqual(entry.settings, config.parser)) delete entry.settings;
+    if (entry.id === legacySyntaxPlugin && isDeepStrictEqual(entry.settings, config.parser)) delete entry.settings;
     return entry;
-  }) : settings.plugins;
+  }) : toolchain;
   // The policy is stable across commits; its matched paths describe this snapshot alone.
   const { generatedExcluded, ...sourceSettings } = source;
   return {

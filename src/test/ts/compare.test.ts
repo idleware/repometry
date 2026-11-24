@@ -11,6 +11,7 @@ import reportV2 from '../../main/resources/report/json/report-v2.schema.json' wi
 import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
 import { compareInspections, comparisonSchema } from '../../main/ts/core/usecases/compare.js';
 import type { InspectionComparison } from '../../main/ts/core/usecases/compare.js';
+import { inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
@@ -73,6 +74,28 @@ test('comparison uses completeness and methodology for the relevant measurement'
   assert.equal(methodChange.maxCyclomaticComplexity.reason, 'method-changed');
   assert.equal(methodChange.maxCyclomaticComplexity.delta, null);
   assert.equal(methodChange.lineCoverage.delta, 50);
+});
+
+test('provider-owned tool provenance compares with earlier reports without a profile boundary', async () => {
+  const current = await analyze(head, afterSource, 1);
+  const entries = current.appliedConfig.plugins;
+  assert.ok(Array.isArray(entries));
+  const syntax = entries.find(entry => entry.id === 'babel-syntax');
+  const { '@babel/types': version, ...parserTools } = syntax.tools;
+  assert.equal(typeof version, 'string');
+  const plugins = entries.map(entry => {
+    if (entry === syntax) return { ...entry, tools: parserTools };
+    if (entry.id === 'structure' || entry.id === 'maintainability') {
+      return { ...entry, tools: { ...entry.tools, '@babel/types': version } };
+    }
+    return entry;
+  });
+  const historical = { ...current, appliedConfig: { ...current.appliedConfig, plugins } };
+  assert.equal(inspectionProfileDigest(historical), inspectionProfileDigest(current));
+  const comparison = compareInspections(historical, current);
+  assert.equal(comparison.metrics.physicalLines.delta, 0);
+  assert.equal(comparison.metrics.functions.delta, 0);
+  assert.equal(comparison.metrics.maxCyclomaticComplexity.delta, 0);
 });
 
 function analyze(id: string, source: string, hits: number,

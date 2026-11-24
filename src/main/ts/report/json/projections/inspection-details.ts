@@ -10,7 +10,6 @@ import { componentFiles } from './components.js';
 import type { Component } from './components.js';
 
 import type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
-export type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
 
 export interface InspectionOptions {
   readonly components?: readonly Component[];

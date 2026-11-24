@@ -28,7 +28,7 @@ export const babelProvider: Plugin = {
   providesLanguages: [javascriptType, typescriptType],
   settings: parserDefaults,
   produces: [{ contract: codeStructure.id, persistence: 'transient' }],
-  tools: { '@babel/parser': require('@babel/parser/package.json').version as string },
+  tools: { '@babel/parser': require('@babel/parser/package.json').version as string, ...babelTypes },
   operations: [{
     id: 'parse',
     role: 'provider',

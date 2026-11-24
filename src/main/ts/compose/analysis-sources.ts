@@ -3,14 +3,13 @@ import type { Operation, Plugin } from '../core/engine/plugin.js';
 import type { SourceFile, SourceSnapshot } from '../core/model/source.js';
 import { coverage } from '../plugins/coverage/coverage.js';
 import { duplication } from '../plugins/duplication/duplication.js';
-import { babelProvider, babelTypes } from '../plugins/language-js/babel-provider.js';
 import { maintainability } from '../plugins/maintainability/maintainability.js';
 import { structure } from '../plugins/structure/structure.js';
 import { claimMatcher, defaultLanguages, languageRegistry } from './languages.js';
 import type { LanguageProvider } from './languages.js';
 import { securityPlugins } from './security-plugins.js';
 
-export const structuralInspections = [{ ...structure, tools: babelTypes }, { ...maintainability, tools: babelTypes }];
+export const structuralInspections = [structure, maintainability];
 export const defaultProvider = defaultLanguages.providers[0]!;
 
 export interface SelectedSource {
@@ -35,7 +34,7 @@ export function selectAnalysisSources(snapshot: SourceSnapshot, additional: read
   const providersByPath = new Map(sources.flatMap(({ file, provider }) => provider ? [[file.path, provider] as const] : []));
   const sourceFiles = sources.flatMap(({ file, provider }) => provider ? [file] : []);
   const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional];
-  const plugins = [babelProvider, ...structuralInspections, duplication, ...(withCoverage ? [coverage] : []), ...claimedPlugins];
+  const plugins = [defaultProvider.plugin, ...structuralInspections, duplication, ...(withCoverage ? [coverage] : []), ...claimedPlugins];
   validateRegistration(plugins, additional, withCoverage);
   const claims: ClaimedPlugin[] = claimedPlugins.map(plugin => ({ plugin, matches: plugin.kinds.includes('language')
     ? path => providersByPath.get(path)?.plugin.id === plugin.id : claimMatcher(plugin.claims, languages.id) }));

@@ -5,7 +5,8 @@ import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.sc
 import fileSchema from '../../main/resources/report/json/file-metrics-v1.schema.json' with { type: 'json' };
 import reportSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { definitions } from '../../main/ts/core/model/measurement.js';
-import { fileMetrics, fileMetricsSchema } from '../../main/ts/report/json/projections/file-metrics.js';
+import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
+import { fileMetricsSchema } from '../../main/ts/report/json/wire/file-metrics-model.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
 test('file metrics roll up known counts and distinguish uncovered from missing files', () => {

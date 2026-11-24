@@ -1,7 +1,9 @@
 import { fileTypeId, fileTypes } from '../../../core/model/file-types.js';
 import type { LanguageLookup } from '../../../core/model/language.js';
 import { isRecord } from '../../../core/engine/plugin.js';
+import type { Measurement } from '../../../core/model/measurement.js';
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
+import { legacySyntaxPlugin } from '../../../core/model/report.js';
 import type { Report } from '../validation/report.js';
 import type { ChurnWindow } from '../../../core/model/churn.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
@@ -9,12 +11,9 @@ import { metricProjection } from './metric-values.js';
 
 import { fileMetricsSchema } from '../wire/file-metrics-model.js';
 import type { Complexity, DirectoryMetrics, FileMetricsReport, Maintainability, Metrics, Quality } from '../wire/file-metrics-model.js';
-export { fileMetricsSchema } from '../wire/file-metrics-model.js';
-export type { FileMetricsReport } from '../wire/file-metrics-model.js';
 
 export function fileMetrics(report: Report, registry: LanguageLookup = { id: fileTypeId, catalog: [] }): FileMetricsReport {
   const byPath = new Map<string, Metrics>();
-  const duplicatedLines = new Map<string, number>();
   const pluginMetrics = metricProjection(report);
   const languages: { id: string; label?: string; color?: string; analysed: boolean }[] = [];
   const recorded = new Map(report.pluginData?.languages?.map(item => [item.id, item]));
@@ -51,46 +50,14 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
     if (provider !== undefined) entry.provider = provider;
   }
 
-  for (const row of report.measurements) {
-    if (!row.path) continue;
-    const id = canonicalMetricId(row.definition);
-    if (pluginMetrics) file(row.path);
-    if (row.target === 'file' && id === definitions.coverage && row.covered !== undefined && row.total !== undefined) {
-      file(row.path).lineCoverage = { covered: row.covered, total: row.total };
-    }
-    if (row.value === null || !Number.isSafeInteger(row.value) || row.value < 0) continue;
-    if (row.target === 'file' && id === definitions.lines) file(row.path).lines = row.value;
-    if (row.target === 'file' && id === definitions.functions) file(row.path).functions = row.value;
-    if (row.target === 'file') {
-      switch (id) {
-        case definitions.codeLines: quality(file(row.path)).codeLines = row.value; break;
-        case definitions.comments: quality(file(row.path)).commentLines = row.value; break;
-        case definitions.classes: quality(file(row.path)).classes = row.value; break;
-        case definitions.cognitiveComplexity: quality(file(row.path)).cognitiveComplexity = row.value; break;
-        case definitions.churn: quality(file(row.path)).churn = row.value; break;
-        case definitions.duplicatedLines: duplicatedLines.set(row.path, row.value); break;
-      }
-    }
-    if (row.target === 'function' && id === definitions.complexity) {
-      const target = file(row.path);
-      target.complexity = addComplexity(target.complexity, { sum: row.value, maximum: row.value, measuredFunctions: 1 });
-    }
-  }
-
-  for (const [path, duplicateCount] of duplicatedLines) {
-    const entry = byPath.get(path);
-    const codeLines = entry?.quality?.codeLines;
-    if (entry && codeLines !== undefined && duplicateCount <= codeLines) {
-      quality(entry).duplication = { duplicatedLines: duplicateCount, codeLines };
-    }
-  }
-  addFileFindings(byPath, report.findings);
+  const duplicatedLines = collectMeasurements(report.measurements, file, pluginMetrics !== undefined);
+  addFileQuality(byPath, duplicatedLines, report.findings);
 
   let unassignedDiagnostics = 0;
   for (const diagnostic of report.diagnostics) {
     const { path, operation } = diagnostic;
     const target = path === undefined ? undefined
-      : operation === 'babel-syntax/parse' || operation.startsWith('structure/') ? file(path) : byPath.get(path);
+      : operation === `${legacySyntaxPlugin}/parse` || operation.startsWith('structure/') ? file(path) : byPath.get(path);
     if (target) target.diagnosticCount++;
     else unassignedDiagnostics++;
   }
@@ -128,8 +95,8 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   const complexity = files.filter(entry => entry.complexity?.maximum != null)
     .sort((left, right) => right.complexity!.maximum! - left.complexity!.maximum!
       || right.complexity!.sum - left.complexity!.sum || byName(left, right));
-  const coverage = files.filter(entry => missedLines(entry) > 0)
-    .sort((left, right) => missedLines(right) - missedLines(left) || byName(left, right));
+  const coverage = ranked(files, ({ lineCoverage }) => lineCoverage && lineCoverage.covered < lineCoverage.total
+    ? lineCoverage.total - lineCoverage.covered : undefined) ?? [];
   const cognitive = ranked(files, entry => entry.quality?.cognitiveComplexity);
   const duplication = ranked(files, entry => entry.quality?.duplication?.duplicatedLines);
   const churn = ranked(files, entry => entry.quality?.churn);
@@ -140,17 +107,50 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
     ...(pluginMetrics === undefined ? {} : { catalog: pluginMetrics.catalog }),
     ...(languages.length === 0 ? {} : { languages }),
     ...(churnWindow === undefined ? {} : { churnWindow }),
-    hotspots: { complexity: complexity.map(entry => entry.path), missedLines: coverage.map(entry => entry.path),
+    hotspots: { complexity: complexity.map(entry => entry.path), missedLines: coverage,
       ...(cognitive === undefined ? {} : { cognitive }), ...(duplication === undefined ? {} : { duplication }),
       ...(churn === undefined ? {} : { churn }) } };
 }
 
-function addFileFindings(byPath: ReadonlyMap<string, Metrics>, findings: Report['findings']): void {
-  if (findings === undefined) return;
-  for (const entry of byPath.values()) {
-    if (entry.quality?.duplication) entry.quality.maintainability = { smells: 0, effortMinutes: 0 };
+const qualityFields = new Map<string, keyof Omit<Quality, 'duplication' | 'maintainability'>>([
+  [definitions.codeLines, 'codeLines'], [definitions.comments, 'commentLines'], [definitions.classes, 'classes'],
+  [definitions.cognitiveComplexity, 'cognitiveComplexity'], [definitions.churn, 'churn'],
+]);
+
+function collectMeasurements(rows: readonly Measurement[], file: (path: string) => Metrics, includeMeasuredFiles: boolean) {
+  const duplicated = new Map<string, number>();
+  for (const { path, target, value, definition, covered, total } of rows) {
+    if (!path) continue;
+    if (includeMeasuredFiles) file(path);
+    const id = canonicalMetricId(definition);
+    if (target === 'file' && id === definitions.coverage && covered !== undefined && total !== undefined) {
+      file(path).lineCoverage = { covered, total };
+    }
+    if (value === null || !Number.isSafeInteger(value) || value < 0) continue;
+    if (target === 'file') {
+      const field = qualityFields.get(id);
+      if (field) quality(file(path))[field] = value;
+      else if (id === definitions.lines) file(path).lines = value;
+      else if (id === definitions.functions) file(path).functions = value;
+      else if (id === definitions.duplicatedLines) duplicated.set(path, value);
+    } else if (target === 'function' && id === definitions.complexity) {
+      const entry = file(path);
+      entry.complexity = addComplexity(entry.complexity, { sum: value, maximum: value, measuredFunctions: 1 });
+    }
   }
-  for (const finding of findings) {
+  return duplicated;
+}
+
+function addFileQuality(byPath: ReadonlyMap<string, Metrics>, duplicated: ReadonlyMap<string, number>, findings: Report['findings']): void {
+  for (const [path, duplicatedLines] of duplicated) {
+    const entry = byPath.get(path);
+    const codeLines = entry?.quality?.codeLines;
+    if (!entry || codeLines === undefined || duplicatedLines > codeLines) continue;
+    const result = quality(entry);
+    result.duplication = { duplicatedLines, codeLines };
+    if (findings !== undefined) result.maintainability = { smells: 0, effortMinutes: 0 };
+  }
+  for (const finding of findings ?? []) {
     if (!finding.path || (finding.category !== 'structure' && finding.category !== 'duplication')) continue;
     const observations = byPath.get(finding.path)?.quality;
     if (!observations?.maintainability) continue;
@@ -242,8 +242,4 @@ function addComplexity(left: Complexity | null, right: Complexity | null): Compl
   if (!left || !right) return left ?? right;
   const maximum = left.maximum === null ? right.maximum : Math.max(left.maximum, right.maximum ?? left.maximum);
   return { sum: left.sum + right.sum, maximum, measuredFunctions: left.measuredFunctions + right.measuredFunctions };
-}
-
-function missedLines(entry: Metrics): number {
-  return entry.lineCoverage ? entry.lineCoverage.total - entry.lineCoverage.covered : 0;
 }

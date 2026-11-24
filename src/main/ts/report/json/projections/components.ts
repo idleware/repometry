@@ -1,4 +1,4 @@
-import type { FileMetricsReport } from './file-metrics.js';
+import type { FileMetricsReport } from '../wire/file-metrics-model.js';
 
 import type { Component, ComponentMetrics } from '../wire/component-model.js';
 export type { Component, ComponentMetrics } from '../wire/component-model.js';

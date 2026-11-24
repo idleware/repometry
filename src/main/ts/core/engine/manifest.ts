@@ -21,36 +21,15 @@ export function isCoreReportProduct(contract: string): boolean {
 }
 
 export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDeclaration> {
-  const { id, kinds: declaredKinds, claims, providesLanguages, produces, rules, config } = plugin;
-  if (declaredKinds === undefined && claims === undefined && providesLanguages === undefined && produces === undefined) {
-    throw new Error(`Missing plugin manifest for ${id}. Declare kinds and produces.`);
-  }
-  if (Object.hasOwn(plugin, 'languages')) throw new Error(`Plugin ${id} must declare languages in claims.languages`);
-  if (!strings(declaredKinds) || declaredKinds.length === 0 || declaredKinds.some(kind => !kinds.has(kind))) {
-    throw new Error(`Invalid kinds for plugin ${id}`);
-  }
-  if (claims !== undefined && (!isRecord(claims) || Object.entries(claims).some(([key, values]) =>
-    key === 'scanOnly' ? typeof values !== 'boolean'
-    : !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
-    || (key === 'extensions' && values.some(extension => !/^\.[\w-]+$/.test(extension)))))) {
-    throw new Error(`Invalid file claims for plugin ${id}`);
-  }
-  if (providesLanguages !== undefined && (!declaredKinds.includes('language') || !validLanguages(providesLanguages))) {
-    throw new Error(`Invalid provided languages for plugin ${id}`);
-  }
-  if (!Array.isArray(produces)) throw new Error(`Plugin ${id} must declare its products`);
-  if (rules !== undefined && (!Array.isArray(rules) || !rules.every(isRuleDescriptor)
-    || new Set(rules.map(rule => rule.id)).size !== rules.length)) throw new Error(`Invalid or duplicate rules for plugin ${id}`);
-  if (config !== undefined && typeof config !== 'boolean' && !isRecord(config)) throw new Error(`Invalid configuration schema for plugin ${id}`);
-
+  const { id, produces, rules } = manifestDeclarations(plugin);
   const products = new Map<string, ProductDeclaration>();
   const catalog = new Map<string, MetricDescriptor>();
   for (const product of produces) {
     if (!isRecord(product) || !text(product.contract) || !text(product.persistence) || !persistence.has(product.persistence)
       || products.has(product.contract)) throw new Error(`Invalid or duplicate product for plugin ${id}`);
     const { contract, schema, metrics } = product;
-    if ((schema === undefined && product.persistence !== 'transient' && !isCoreReportProduct(contract))
-      || (schema !== undefined && typeof schema !== 'boolean' && !isRecord(schema))) {
+    if (schema === undefined ? product.persistence !== 'transient' && !isCoreReportProduct(contract)
+      : typeof schema !== 'boolean' && !isRecord(schema)) {
       throw new Error(`Missing or invalid product schema for ${contract} in plugin ${id}`);
     }
     if (metrics !== undefined && (!Array.isArray(metrics) || !metrics.every(isMetricDescriptor))) {
@@ -63,20 +42,40 @@ export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDec
     }
     products.set(contract, declaration);
   }
-  for (const rule of rules ?? []) {
-    if (rule.measure !== undefined && !catalog.has(rule.measure)) {
-      throw new Error(`Rule ${rule.id} in plugin ${id} references undeclared metric ${rule.measure}`);
-    }
-  }
+  const undeclared = rules?.find(rule => rule.measure !== undefined && !catalog.has(rule.measure));
+  if (undeclared) throw new Error(`Rule ${undeclared.id} in plugin ${id} references undeclared metric ${undeclared.measure}`);
   for (const metric of catalog.values()) {
     if (!metric.ratio) continue;
-    for (const component of [metric.ratio.of, metric.ratio.over]) {
-      if (component === metric.id || (!catalog.has(component) && !coreMetrics.has(component))) {
-        throw new Error(`Ratio ${metric.id} in plugin ${id} references invalid component ${component}`);
-      }
-    }
+    const invalid = [metric.ratio.of, metric.ratio.over].find(component =>
+      component === metric.id || (!catalog.has(component) && !coreMetrics.has(component)));
+    if (invalid !== undefined) throw new Error(`Ratio ${metric.id} in plugin ${id} references invalid component ${invalid}`);
   }
   return products;
+}
+
+function manifestDeclarations(plugin: Plugin) {
+  const { id, kinds: declaredKinds, claims, providesLanguages, produces, rules, config } = plugin;
+  if (declaredKinds === undefined && claims === undefined && providesLanguages === undefined && produces === undefined) {
+    throw new Error(`Missing plugin manifest for ${id}. Declare kinds and produces.`);
+  }
+  if (Object.hasOwn(plugin, 'languages')) throw new Error(`Plugin ${id} must declare languages in claims.languages`);
+  if (!strings(declaredKinds) || declaredKinds.length === 0 || declaredKinds.some(kind => !kinds.has(kind))) {
+    throw new Error(`Invalid kinds for plugin ${id}`);
+  }
+  if (claims !== undefined && (!isRecord(claims) || Object.entries(claims).some(([key, values]) =>
+    key === 'scanOnly' ? typeof values !== 'boolean'
+    : !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
+    || (key === 'extensions' && !values.every(isExtension))))) {
+    throw new Error(`Invalid file claims for plugin ${id}`);
+  }
+  if (providesLanguages !== undefined && (!declaredKinds.includes('language') || !validLanguages(providesLanguages))) {
+    throw new Error(`Invalid provided languages for plugin ${id}`);
+  }
+  if (!Array.isArray(produces)) throw new Error(`Plugin ${id} must declare its products`);
+  if (rules !== undefined && (!Array.isArray(rules) || !rules.every(isRuleDescriptor)
+    || new Set(rules.map(rule => rule.id)).size !== rules.length)) throw new Error(`Invalid or duplicate rules for plugin ${id}`);
+  if (config !== undefined && typeof config !== 'boolean' && !isRecord(config)) throw new Error(`Invalid configuration schema for plugin ${id}`);
+  return { id, produces, rules };
 }
 
 function validLanguages(values: unknown): boolean {
@@ -85,7 +84,7 @@ function validLanguages(values: unknown): boolean {
   for (const value of values as unknown[]) {
     if (!isRecord(value) || !isLanguageDisplay(value) || ids.has(value.id)) return false;
     const { extensions, globs } = value;
-    if (extensions !== undefined && (!strings(extensions) || extensions.some(extension => !/^\.[\w-]+$/.test(extension)))) return false;
+    if (extensions !== undefined && (!strings(extensions) || !extensions.every(isExtension))) return false;
     if (globs !== undefined && !strings(globs)) return false;
     if (!(Array.isArray(extensions) && extensions.length || Array.isArray(globs) && globs.length)) return false;
     ids.add(value.id);
@@ -110,6 +109,10 @@ export function isMetricDescriptor(value: unknown): value is MetricDescriptor {
     && (value.bands === undefined || (Array.isArray(value.bands) && value.bands.length === 4
       && value.bands.every((limit, index, array) => typeof limit === 'number' && Number.isFinite(limit)
         && (index === 0 || limit > array[index - 1]))));
+}
+
+function isExtension(value: string): boolean {
+  return /^\.[\w-]+$/.test(value);
 }
 
 function strings(value: unknown): value is readonly string[] {

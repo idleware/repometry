@@ -32,13 +32,12 @@ export const duplicationInput = cloneSources;
 interface Occurrence extends Candidate { readonly path: string }
 
 function detectClones(sources: readonly CloneSource[]): FindingResult {
-  const schemes = new Map<string, Map<string, Occurrence[]>>();
+  const schemes = new Map<string | undefined, Map<string, Occurrence[]>>();
   for (const { path, candidates, scheme } of sources) {
-    const name = scheme ?? 'babel-syntax';
-    let byFingerprint = schemes.get(name);
+    let byFingerprint = schemes.get(scheme);
     if (!byFingerprint) {
       byFingerprint = new Map();
-      schemes.set(name, byFingerprint);
+      schemes.set(scheme, byFingerprint);
     }
     for (const candidate of candidates) {
       const occurrences = byFingerprint.get(candidate.similar);
