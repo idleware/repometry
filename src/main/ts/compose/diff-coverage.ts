@@ -1,7 +1,7 @@
 import { execute } from '../core/engine/execute.js';
 import { plan } from '../core/engine/plan.js';
-import type { Product } from '../core/engine/plugin.js';
-import { digest, sourceDirectoriesExcluded, sourceExtensions, sourceLineCounts } from '../core/model/snapshot.js';
+import type { Plugin, Product } from '../core/engine/plugin.js';
+import { digest, sourceDirectoriesExcluded, sourceLineCounts } from '../core/model/snapshot.js';
 import { executeDiffCoverage } from '../core/usecases/diff-coverage.js';
 import type { DiffCoveragePorts, DiffCoverageReport } from '../core/usecases/diff-coverage.js';
 import { defaultSourceExclusions, generatedSourcePolicy, sourceExclusionMatcher } from '../core/profile/exclusions.js';
@@ -11,6 +11,7 @@ import { diffMethod, findMergeBase, readChanges } from '../api/git/changes.js';
 import { gitText, physicalGitRoot, readGitCommit, resolveGitCommit } from '../api/git/git.js';
 import { readLcovFiles } from '../api/import/lcov-files.js';
 import type { LcovFiles } from '../api/import/lcov-files.js';
+import { defaultLanguages, languageRegistry } from './languages.js';
 
 export { diffCoverageSchema } from '../core/usecases/diff-coverage.js';
 export type { DiffCoverageReport } from '../core/usecases/diff-coverage.js';
@@ -22,6 +23,7 @@ export interface DiffCoverageRequest {
   readonly lcov: LcovFiles;
   readonly exclude?: readonly string[];
   readonly minimumPercent?: number;
+  readonly plugins?: readonly Plugin[];
 }
 
 const operation = 'diff-coverage/measure';
@@ -59,10 +61,11 @@ async function readInputs(request: DiffCoverageRequest, excludedPaths: readonly 
     gitText(root, ['--version']).then(text => text.trim()),
   ]);
   const base = await findMergeBase(root, requestedBase, head);
-  const snapshot = await readGitCommit(root, head, excludes);
-  const changes = await readChanges(root, base, snapshot, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded));
+  const { isSource, extensions, globs } = request.plugins?.length ? languageRegistry(request.plugins) : defaultLanguages;
+  const snapshot = await readGitCommit(root, head, excludes, isSource);
+  const changes = await readChanges(root, base, snapshot, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded), isSource);
   return { requestedBase, base, head, snapshot, changes, root, lcovText: lcov.text, appliedConfig: {
-    source: { extensions: sourceExtensions, excludedDirectories: sourceDirectoriesExcluded, excludedPaths,
+    source: { extensions, ...(globs.length ? { globs } : {}), excludedDirectories: sourceDirectoriesExcluded, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
     gitDiff: { ...diffMethod, version: gitVersion },
     lcov: { inputDigest: digest(lcov.text), pathBase: root, merge: 'any-hit', importerVersion: coverage.version,

@@ -18,7 +18,7 @@ const catalog = [...kind('branch', 'branches'), ...kind('function', 'functions')
 const commit = (sha: string, values: Record<number, number>) => ({
   sha, lineCoverage: { covered: 50, total: 100 }, values,
 } as unknown as PublicHistoryEntry);
-const data = (reports: PublicHistoryEntry[]): TrendData => ({ reports, quality: {}, context: null, compact: false, link: () => '' });
+const data = (reports: PublicHistoryEntry[], reviews = 1): TrendData => ({ reports, quality: {}, context: null, compact: false, reviews, link: () => '' });
 
 test('Trends lists every coverage kind the history has, after line coverage and before changed lines, without their counts', () => {
   useCatalog(catalog);
@@ -32,6 +32,12 @@ test('a history without branch or function data keeps line coverage alone', () =
   const views = availableViews(data([commit('b'.repeat(40), {})]));
   assert.deepEqual(views.filter(view => view.includes('coverage')), ['coverage', 'diff-coverage']);
   assert.equal(pluginSpec('branch-coverage'), undefined);
+});
+
+test('changed-line coverage is a series only where pull request reviews are saved', () => {
+  useCatalog([]);
+  assert.deepEqual(availableViews(data([commit('e'.repeat(40), {})], 0)).filter(view => view.includes('coverage')), ['coverage']);
+  assert.ok(availableViews(data([commit('e'.repeat(40), {})], 2)).includes('diff-coverage'));
 });
 
 test('a kind reads as the share of its covered over its measured count, and is absent where nothing was measured', () => {

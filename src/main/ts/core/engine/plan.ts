@@ -1,18 +1,16 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { isJsonValue } from '../model/plugin-data.js';
 import { pluginApi } from './plugin.js';
-import type { LegacyPlugin, Operation, Plugin, ProductDeclaration } from './plugin.js';
+import type { Operation, Plugin, ProductDeclaration } from './plugin.js';
 import { manifestProducts } from './manifest.js';
 
 export type InputBinding = { readonly external: string } | { readonly operation: string };
 
 export interface PlanRequest {
-  readonly plugins: readonly (Plugin | LegacyPlugin)[];
+  readonly plugins: readonly Plugin[];
   readonly select: readonly string[];
   readonly inputs: ReadonlyMap<string, string>;
   readonly bindings?: ReadonlyMap<string, Readonly<Record<string, InputBinding>>>;
-  /** Explicit migration exception for named v1 plugins that predate the manifest. */
-  readonly legacyPluginIds?: readonly string[];
 }
 
 export interface PlannedOperation {
@@ -25,7 +23,7 @@ export interface PlannedOperation {
 }
 
 export function plan(request: PlanRequest): readonly PlannedOperation[] {
-  const { operations, declarations, cacheIdentities } = indexOperations(request.plugins, new Set(request.legacyPluginIds));
+  const { operations, declarations, cacheIdentities } = indexOperations(request.plugins);
   const resolved = new Map<string, PlannedOperation>();
   const path: string[] = [];
 
@@ -79,7 +77,7 @@ function validateSchema(schema: NonNullable<ProductDeclaration['schema']>, key: 
   }
 }
 
-function indexOperations(plugins: PlanRequest['plugins'], legacyPlugins: ReadonlySet<string>) {
+function indexOperations(plugins: PlanRequest['plugins']) {
   const ids = new Set<string>();
   const operations = new Map<string, Operation>();
   const declarations = new Map<string, ProductDeclaration>();
@@ -89,14 +87,14 @@ function indexOperations(plugins: PlanRequest['plugins'], legacyPlugins: Readonl
     if (plugin.api !== pluginApi) throw new Error(`Unsupported plugin API for ${plugin.id}: ${plugin.api}`);
     if (ids.has(plugin.id) || !plugin.id || plugin.id.includes('/')) throw new Error(`Invalid or duplicate plugin ID: ${plugin.id}`);
     ids.add(plugin.id);
-    const products = manifestProducts(plugin, legacyPlugins.has(plugin.id));
+    const products = manifestProducts(plugin);
     if (plugin.settings !== undefined) {
       if (!isJsonValue(plugin.settings)) throw new Error(`Plugin settings must be JSON data: ${plugin.id}`);
       if (plugin.config !== undefined && !new Ajv2020().validate(plugin.config, plugin.settings)) {
         throw new Error(`Plugin settings violate the configuration schema: ${plugin.id}`);
       }
     }
-    for (const declaration of products?.values() ?? []) {
+    for (const declaration of products.values()) {
       for (const metric of declaration.metrics ?? []) {
         const owner = metricOwners.get(metric.id);
         if (owner !== undefined) throw new Error(`Duplicate metric ${metric.id} in plugins ${owner} and ${plugin.id}`);
@@ -109,16 +107,14 @@ function indexOperations(plugins: PlanRequest['plugins'], legacyPlugins: Readonl
       if (operation.scope !== undefined && operation.scope !== 'file' && operation.scope !== 'repository') {
         throw new Error(`Invalid operation scope: ${key}`);
       }
-      if (products !== undefined) {
-        const declaration = products.get(operation.output.id);
-        if (!declaration) throw new Error(`Undeclared output for ${key}: ${operation.output.id}`);
-        declarations.set(key, declaration);
-        if (declaration.persistence === 'cache') {
-          cacheIdentities.set(key, JSON.stringify([
-            plugin.api, plugin.version, Object.entries(plugin.tools ?? {}).sort(), plugin.settings, operation.scope, operation.implementation,
-            declaration.contract, declaration.schema,
-          ]));
-        }
+      const declaration = products.get(operation.output.id);
+      if (!declaration) throw new Error(`Undeclared output for ${key}: ${operation.output.id}`);
+      declarations.set(key, declaration);
+      if (declaration.persistence === 'cache') {
+        cacheIdentities.set(key, JSON.stringify([
+          plugin.api, plugin.version, Object.entries(plugin.tools ?? {}).sort(), plugin.settings, operation.scope, operation.implementation,
+          declaration.contract, declaration.schema,
+        ]));
       }
       operations.set(key, operation);
     }

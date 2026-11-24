@@ -4,7 +4,6 @@ import type { IgnoredFinding } from './ignore-rule.js';
 import type { PluginData } from './plugin-data.js';
 import type { Subject } from './source.js';
 
-export const legacyReportSchema = 'urn:repometry:schema:report:1';
 export const reportSchema = 'urn:repometry:schema:report:2';
 
 export interface Diagnostic {
@@ -15,7 +14,7 @@ export interface Diagnostic {
 }
 
 export interface Report {
-  readonly schema: typeof reportSchema | typeof legacyReportSchema;
+  readonly schema: typeof reportSchema;
   readonly subject: Subject;
   readonly generatedAt: string;
   readonly committedAt?: string;

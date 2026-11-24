@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { comparePaths, isExcludedDirectory, isSourcePath, textLineCount, utf8 } from '../../core/model/snapshot.js';
+import { comparePaths, isExcludedDirectory, textLineCount, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
 import { isGeneratedSource } from '../../core/profile/exclusions.js';
@@ -100,11 +100,11 @@ export async function gitBlobText(directory: string, oid: string): Promise<strin
 }
 
 export async function readGitCommit(directory: string, revision: string, excludes: (path: string) => boolean,
-  claims?: (path: string) => boolean): Promise<SourceSnapshot> {
+  isSource: (path: string) => boolean, claims?: (path: string) => boolean): Promise<SourceSnapshot> {
   const id = await resolveGitCommit(directory, revision);
   const tracked = (await gitTreeFiles(directory, id, undefined, true)).filter(({ path }) =>
     !path.split('/').slice(0, -1).some(isExcludedDirectory) && !excludes(path));
-  const entries = tracked.filter(entry => isSourcePath(entry.path));
+  const entries = tracked.filter(entry => isSource(entry.path));
   const blobs = readBlobs(directory, [...new Set(entries.map(entry => entry.oid))]);
   const generated = new Set<string>();
   const files = entries.flatMap(({ path, oid }) => {
@@ -114,7 +114,7 @@ export async function readGitCommit(directory: string, revision: string, exclude
     generated.add(path);
     return [];
   });
-  const claimed = tracked.filter(({ path }) => !isSourcePath(path) && claims?.(path));
+  const claimed = tracked.filter(({ path }) => !isSource(path) && claims?.(path));
   const oversized = new Set(claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes).map(({ path }) => path));
   const requested = new Set(claimed.filter(({ path }) => !oversized.has(path)).map(({ oid }) => oid));
   const claimedBlobs = new Map<string, Buffer>();

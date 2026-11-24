@@ -2,7 +2,7 @@ import type { AnalysisExecutor } from '../../core/usecases/inspect.js';
 import { readReport } from '../../report/json/validation/report.js';
 import { encodeWorkerInput, maxWorkerInput, maxWorkerResult, workerRoute } from './worker-protocol.js';
 
-export function remoteExecutor(endpoint: string, token: string): AnalysisExecutor {
+export function remoteExecutor(endpoint: string, token: string, isSource: (path: string) => boolean): AnalysisExecutor {
   const base = new URL(endpoint);
   const local = ['127.0.0.1', '[::1]', 'localhost'].includes(base.hostname);
   if (base.protocol !== 'https:' && !(base.protocol === 'http:' && local)) {
@@ -11,7 +11,7 @@ export function remoteExecutor(endpoint: string, token: string): AnalysisExecuto
   if (base.username || base.password || base.search || base.hash) throw new Error('Invalid worker base URL');
   base.pathname = base.pathname.replace(/\/+$/, '') + workerRoute;
   return async input => {
-    const body = encodeWorkerInput(input);
+    const body = encodeWorkerInput(input, isSource);
     if (Buffer.byteLength(body) > maxWorkerInput) throw new Error('Worker input exceeds 16 MiB');
     const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body, signal: AbortSignal.timeout(60_000), redirect: 'error' });

@@ -3,14 +3,14 @@ import { test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
 import fileSchema from '../../main/resources/report/json/file-metrics-v1.schema.json' with { type: 'json' };
-import reportSchema from '../../main/resources/report/json/report-v1.schema.json' with { type: 'json' };
+import reportSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { fileMetrics, fileMetricsSchema } from '../../main/ts/report/json/projections/file-metrics.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
 test('file metrics roll up known counts and distinguish uncovered from missing files', () => {
   const report: Report = {
-    schema: 'urn:repometry:schema:report:1',
+    schema: 'urn:repometry:schema:report:2',
     subject: { kind: 'commit', id: 'a'.repeat(40) },
     generatedAt: '2026-11-21T00:00:00Z',
     status: 'partial',
@@ -55,7 +55,7 @@ test('file metrics roll up known counts and distinguish uncovered from missing f
 
 test('file quality totals use measured denominators and preserve unknown effort', () => {
   const report: Report = {
-    schema: 'urn:repometry:schema:report:1',
+    schema: 'urn:repometry:schema:report:2',
     subject: { kind: 'commit', id: 'b'.repeat(40) },
     generatedAt: '2026-11-21T00:00:00Z',
     status: 'partial',

@@ -1,5 +1,5 @@
 import { gitText, gitUtf8 } from './git.js';
-import { isSourcePath, physicalLines, utf8 } from '../../core/model/snapshot.js';
+import { physicalLines, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
 
 import type { GitChanges, LineRange } from '../../core/model/changes.js';
@@ -28,7 +28,7 @@ export async function findMergeBase(repository: string, base: string, head: stri
 }
 
 export async function readChanges(repository: string, base: string, head: SourceSnapshot,
-  excludes: (path: string) => boolean): Promise<GitChanges> {
+  excludes: (path: string) => boolean, isSource: (path: string) => boolean): Promise<GitChanges> {
   if (!oid.test(base) || head.subject.kind !== 'commit' || !oid.test(head.subject.id)) throw new Error('Git diff requires full commit IDs');
   const files = new Map<string, readonly LineRange[]>();
   const gaps = new Map<string, string>();
@@ -40,7 +40,7 @@ export async function readChanges(repository: string, base: string, head: Source
   for (const change of rawChanges(raw)) {
     const bytes = contents.get(change.path);
     if (!bytes || !regularFile.test(change.mode)) continue;
-    const before = change.previous && isSourcePath(change.previous.path) && !excludes(change.previous.path)
+    const before = change.previous && isSource(change.previous.path) && !excludes(change.previous.path)
       ? change.previous.oid : undefined;
     if (before === change.oid) continue;
     let source: string;

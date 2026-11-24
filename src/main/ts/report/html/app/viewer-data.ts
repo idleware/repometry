@@ -1,9 +1,9 @@
+// The viewer's data: the repository summary, which lists every inspected commit, and each commit's inspection on demand.
 import { unpackJson } from '../../json/wire/compact-json.js';
 import { summarySchema } from '../../json/wire/summary-model.js';
-import { compareHistoryEntries, historySchema } from '../../json/wire/public-history-model.js';
-import type { DetailsBundle, InspectionAsset } from '../../json/wire/inspection-details-model.js';
+import type { InspectionAsset } from '../../json/wire/inspection-details-model.js';
 import type { InspectionContext } from '../../json/wire/inspection-context-model.js';
-import type { PublicHistory, PublicHistoryEntry, QualityHistory } from '../../json/wire/public-history-model.js';
+import type { PublicHistoryEntry, QualityHistory } from '../../json/wire/public-history-model.js';
 import type { InspectionCounts, MetricDescriptor, RepositorySummary } from '../../json/wire/summary-model.js';
 import { sourceLocator } from './viewer-source.js';
 import type { SourceLocator } from './viewer-source.js';
@@ -12,7 +12,7 @@ export interface ViewerData {
   readonly reports: readonly PublicHistoryEntry[];
   readonly quality: QualityHistory['reports'];
   readonly context: Record<string, InspectionContext>;
-  readonly counts?: Record<string, InspectionCounts | undefined>;
+  readonly counts: Record<string, InspectionCounts | undefined>;
   readonly pullReviewCount?: number;
   /** The branch whose first-parent history the commits are, when the configuration names it. */
   readonly branch?: string;
@@ -34,7 +34,6 @@ export class ViewerSummaryChanged extends Error {
 
 export async function loadViewerData(mode: string | undefined): Promise<ViewerData> {
   const summary = await readSummary();
-  if (!summary) return legacyViewerData(mode);
   const counts = Object.fromEntries(summary.commits.map(commit => [commit.sha, commit.counts]));
   const details = new Map(summary.commits.map(commit => [commit.sha, commit.detail]));
   return {
@@ -64,9 +63,8 @@ export async function loadViewerData(mode: string | undefined): Promise<ViewerDa
   };
 }
 
-async function readSummary(cache?: RequestCache): Promise<RepositorySummary | null> {
+async function readSummary(cache?: RequestCache): Promise<RepositorySummary> {
   const response = await fetch('./summary.json', { cache });
-  if (response.status === 404) return null;
   if (!response.ok) throw new Error('Could not load the repository summary');
   const data = await response.json() as RepositorySummary;
   if (data?.schema !== summarySchema || !Array.isArray(data.commits)
@@ -74,6 +72,7 @@ async function readSummary(cache?: RequestCache): Promise<RepositorySummary | nu
   return data;
 }
 
+/** A commit's inspection, where the summary's path names one: `inspection/` when served locally, `details/` in an export. */
 async function readInspection(path: string, sha: string, mode: string | undefined): Promise<InspectionAsset | null> {
   const prefix = `${mode === 'local' ? 'inspection' : 'details'}/${sha}-`;
   const allowed = path.startsWith(prefix) && /^[a-f0-9]{64}\.json$/.test(path.slice(prefix.length));
@@ -84,29 +83,6 @@ async function readInspection(path: string, sha: string, mode: string | undefine
   } catch {
     return null;
   }
-}
-
-async function legacyViewerData(mode: string | undefined): Promise<ViewerData> {
-  const [history, quality, saved, localContext] = await Promise.all([
-    readOptional<PublicHistory>('./history.json'),
-    readOptional<QualityHistory>('./quality-history.json'),
-    mode === 'local' ? null : readOptional<DetailsBundle>('./details.json'),
-    mode === 'local' ? readOptional<Record<string, InspectionContext>>('./inspection-context.json') : null,
-  ]);
-  if (history?.schema !== historySchema || !Array.isArray(history.reports)) throw new Error('Unsupported history format');
-  const bundle = saved?.schema === 'urn:repometry:schema:viewer-details:1' ? saved : null;
-  const context = localContext ?? bundle?.context ?? {};
-  const reports = [...history.reports].sort(compareHistoryEntries);
-  return {
-    reports, context, quality: quality?.schema === 'urn:repometry:schema:quality-history:1' ? quality.reports : {},
-    async loadDetails(sha) {
-      if (!shaPattern.test(sha)) return null;
-      const inspection = mode === 'local'
-        ? await readOptional<InspectionAsset['inspection']>(`./details/${sha}.json`)
-        : bundle?.inspections[sha];
-      return inspection ? { schema: 'urn:repometry:schema:viewer-inspection:1', sha, context: context[sha], inspection } : null;
-    },
-  };
 }
 
 async function readOptional<T>(path: string): Promise<T | null> {

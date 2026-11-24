@@ -97,13 +97,13 @@ function start(data: ViewerData): void {
 
   function trendData(): TrendData {
     return {
-      reports, quality, context, compact: compact.matches,
+      reports, quality, context, compact: compact.matches, reviews: pullReviewCount,
       link: (sha, view, period) => href({ page: 'trends', sha, view, period }),
     };
   }
 
   function refreshTabs(page: Page, sha: string, version: number, detail: Promise<InspectionAsset | null> | undefined): void {
-    const row = counts?.[sha];
+    const row = counts[sha];
     const cachedDetail = cached.get(sha);
     if (row) updateTabs(page, row.findingCount, row.diagnosticCount);
     else if (cachedDetail) updateDetailsTabs(page, cachedDetail);
@@ -201,7 +201,7 @@ function start(data: ViewerData): void {
     renderQuality(report, quality[report.sha]);
     if (page === 'overview') renderLead(reports, report, history, chartMetric, cached.get(report.sha));
     renderScannerContext(context?.[current.sha], report.sha);
-    const detail = needsDetails(page, Boolean(counts)) ? selectedDetails(report.sha) : undefined;
+    const detail = needsDetails(page) ? selectedDetails(report.sha) : undefined;
     refreshTabs(page, report.sha, version, detail);
     if (page === 'overview') renderTrend(trendData(), report, chartMetric, compact.matches);
     if (page === 'trends') showTrends(current, report, version);

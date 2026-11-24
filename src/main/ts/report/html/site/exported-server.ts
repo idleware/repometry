@@ -28,7 +28,8 @@ export async function serveExportedSite(directory: string, port: number, access?
   const local = summary.sources?.provider === 'local' && summary.sources.url === './sources/{revision}/{path}' ? access : undefined;
 
   async function file(name: string): Promise<Buffer | undefined> {
-    if (!/^[A-Za-z0-9_-]+\.(?:html|css|js|json|svg)$/.test(name) && !/^details\/[a-f0-9]+-[a-f0-9]{64}\.json$/.test(name)) {
+    if (name !== 'summary.json' && name !== 'pulls.json' && !/^[A-Za-z0-9_-]+\.(?:html|css|js|svg)$/.test(name)
+      && !/^details\/[a-f0-9]+-[a-f0-9]{64}\.json$/.test(name)) {
       return undefined;
     }
     const path = join(root, name);

@@ -1,6 +1,6 @@
 import { isRecord } from './plugin-data.js';
 import type { Report } from './report.js';
-import { definitions } from './measurement.js';
+import { canonicalMetricId, definitions } from './measurement.js';
 
 export type Grade = 'A' | 'B' | 'C' | 'D' | 'F';
 
@@ -33,9 +33,10 @@ export function qualitySummary(report: Report): QualitySummary {
   let duplicationMeasuredFiles = 0;
   for (const item of report.measurements) {
     if (item.target !== 'file' || item.value === null || !Number.isSafeInteger(item.value) || item.value < 0) continue;
-    if (item.definition === definitions.codeLines) codeMeasuredFiles++;
-    if (item.definition === definitions.duplicatedLines) duplicationMeasuredFiles++;
-    totals.set(item.definition, (totals.get(item.definition) ?? 0) + item.value);
+    const id = canonicalMetricId(item.definition);
+    if (id === definitions.codeLines) codeMeasuredFiles++;
+    if (id === definitions.duplicatedLines) duplicationMeasuredFiles++;
+    totals.set(id, (totals.get(id) ?? 0) + item.value);
   }
   const codeLines = totals.get(definitions.codeLines) ?? null;
   const duplicatedLines = totals.get(definitions.duplicatedLines) ?? null;

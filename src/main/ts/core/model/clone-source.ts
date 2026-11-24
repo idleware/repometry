@@ -13,6 +13,7 @@ export interface Candidate {
 
 export interface CloneSource {
   readonly path: string;
+  readonly scheme?: string;
   readonly codeLines: readonly number[];
   readonly candidates: readonly Candidate[];
 }
@@ -29,6 +30,7 @@ function isCount(value: unknown): value is number {
 
 export function isCloneSource(value: unknown): value is CloneSource {
   return isRecord(value) && typeof value.path === 'string' && Array.isArray(value.codeLines)
+    && (value.scheme === undefined || typeof value.scheme === 'string' && value.scheme.length > 0)
     && value.codeLines.every((line: unknown, index, lines) => isCount(line) && line > (lines[index - 1] ?? 0))
     && Array.isArray(value.candidates) && value.candidates.every(isCandidate);
 }

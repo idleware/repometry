@@ -1,20 +1,20 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
-import schemaV1 from '../../../../resources/report/json/report-v1.schema.json' with { type: 'json' };
 import schemaV2 from '../../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { isRecord } from '../../../core/engine/plugin.js';
 import { isMetricDescriptor } from '../../../core/engine/manifest.js';
 import { isFinding } from '../../../core/model/finding.js';
+import { canonicalMetricId } from '../../../core/model/measurement.js';
 import { lcovLines } from '../../../core/model/line-coverage.js';
 import { digest } from '../../../core/model/snapshot.js';
 import type { Subject } from '../../../core/model/source.js';
 import { compactJsonSchema, unpackJson } from '../wire/compact-json.js';
 import type { CommitSummary } from '../wire/summary-model.js';
-import { legacyReportSchema, reportSchema } from '../../../core/model/report.js';
+import { reportSchema } from '../../../core/model/report.js';
 import type { Report } from '../../../core/model/report.js';
 import type { ReportReader as DomainReportReader, ReportWriter } from '../../../core/ports/report.js';
 
-export { legacyReportSchema, reportSchema, validSubjectId } from '../../../core/model/report.js';
+export { reportSchema, validSubjectId } from '../../../core/model/report.js';
 export type { Diagnostic, Report } from '../../../core/model/report.js';
 
 export interface ReportReader extends DomainReportReader {
@@ -43,19 +43,21 @@ export function compareReports(a: Report, b: Report): number {
 }
 
 const ajv = new Ajv2020({ schemas: [metricCatalog] });
-const validateV1 = ajv.compile<Report>(schemaV1);
-const validateV2 = ajv.compile<Report>(schemaV2);
+const validate = ajv.compile<Report>(schemaV2);
 
 export function readReport(value: unknown): Report {
-  if (!isRecord(value) || (value.schema !== reportSchema && value.schema !== legacyReportSchema)) {
+  if (!isRecord(value) || value.schema !== reportSchema) {
     throw new Error('Unsupported or missing report schema');
   }
-  const validate = value.schema === reportSchema ? validateV2 : validateV1;
   if (!validate(value)) throw new Error(`Invalid report: ${ajv.errorsText(validate.errors)}`);
+  const definitionIds = Object.keys(value.definitions);
+  if (new Set(definitionIds.map(canonicalMetricId)).size !== definitionIds.length) {
+    throw new Error('Invalid report: the same measurement uses multiple IDs');
+  }
   if (value.pluginData) {
     const { metrics, measured, privateMetrics } = value.pluginData;
     const ids = new Set(metrics.map(metric => metric.id));
-    if (ids.size !== metrics.length || !metrics.every(isMetricDescriptor)
+    if (new Set([...ids].map(canonicalMetricId)).size !== metrics.length || !metrics.every(isMetricDescriptor)
       || [...measured, ...privateMetrics ?? []].some(id => !ids.has(id))) throw new Error('Invalid report: inconsistent metric catalog');
     const lines = value.pluginData.products[lcovLines.id];
     if (lines && !lcovLines.accepts(lines[0]?.value)) throw new Error('Invalid report: LCOV line ranges must be sorted and merged');

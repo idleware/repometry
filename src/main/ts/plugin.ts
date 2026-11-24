@@ -1,9 +1,10 @@
 export { pluginApi } from './core/engine/plugin.js';
 export type { DataContract, InspectionInputs, Operation, Plugin, PluginConfigSchema, Product, RuleDescriptor } from './core/engine/plugin.js';
-export type { FileClaims, LegacyPlugin, MetricDescriptor, MetricScope, PluginKind, ProductDeclaration } from './core/engine/plugin.js';
+export type { FileClaims, MetricDescriptor, MetricScope, PluginKind, ProductDeclaration } from './core/engine/plugin.js';
 export type { OperationCache, OperationCacheOptions } from './core/engine/operation-cache.js';
-export { codeStructure } from './core/model/code-structure.js';
+export { codeStructure, codeStructures } from './core/model/code-structure.js';
 export type { CodeStructure, FunctionComplexity, StructuralCheck, StructuralObservation } from './core/model/code-structure.js';
+export type { LanguageDisplay, ProvidedLanguage } from './core/model/language.js';
 export type { Candidate, CloneSource } from './core/model/clone-source.js';
 export { sourceFile, sourceFiles } from './core/model/snapshot.js';
 export type { InventoryFile, SourceFile, SourceSnapshot } from './core/model/source.js';

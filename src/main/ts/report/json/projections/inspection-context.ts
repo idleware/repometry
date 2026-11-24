@@ -71,11 +71,18 @@ function readProfile(config: Report['appliedConfig']) {
     coverage = settings;
   }
   const { churnWindow, securityScanners, ...settings } = config;
+  const plugins = Array.isArray(settings.plugins) ? settings.plugins.map(plugin => {
+    if (!isRecord(plugin)) return plugin;
+    const { providesLanguages, ...entry } = plugin;
+    if (entry.id === 'babel-syntax' && isDeepStrictEqual(entry.settings, config.parser)) delete entry.settings;
+    return entry;
+  }) : settings.plugins;
   // The policy is stable across commits; its matched paths describe this snapshot alone.
   const { generatedExcluded, ...sourceSettings } = source;
   return {
     exclusions: { paths: [...new Set([...(stringList(source.defaultExclusions) ?? []), ...paths, ...(stringList(generatedExcluded) ?? [])])], directories },
-    settings: { ...settings, coverage, findingImports: findingImportMethods(config.findingImports), source: { ...sourceSettings,
+    settings: { ...settings, ...(plugins === undefined ? {} : { plugins }), coverage,
+      findingImports: findingImportMethods(config.findingImports), source: { ...sourceSettings,
       extensions: extensions ? ordered(extensions) : source.extensions,
       excludedPaths: ordered(paths), excludedDirectories: ordered(directories),
     } },

@@ -10,7 +10,7 @@ import type { Candidate, CloneSource } from '../../core/model/clone-source.js';
 import { duplicationSettings } from '../../core/profile/maintainability.js';
 
 const cloneSources: DataContract<readonly CloneSource[]> = {
-  id: 'repometry.clone-sources-babel/v1',
+  id: 'repometry.clone-sources/v1',
   accepts: (value): value is readonly CloneSource[] => Array.isArray(value) && value.every(isCloneSource),
 };
 
@@ -32,8 +32,14 @@ export const duplicationInput = cloneSources;
 interface Occurrence extends Candidate { readonly path: string }
 
 function detectClones(sources: readonly CloneSource[]): FindingResult {
-  const byFingerprint = new Map<string, Occurrence[]>();
-  for (const { path, candidates } of sources) {
+  const schemes = new Map<string, Map<string, Occurrence[]>>();
+  for (const { path, candidates, scheme } of sources) {
+    const name = scheme ?? 'babel-syntax';
+    let byFingerprint = schemes.get(name);
+    if (!byFingerprint) {
+      byFingerprint = new Map();
+      schemes.set(name, byFingerprint);
+    }
     for (const candidate of candidates) {
       const occurrences = byFingerprint.get(candidate.similar);
       const occurrence = { ...candidate, path };
@@ -41,7 +47,7 @@ function detectClones(sources: readonly CloneSource[]): FindingResult {
       else byFingerprint.set(candidate.similar, [occurrence]);
     }
   }
-  const groups = [...byFingerprint.values()].filter(group => group.length > 1)
+  const groups = [...schemes.values()].flatMap(byFingerprint => [...byFingerprint.values()].filter(group => group.length > 1))
     .sort((left, right) => right[0]!.nodes - left[0]!.nodes || comparePaths(left[0]!.similar, right[0]!.similar));
   const matched = new Map(sources.map(source => [source.path, [] as Occurrence[]]));
   const findings: Finding[] = [];

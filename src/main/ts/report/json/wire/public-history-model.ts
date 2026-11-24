@@ -1,8 +1,6 @@
 import type { Report } from '../../../core/model/report.js';
 import type { QualitySummary } from '../../../core/model/quality-summary.js';
 
-export const historySchema = 'urn:repometry:schema:public-history:1';
-
 export interface PublicHistoryEntry {
   readonly sha: string;
   readonly generatedAt: string;
@@ -28,13 +26,7 @@ export function compareHistoryEntries(a: PublicHistoryEntry, b: PublicHistoryEnt
     || a.sha.localeCompare(b.sha);
 }
 
-export interface PublicHistory {
-  readonly schema: typeof historySchema;
-  readonly reports: readonly PublicHistoryEntry[];
-}
-
 export interface QualityHistory {
-  readonly schema: 'urn:repometry:schema:quality-history:1';
   readonly reports: Record<string, QualitySummary>;
 }
 

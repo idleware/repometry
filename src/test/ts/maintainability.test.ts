@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
-import { legacyReportSchema, readReport } from '../../main/ts/report/json/validation/report.js';
 import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { readReport } from '../../main/ts/report/json/validation/report.js';
 
 function scan(sources: Record<string, string>) {
   const snapshot = workingSnapshot(Object.entries(sources).map(([path, source]) => ({ path, bytes: Buffer.from(source) })));
@@ -32,11 +32,10 @@ test('duplicate groups retain the largest subtrees and count only distinct code 
     maintainability: { smells: 1, effortMinutes: 30, debtRatio: 30 / (2.4 * 0.031 ** 1.05 * 9600), grade: 'A' },
   });
 
-  // Historical measurements had no finding collection or derived quality fields.
-  const { findings: _, pluginData: _plugins, ...historical } = report;
-  const legacy = readReport({ ...historical, schema: legacyReportSchema, measurements: historical.measurements.filter(row =>
+  const { findings: _, pluginData: _plugins, ...incomplete } = report;
+  const minimal = readReport({ ...incomplete, measurements: incomplete.measurements.filter(row =>
     row.definition === definitions.lines || row.definition === definitions.functions || row.definition === definitions.complexity) });
-  assert.equal(qualitySummary(legacy).maintainability, null);
+  assert.equal(qualitySummary(minimal).maintainability, null);
 });
 
 test('nested functions have separate return counts and cognitive scores, and parse gaps suppress the project grade', async () => {

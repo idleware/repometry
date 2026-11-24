@@ -12,7 +12,8 @@ function report(char: string, committedAt: string, lines: number): Report {
   return {
     schema: reportSchema, subject: { kind: 'commit', id: char.repeat(40) },
     generatedAt: '2026-11-21T09:00:00.000Z',
-    appliedConfig: { churnWindow: { endingAt: committedAt } },
+    committedAt,
+    appliedConfig: { profile: 'fixture' },
     definitions: { [definitions.lines]: 'Physical lines' },
     status: 'complete', scope: { files: 1, parsed: 1 },
     measurements: [{ definition: definitions.lines, target: 'file', path: 'src/nested/component.ts', value: lines }],
@@ -57,7 +58,7 @@ test('stored reports reject a string table edit that moves measurements between 
   await assert.rejects(store.read(original.subject), /Report revision mismatch/);
 });
 
-test('summary includes existing legacy commits and reinspection updates the old point in place', async t => {
+test('summary includes current uncompressed reports and reinspection updates the old point in place', async t => {
   const output = await mkdtemp(join(tmpdir(), 'repometry-summary-'));
   t.after(() => rm(output, { recursive: true, force: true }));
   const store = new LocalReportStore(output);

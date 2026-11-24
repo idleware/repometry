@@ -3,17 +3,24 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import type { TestContext } from 'node:test';
+import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
+import { processPlugin } from '../../main/ts/api/process/plugin.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { Plugin } from '../../main/ts/core/engine/plugin.js';
-import { codeStructure } from '../../main/ts/core/model/code-structure.js';
+import { codeStructure, codeStructures } from '../../main/ts/core/model/code-structure.js';
 import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
-import { sourceFile } from '../../main/ts/core/model/snapshot.js';
+import { sourceFile, sourceFiles } from '../../main/ts/core/model/snapshot.js';
+import type { ToolRunner } from '../../main/ts/core/ports/tool-runner.js';
+import { compareInspections } from '../../main/ts/core/usecases/compare.js';
 import { fileQuality, maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
 import { structure } from '../../main/ts/plugins/structure/structure.js';
+import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
+import { readReport } from '../../main/ts/report/json/validation/report.js';
 
 function structureFacts(path: string): CodeStructure {
   return {
@@ -76,6 +83,9 @@ test('an inspection uses the provider that claims the current file', async t => 
   const report = await inspect({ directory, output: join(directory, '.repometry'), source: { workingTree: true },
     plugins: [provider, inspection] });
   assert.equal(report.status, 'complete');
+  assert.deepEqual(report.scope, { files: 2, parsed: 2 });
+  assert.equal(report.measurements.find(row => row.path === 'b.fixture' && row.definition === definitions.complexity)?.value, 4);
+  assert.ok(report.findings?.some(finding => finding.path === 'b.fixture'));
   assert.deepEqual(report.measurements.filter(row => row.definition === metric.id).map(row => [row.path, row.value]), [
     ['a.js', 0], ['b.fixture', 1],
   ]);
@@ -86,3 +96,58 @@ test('an inspection uses the provider that claims the current file', async t => 
     { syntax: { operation: 'fixture-provider/read' } },
   ]);
 });
+
+test('one repository-scoped language process supplies facts for all of its selected files', async t => {
+  await inspectFixtureLanguage(t);
+});
+
+const image = process.env.REPOMETRY_TOOL_TEST_IMAGE;
+test('a repository-scoped toy language supplies measures and display metadata through Docker', { skip: !image }, async t => {
+  await inspectFixtureLanguage(t, new DockerToolRunner(image!));
+});
+
+async function inspectFixtureLanguage(t: TestContext, docker?: ToolRunner) {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-batch-provider-'));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const paths = ['a.fixture', 'b.fixture'];
+  await Promise.all([...paths, 'excluded.fixture'].map(path => writeFile(join(directory, path), 'choose\n'.repeat(10))));
+  await writeFile(join(directory, 'native.js'), 'export const flag = true;\n');
+  let calls = 0;
+  const parser = `
+    const fs = require('node:fs');
+    const parse = ${structureFacts.toString()};
+    const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const value = input.inputs.files.files.filter(({ path }) => fs.readFileSync(path, 'utf8').startsWith('choose')).map(({ path }) => parse(path));
+    process.stdout.write(JSON.stringify({ kind: 'product', contract: ${JSON.stringify(codeStructures.id)}, value }) + '\\n');
+  `;
+  const provider = processPlugin({
+    id: 'batch-fixture', version: '1.0.0', api: pluginApi, kinds: ['language'], tools: { fixture: '1' },
+    providesLanguages: [{ id: 'toy', label: 'Toy Language', color: '#123456', extensions: ['.fixture'] }],
+    produces: [{ contract: codeStructures.id, persistence: 'transient' }],
+    operations: [{ id: 'read', role: 'provider', scope: 'repository', inputs: { files: sourceFiles }, output: codeStructures,
+      argv: ['node', '-e', parser], timeoutMs: 10_000, maxOutputBytes: 10_000 }],
+  }, { network: 'none', implementation: docker?.implementation ?? 'fixture', async run(invocation) {
+    calls++;
+    const { files } = invocation;
+    assert.deepEqual(files.map(file => file.path), paths);
+    if (docker) return docker.run(invocation);
+    const value = files.map(file => structureFacts(file.path));
+    return { exitCode: 0, stdout: Buffer.from(JSON.stringify({ kind: 'product', contract: codeStructures.id, value })), stderr: Buffer.alloc(0) };
+  } });
+  const report = await inspect({ directory, output: join(directory, '.repometry'), source: { workingTree: true },
+    exclude: ['excluded.fixture'], plugins: [provider] });
+  assert.equal(calls, 1);
+  assert.equal(report.status, 'complete');
+  assert.deepEqual(report.scope, { files: 3, parsed: 3 });
+  assert.deepEqual(report.measurements.filter(row => row.definition === definitions.complexity).map(row => [row.path, row.value]),
+    [['a.fixture', 4], ['b.fixture', 4]]);
+  assert.deepEqual(report.findings?.filter(finding => finding.category === 'structure').map(finding => finding.path), paths);
+  const metrics = fileMetrics(readReport(JSON.parse(JSON.stringify(report))));
+  assert.deepEqual(metrics.languages?.find(language => language.id === 'toy'),
+    { id: 'toy', label: 'Toy Language', color: '#123456', analysed: true });
+  assert.equal(metrics.files.find(file => file.path === paths[0])?.provider, 'batch-fixture/read');
+  assert.equal(compareInspections(report, report).metrics.physicalLines.delta, 0);
+  const failed = { ...report, diagnostics: [...report.diagnostics,
+    { operation: 'batch-fixture/read', path: paths[0], state: 'partial' as const, message: 'Parse issue' }] };
+  assert.equal(compareInspections(report, failed).metrics.physicalLines.current.status, 'partial');
+}

@@ -8,15 +8,10 @@ import { parse } from '@babel/parser';
 import { traverseFast } from '@babel/types';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
-import detailsV1 from '../../main/resources/report/json/viewer-details-v1.schema.json' with { type: 'json' };
 import inspectionV1 from '../../main/resources/report/json/viewer-inspection-v1.schema.json' with { type: 'json' };
 import summaryV1 from '../../main/resources/report/json/repository-summary-v1.schema.json' with { type: 'json' };
 import compactV1 from '../../main/resources/report/json/compact-json-v1.schema.json' with { type: 'json' };
 import fileMetricsV1 from '../../main/resources/report/json/file-metrics-v1.schema.json' with { type: 'json' };
-import historyV1 from '../../main/resources/report/json/public-history-v1.schema.json' with { type: 'json' };
-import contextV1 from '../../main/resources/report/json/inspection-context-v1.schema.json' with { type: 'json' };
-import qualityV1 from '../../main/resources/report/json/quality-history-v1.schema.json' with { type: 'json' };
-import reportV1 from '../../main/resources/report/json/report-v1.schema.json' with { type: 'json' };
 import reportV2 from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
@@ -24,10 +19,9 @@ import { defaultSourceExclusions, generatedSourcePolicy } from '../../main/ts/co
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
-import type { PublicHistory } from '../../main/ts/report/json/wire/public-history-model.js';
 import { unpackJson } from '../../main/ts/report/json/wire/compact-json.js';
 import type { RepositorySummary } from '../../main/ts/report/json/wire/summary-model.js';
-import type { DetailsBundle } from '../../main/ts/report/json/projections/inspection-details.js';
+import type { InspectionAsset } from '../../main/ts/report/json/projections/inspection-details.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
 
@@ -226,26 +220,21 @@ test('export writes the whole store without working trees and refuses to overwri
   const scripts = [...app, ...wire].filter(name => name.endsWith('.js'));
   const assets = [...scripts, ...resources.filter(name => name.endsWith('.css') || name === 'index.html')];
   assert.deepEqual((await readdir(viewer)).sort(),
-    [...assets, 'coverage.svg', 'details', 'history.json', 'maintainability.svg', 'pulls.json', 'quality-history.json', 'summary.json'].sort());
+    [...assets, 'coverage.svg', 'details', 'maintainability.svg', 'pulls.json', 'summary.json'].sort());
   const html = await readFile(join(viewer, 'index.html'), 'utf8');
   assert.match(html, /name="repometry-view" content="private"/);
   await expectShippedModules(viewer, html, scripts);
-  const text = await readFile(join(dir, 'viewer', 'history.json'), 'utf8');
-  assert.doesNotMatch(text, /private-/);
-  const quality = await readFile(join(dir, 'viewer', 'quality-history.json'), 'utf8');
-  assert.doesNotMatch(quality, /private-/);
-  const summary = JSON.parse(await readFile(join(dir, 'viewer', 'summary.json'), 'utf8'));
-  const schemas = new Ajv2020({ schemas: [metricCatalog, historyV1, qualityV1, summaryV1, compactV1, reportV1, reportV2, fileMetricsV1, contextV1, detailsV1] });
+  const summaryText = await readFile(join(viewer, 'summary.json'), 'utf8');
+  assert.doesNotMatch(summaryText, /private-/);
+  const summary: unknown = JSON.parse(summaryText);
+  const schemas = new Ajv2020({ schemas: [metricCatalog, summaryV1, compactV1, reportV2, fileMetricsV1] });
   const validSummary = schemas.compile<RepositorySummary>(summaryV1);
   assert.ok(validSummary(summary), JSON.stringify(validSummary.errors));
-  assert.deepEqual(summary.commits.map((row: { sha: string }) => row.sha), [sha]);
+  assert.deepEqual(summary.commits.map(row => row.sha), [sha]);
   assert.ok(summary.commits[0]?.detail, 'the commit links its details');
-  assert.ok(new Ajv2020().compile(qualityV1)(JSON.parse(quality)));
-  const data = JSON.parse(text) as PublicHistory;
-  const validate = new Ajv2020().compile<PublicHistory>(historyV1);
-  assert.ok(validate(data), JSON.stringify(validate.errors));
-  assert.deepEqual(data.reports, [{ sha, generatedAt: report.generatedAt, status: 'partial', files: 2, parsed: 1,
-    lines: 11, functions: null, maxComplexity: 3, lineCoverage: { covered: 2, total: 4 } }]);
+  assert.equal(summary.commits[0].generatedAt, report.generatedAt);
+  assert.equal(summary.commits[0].maxComplexity, 3);
+  assert.deepEqual(summary.commits[0].lineCoverage, { covered: 2, total: 4 });
   assert.equal(invoke(dir, ['report', 'html=viewer']).status, 0);
 
   await writeFile(join(dir, 'components.json'), JSON.stringify([
@@ -268,17 +257,10 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.ok(validSummary(initialSummary), JSON.stringify(validSummary.errors));
   assert.ok(validCompact(JSON.parse(rawFirstDetail)), JSON.stringify(validCompact.errors));
   assert.ok(validInspection(unpackJson(JSON.parse(rawFirstDetail))), JSON.stringify(validInspection.errors));
-  const detail = unpackJson(JSON.parse(rawFirstDetail)) as { inspection: unknown; context: unknown };
-  const saved = { schema: 'urn:repometry:schema:viewer-details:1', inspections: { [sha]: detail.inspection },
-    context: { [sha]: detail.context } };
-  await assert.rejects(readFile(join(dir, 'private-viewer', 'details.json')), { code: 'ENOENT' });
-  const validateDetails = new Ajv2020({ schemas: [metricCatalog, reportV1, reportV2, fileMetricsV1, contextV1] }).compile<DetailsBundle>(detailsV1);
-  assert.ok(validateDetails(saved), JSON.stringify(validateDetails.errors));
-  assert.deepEqual(Object.keys(saved.inspections), [sha]);
-  assert.deepEqual(saved.context[sha]?.exclusions?.paths, ['private-path/**']);
-  assert.deepEqual(saved.inspections[sha]?.components?.map(entry => entry.paths), [['private-filename.ts'], []]);
-  assert.equal(saved.inspections[sha]?.diagnostics[0]?.message, 'private-diagnostic');
-  await writeFile(join(dir, 'private-viewer', 'details.json'), JSON.stringify(saved));
+  const detail = unpackJson(JSON.parse(rawFirstDetail)) as InspectionAsset;
+  assert.deepEqual(detail.context?.exclusions?.paths, ['private-path/**']);
+  assert.deepEqual(detail.inspection.components?.map(entry => entry.paths), [['private-filename.ts'], []]);
+  assert.equal(detail.inspection.diagnostics[0]?.message, 'private-diagnostic');
   await store.save({ ...report, generatedAt: '2026-11-21T00:00:00.000Z', diagnostics: [] });
   const refreshed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--components', 'components.json']);
   assert.equal(refreshed.status, 0, refreshed.stderr);
@@ -286,7 +268,6 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.notEqual(nextSummary.commits[0].detail, firstPath);
   assert.equal(nextSummary.commits[0].counts.diagnosticCount, 0);
   assert.equal(await readFile(join(dir, 'private-viewer', firstPath), 'utf8'), rawFirstDetail);
-  await assert.rejects(readFile(join(dir, 'private-viewer', 'details.json')), { code: 'ENOENT' });
   assert.equal(invoke(dir, ['report', 'html=private-viewer']).status, 0);
   const projectIndex = invoke(dir, ['projects', '--output', '.']);
   assert.equal(projectIndex.status, 0, projectIndex.stderr);

@@ -5,7 +5,8 @@ import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract } from '../../main/ts/core/engine/plugin.js';
 import { findingResult } from '../../main/ts/core/model/finding.js';
 import type { Finding } from '../../main/ts/core/model/finding.js';
-import { sourceExtensions, sourceFile, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { sourceFile, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { jsTsExtensions } from '../../main/ts/plugins/language-js/extensions.js';
 import { isSecretName, jsSecurity } from '../../main/ts/plugins/language-js/js-security.js';
 
 async function scanBytes(path: string, bytes: Uint8Array): Promise<readonly Finding[]> {
@@ -34,7 +35,7 @@ test('the manifest declares a security inspection over the JS/TS extensions with
   assert.equal(jsSecurity.version, '1.0.0');
   assert.equal(jsSecurity.api, pluginApi);
   assert.deepEqual(jsSecurity.kinds, ['security']);
-  assert.deepEqual(jsSecurity.claims, { extensions: sourceExtensions });
+  assert.deepEqual(jsSecurity.claims, { extensions: jsTsExtensions });
   assert.deepEqual(jsSecurity.produces, [{ contract: findingResult.id, persistence: 'report' }]);
   assert.deepEqual(jsSecurity.rules?.map(rule => rule.id), ['eval', 'child-process-injection', 'vm-code-execution', 'dom-xss',
     'tls-verification-disabled', 'weak-hash', 'insecure-random', 'http-url']);

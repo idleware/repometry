@@ -45,9 +45,9 @@ export function isFilePage(page: Page): page is FilePage {
   return page === 'metrics' || page === 'hotspots' || page === 'issues' || page === 'diagnostics';
 }
 
-/** Every page but pull requests reads the inspection's details, and the tabs need them where the summary has no counts. */
-export function needsDetails(page: Page, counted: boolean): boolean {
-  return isFilePage(page) || page === 'overview' || page === 'settings' || !counted;
+/** The pages that read the inspection's details; the summary's counts serve the rest. */
+export function needsDetails(page: Page): boolean {
+  return isFilePage(page) || page === 'overview' || page === 'settings';
 }
 
 /**

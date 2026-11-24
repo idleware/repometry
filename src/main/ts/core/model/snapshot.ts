@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { extname } from 'node:path';
 import { isRecord } from './plugin-data.js';
 import type { DataContract } from '../engine/plugin.js';
 
@@ -17,13 +16,7 @@ export const sourceFiles: DataContract<readonly SourceFile[]> = {
 };
 
 export const sourceDirectoriesExcluded = ['.git', '.repometry', 'node_modules', 'target'] as const;
-export const sourceExtensions = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'] as const;
 const excluded = new Set<string>(sourceDirectoriesExcluded);
-const extensions = new Set<string>(sourceExtensions);
-
-export function isSourcePath(path: string): boolean {
-  return extensions.has(extname(path)) && !path.split('/').slice(0, -1).some(isExcludedDirectory);
-}
 
 export function isExcludedDirectory(name: string): boolean {
   return excluded.has(name);

@@ -1,4 +1,5 @@
 import type { MetricDescriptor } from '../model/metric-descriptor.js';
+import type { ProvidedLanguage } from '../model/language.js';
 import type { JsonValue } from '../model/plugin-data.js';
 export type { MetricDescriptor, MetricScope } from '../model/metric-descriptor.js';
 export { isRecord } from '../model/plugin-data.js';
@@ -71,7 +72,6 @@ export interface Plugin {
   readonly settings?: JsonValue;
   readonly kinds: readonly PluginKind[];
   readonly claims?: FileClaims;
+  readonly providesLanguages?: readonly ProvidedLanguage[];
   readonly produces: readonly ProductDeclaration[];
 }
-
-export type LegacyPlugin = Omit<Plugin, 'kinds' | 'claims' | 'produces'>;

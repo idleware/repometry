@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Ajv2020 } from 'ajv/dist/2020.js';
-import contextV1 from '../../main/resources/report/json/inspection-context-v1.schema.json' with { type: 'json' };
 import { inspectionHistory } from '../../main/ts/report/json/projections/inspection-context.js';
 import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
@@ -18,8 +16,6 @@ test('local history identifies profile boundaries and reads exclusions in legacy
   const upgraded = report('c', { ...filtered.appliedConfig, plugins: [{ id: 'structure', version: '2.0.0' }] });
   const unknown = report('d', { profile: 'unknown' });
   const local = inspectionHistory([unknown, upgraded, filtered, original]);
-  const validate = new Ajv2020().compile(contextV1);
-  assert.ok(validate(local), JSON.stringify(validate.errors));
   assert.deepEqual(local[original.subject.id], { exclusions: { paths: [], directories: ['.git', 'node_modules'] }, boundary: null });
   assert.deepEqual(local[filtered.subject.id], { exclusions: { paths: ['.yarn/releases'], directories: ['.git', 'node_modules'] }, boundary: 'changed' });
   assert.equal(local[upgraded.subject.id]?.boundary, 'changed');
@@ -42,7 +38,7 @@ test('the timeline marks a profile change without publishing its rules or digest
   const original = report('b', profile);
   const filtered = report('a', { ...profile, source: { ...source, excludedPaths: ['.yarn/releases'] } });
   const rows = [original, filtered].map(commitSummary);
-  const text = siteSummary(rows, { mode: 'local' }).toString();
+  const text = siteSummary(rows, {}).toString();
   const index = JSON.parse(text) as RepositorySummary;
   assert.deepEqual(index.commits.map(row => row.profileBoundary), ['changed', undefined]);
   assert.doesNotMatch(text, /profileDigest|\.yarn\/releases/);

@@ -1,14 +1,12 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
-import historySchema from '../../../../resources/report/json/public-history-v1.schema.json' with { type: 'json' };
-import qualitySchema from '../../../../resources/report/json/quality-history-v1.schema.json' with { type: 'json' };
 import summaryContract from '../../../../resources/report/json/repository-summary-v1.schema.json' with { type: 'json' };
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary, RepositorySummary } from '../wire/summary-model.js';
 import type { MetricDescriptor } from '../wire/summary-model.js';
 import { isMetricDescriptor } from '../../../core/engine/manifest.js';
 
-const validator = new Ajv2020({ schemas: [metricCatalog, historySchema, qualitySchema, summaryContract] });
+const validator = new Ajv2020({ schemas: [metricCatalog, summaryContract] });
 
 export const validateSummary = validator.compile<RepositorySummary>(summaryContract);
 const rowShape = validator.compile<CommitSummary>({ $ref: `${summarySchema}#/$defs/commit` });

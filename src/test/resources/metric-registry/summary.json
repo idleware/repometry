@@ -2,10 +2,10 @@
   "schema": "urn:repometry:schema:repository-summary:1",
   "source": { "branch": "main" },
   "metrics": [
-    { "id": "repometry.cyclomatic-babel/v1", "label": "Most complex function", "short": "Peak cyclomatic",
+    { "id": "repometry.cyclomatic-complexity/v1", "label": "Most complex function", "short": "Peak cyclomatic",
       "description": "Highest cyclomatic complexity of any single function.",
       "unit": "count", "scope": "file", "aggregate": "max", "better": "lower", "bands": [5, 10, 20, 50], "group": "Maintainability" },
-    { "id": "repometry.code-lines-babel/v1", "label": "Lines of code", "short": "Code lines",
+    { "id": "repometry.code-lines/v1", "label": "Lines of code", "short": "Code lines",
       "description": "Lines of code, excluding blanks and comments.",
       "unit": "count", "scope": "file", "aggregate": "sum", "better": "none", "group": "Size" },
     { "id": "repometry.lcov-covered-lines/v1", "label": "Covered lines",

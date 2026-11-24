@@ -1,6 +1,6 @@
 import { lstat, readdir, realpath, readFile } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, sep } from 'node:path';
-import { comparePaths, isExcludedDirectory, isSourcePath, workingSnapshot } from '../../core/model/snapshot.js';
+import { comparePaths, isExcludedDirectory, workingSnapshot } from '../../core/model/snapshot.js';
 import type { SourceFile, SourceSnapshot } from '../../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
 import { isGeneratedSource } from '../../core/profile/exclusions.js';
@@ -11,7 +11,7 @@ export function containsPath(parent: string, path: string): boolean {
 }
 
 export async function readWorkingTree(directory: string, output: string, excludes: (path: string) => boolean,
-  claims?: (path: string) => boolean, gitPaths?: readonly string[]): Promise<SourceSnapshot> {
+  isSource: (path: string) => boolean, claims?: (path: string) => boolean, gitPaths?: readonly string[]): Promise<SourceSnapshot> {
   const root = await realpath(directory);
   const files: SourceFile[] = [];
   const generatedExcluded: string[] = [];
@@ -30,7 +30,7 @@ export async function readWorkingTree(directory: string, output: string, exclude
   }
 
   async function read(path: string, absolute: string, size?: number): Promise<void> {
-    if (isSourcePath(path)) {
+    if (isSource(path)) {
       const bytes = await readFile(absolute);
       if (isGeneratedSource(bytes)) generatedExcluded.push(path);
       else files.push({ path, bytes });
@@ -63,7 +63,7 @@ export async function readWorkingTree(directory: string, output: string, exclude
     for (const path of gitPaths) {
       const absolute = join(root, path);
       if (excludes(path) || !containsPath(root, absolute) || containsPath(output, absolute)) continue;
-      if (!(isSourcePath(path) || claims?.(path)) || !await regularDirectory(posix.dirname(path))) continue;
+      if (!(isSource(path) || claims?.(path)) || !await regularDirectory(posix.dirname(path))) continue;
       const stat = await statIfPresent(absolute);
       if (stat?.isFile()) await read(path, absolute, stat.size);
     }

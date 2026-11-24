@@ -1,6 +1,6 @@
 # Language provider metrics
 
-A provider accepts `sourceFile` and emits `codeStructure`. Both contracts are exported by `repometry/plugin`. The planner matches ports by contract ID. The input path is relative to the repository root and uses forward slashes.
+A file provider accepts `sourceFile` and emits `codeStructure`. A repository provider accepts `sourceFiles` and emits `codeStructures`, an array with at most one structure per input path. Repometry marks a missing structure as an incomplete analysis of that file. These contracts are exported by `repometry/plugin`. The planner matches ports by contract ID. Input paths are relative to the repository root and use forward slashes.
 
 - `lines` counts physical lines, including blank lines and comments. A final line terminator adds no line. `commentLines` counts lines containing only a comment or interpreter directive. `clones.codeLines` lists distinct code lines in ascending order. A line with code and a comment counts as code.
 - `functions` and `classes` count declarations and expressions the language recognizes. `cyclomaticFunctions` and `cognitiveFunctions` contain the separate scores for each measured function. Coordinates are 1-based. JS and TS columns count UTF-16 code units. A lexical parameter can contain a nested function, so the function count and the reported score arrays follow their own analysis rules.
@@ -8,7 +8,7 @@ A provider accepts `sourceFile` and emits `codeStructure`. Both contracts are ex
 - `observations` carries raw counts and locations for the maintainability rules. The maintainability inspection applies the profile limits and computes remediation effort.
 - `clones` carries candidate fingerprints, line ranges, and half-open source offsets. For JS and TS, candidates come from Babel subtrees. Exact fingerprints preserve identifiers and literals. Similar fingerprints normalize them. Compare fingerprints only within the same scheme.
 
-The built-in JS and TS profile retains its existing metric IDs and algorithm definitions. A provider that measures a metric differently needs a distinct measurement definition before its results can be compared with this history.
+The built-in JS and TS profile retains its algorithm definitions. Built-in metric IDs describe the measurement independently of the parser. When reading v2 reports and summaries, the six earlier `-babel` IDs resolve to the same metrics. A provider that measures a metric differently needs a distinct measurement definition before its results can be compared with this history.
 
 ## Coverage counts
 
@@ -18,11 +18,15 @@ Each file in `repometry.lcov-lines/v1` can include `functionCalls`, a list of `[
 
 ## Declaring metrics and products
 
-A plugin manifest declares its `kinds`, optional file `claims`, and every product its operations return. A planner request can explicitly opt a pre-manifest plugin into compatibility mode by naming it in `legacyPluginIds`. Use the contracts exported by `repometry/plugin` for source files, structure facts, measurements, and findings. The `report` persistence class saves measurements, rules, and custom products. Custom products declare a JSON Schema so the engine can validate the output and store the contract with it. Transient products feed other operations during analysis.
+A plugin manifest declares its `kinds`, optional file `claims`, and every product its operations return. Use the contracts exported by `repometry/plugin` for source files, structure facts, measurements, and findings. The `report` persistence class saves measurements, rules, and custom products. Custom products declare a JSON Schema so the engine can validate the output and store the contract with it. Transient products feed other operations during analysis.
 
 Pass trusted in-process plugins as `plugins` in the `inspect` request. The default executor receives text files matching their claims after the source adapter applies exclusions. A Git working tree includes tracked files and untracked files permitted by Git's ignore rules. With a separately configured executor, register its plugins directly. When supplying your own snapshot, pass the plugins as the second argument to `analyzeSnapshot`.
 
-An inspection can consume `codeStructure` from different providers across files. Each provider and inspection must claim the relevant file. The planner reports overlapping providers for the same input as ambiguous unless the operation has an explicit binding. The report records each distinct binding it used.
+Language plugins define the source file set through their claims. Each file uses its matching provider for structure and maintainability measurements. Overlapping language-provider claims produce an error naming the file and providers. The report records each distinct operation binding it used.
+
+Use `providesLanguages` to declare a language's ID, display label, optional six-digit hexadecimal color, and file extensions or globs. These declarations select source files. Reports store the language catalog once and record the selected provider operation for each source path.
+
+Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths. Worker input validation uses the source selector configured on the worker. The built-in selector uses the JS and TS suffixes.
 
 The Git inventory also records regular tracked files after exclusions. Binary or unavailable files have an unknown line count.
 

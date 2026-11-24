@@ -10,15 +10,15 @@ export interface SourceSelection {
 }
 
 export async function readInspectionSource(request: SourceSelection, excludes: (path: string) => boolean,
-  claims?: (path: string) => boolean) {
+  isSource: (path: string) => boolean, claims?: (path: string) => boolean) {
   const root = await realpath('workingTree' in request.source ? request.directory : await gitRoot(request.directory));
   const output = await physicalPath(resolve(request.output));
   if (containsPath(output, root) || output.split(sep).includes('.git')) {
     throw new Error('Choose a dedicated report directory outside Git metadata');
   }
   const snapshot = 'workingTree' in request.source
-    ? await readWorkingTree(root, output, excludes, claims, await gitWorkingTreePaths(root))
-    : await readGitCommit(root, request.source.revision, excludes, claims);
+    ? await readWorkingTree(root, output, excludes, isSource, claims, await gitWorkingTreePaths(root))
+    : await readGitCommit(root, request.source.revision, excludes, isSource, claims);
   const excludedOutput = snapshot.subject.kind === 'working-tree' && containsPath(root, output)
     ? relative(root, output).split(sep).join('/') : null;
   return { root, snapshot, excludedOutput, output };

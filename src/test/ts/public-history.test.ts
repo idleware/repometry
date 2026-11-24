@@ -1,21 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Ajv2020 } from 'ajv/dist/2020.js';
-import historyV1 from '../../main/resources/report/json/public-history-v1.schema.json' with { type: 'json' };
-import { publicHistory } from '../../main/ts/report/json/projections/public-history.js';
+import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { axisLabels, tickLabels, timeTicks } from '../../main/ts/report/html/app/viewer-chart-time.js';
 import { stableWindow } from '../../main/ts/report/html/app/viewer-trend-data.js';
 import { plantFlags } from '../../main/ts/report/html/app/viewer-trend-points.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
-test('public history carries the commit time recorded by the churn window', () => {
+test('commit summaries use the recorded commit time', () => {
   const window = { endingAt: '2026-07-23T20:10:36.000Z', commits: 3, shallow: false, capReached: false };
-  const history = publicHistory([report('a', { churnWindow: window }), report('b', {}), report('c', { churnWindow: { endingAt: 'soon' } })]);
-  const validate = new Ajv2020().compile(historyV1);
-  assert.ok(validate(history), JSON.stringify(validate.errors));
-  assert.deepEqual(history.reports.map(entry => entry.committedAt), ['2026-07-23T20:10:36.000Z', undefined, undefined]);
-  assert.ok(!('committedAt' in history.reports[1]!));
+  const dated = commitSummary({ ...report('a', {}), committedAt: '2026-07-23T20:10:36.000Z' });
+  const undated = commitSummary(report('b', { churnWindow: window }));
+  assert.equal(dated.committedAt, '2026-07-23T20:10:36.000Z');
+  assert.ok(!('committedAt' in undated));
 });
 
 test('time ticks follow the calendar and keep labels apart', () => {

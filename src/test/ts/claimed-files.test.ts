@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { gitText } from '../../main/ts/api/git/git.js';
 import { decodeWorkerInput, encodeWorkerInput } from '../../main/ts/api/worker/worker-protocol.js';
+import { defaultLanguages } from '../../main/ts/compose/languages.js';
 import { analyzeSnapshot, inspect } from '../../main/ts/compose/inspect.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 
@@ -20,7 +21,8 @@ test('the worker delivers claimed text to the matching inspections without attem
   await writeFile(join(directory, 'source.js'), 'export const value = 1;\n');
 
   const report = await inspect({ directory, output: join(directory, '.repometry'), source: { workingTree: true } }, async input => {
-    const transported = decodeWorkerInput(JSON.parse(encodeWorkerInput(input)));
+    const { isSource } = defaultLanguages;
+    const transported = decodeWorkerInput(JSON.parse(encodeWorkerInput(input, isSource)), isSource);
     assert.deepEqual(transported.snapshot.files.map(file => file.path).sort(), ['.github/workflows/ci.yaml', 'source.js']);
     return analyzeSnapshot(transported);
   });

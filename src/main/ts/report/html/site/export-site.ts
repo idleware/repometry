@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { historySchema } from '../../json/wire/public-history-model.js';
 import { inspectionAsset } from '../../json/projections/inspection-details.js';
-import { isRecord } from '../../../core/engine/plugin.js';
+import { validateSummaryIndex } from '../../json/validation/summary-validation.js';
 import { commitSummary, orderSummaries, repositorySummary, withCommitMetadata } from '../../json/projections/commit-summary.js';
 import type { ReadCommitMetadata } from '../../json/projections/commit-summary.js';
 import type { CommitSummary, SourceLocator } from '../../json/wire/summary-model.js';
@@ -40,8 +39,6 @@ async function listAssets(directory: URL, include: (name: string) => boolean) {
 
 export interface SiteOptions {
   readonly title?: string;
-  /** `local` for `repometry view`, which serves details live; an export writes them as files. */
-  readonly mode?: 'local' | 'private';
   readonly components?: readonly Component[];
   readonly pulls?: readonly PullReview[];
   readonly sources?: SourceLocator;
@@ -56,9 +53,7 @@ export function withoutFooter(html: string): string {
   return html.replace(/\n[ \t]*<footer class="site-footer">[\s\S]*?<\/footer>/, '');
 }
 
-export async function siteFiles(reports: readonly Report[],
-  { title = '', mode = 'private', components, pulls = [], sources, branch, readCommitMetadata, footer = true }: SiteOptions = {},
-  indexed?: readonly CommitSummary[]): Promise<Map<string, Buffer>> {
+export async function viewerAssets(rows: readonly CommitSummary[], { title = '', pulls = [], footer = true }: SiteOptions) {
   const files = new Map<string, Buffer>(await Promise.all((await listViewerAssets()).map(async ([name, source]) => {
     const bytes = await readFile(source);
     // The published viewer keeps its existing flat URLs for static hosts and open tabs.
@@ -68,44 +63,40 @@ export async function siteFiles(reports: readonly Report[],
     return [name, contents] as const;
   })));
   const index = files.get('index.html')!.toString('utf8')
-    .replace('name="repometry-view" content="private"', `name="repometry-view" content="${mode}"`)
     .replace('name="repometry-project" content=""', () => `name="repometry-project" content="${escapeAttribute(title)}"`);
   files.set('index.html', Buffer.from(footer ? index : withoutFooter(index)));
-  const commits = reports.filter(report => report.subject.kind === 'commit');
-  const rows = orderSummaries(await withCommitMetadata(indexed ?? commits.map(commitSummary), readCommitMetadata));
-  const publicRows = rows.map(({ quality, counts, detail, revision, profileDigest, profileBoundary, subject, author, tags,
-    metrics, values, privateMetrics, ...history }) => ({ ...history, subject, author, tags }));
-  const history = { schema: historySchema, reports: publicRows };
-  const quality = { schema: 'urn:repometry:schema:quality-history:1',
-    reports: Object.fromEntries(rows.map(row => [row.sha, row.quality])) };
-  files.set('history.json', Buffer.from(`${JSON.stringify(history)}\n`));
-  files.set('quality-history.json', Buffer.from(`${JSON.stringify(quality)}\n`));
   const latest = rows[0];
   for (const [name, data] of badges(latest, latest?.quality, latest?.counts?.security)) files.set(name, data);
   files.set('pulls.json', Buffer.from(`${JSON.stringify({ schema: pullReviewsSchema, reviews: pulls })}\n`));
-  const details = new Map<string, string>();
-  if (mode === 'private') {
-    for (const report of commits) {
-      const sha = report.subject.id;
-      const data = JSON.stringify(packJson(inspectionAsset(report, components))) + '\n';
-      const name = `details/${sha}-${digest(data)}.json`;
-      details.set(sha, name);
-      files.set(name, Buffer.from(data));
-    }
-  }
-  files.set('summary.json', siteSummary(rows, { mode, components, pulls, sources, branch }, details));
   return files;
 }
 
-export function siteSummary(rows: readonly CommitSummary[], { mode = 'private', components, pulls = [], sources, branch }: SiteOptions,
-  details = new Map<string, string>()): Buffer {
+export async function siteFiles(reports: readonly Report[], options: SiteOptions = {}): Promise<Map<string, Buffer>> {
+  const commits = reports.filter(report => report.subject.kind === 'commit');
+  const rows = orderSummaries(await withCommitMetadata(commits.map(commitSummary), options.readCommitMetadata));
+  const files = await viewerAssets(rows, options);
+  const details = new Map<string, string>();
+  for (const report of commits) {
+    const sha = report.subject.id;
+    const data = JSON.stringify(packJson(inspectionAsset(report, options.components))) + '\n';
+    const name = `details/${sha}-${digest(data)}.json`;
+    details.set(sha, name);
+    files.set(name, Buffer.from(data));
+  }
+  files.set('summary.json', siteSummary(rows, options, row => details.get(row.sha)));
+  return files;
+}
+
+export function siteSummary(rows: readonly CommitSummary[], { components, pulls = [], sources, branch }: SiteOptions,
+  inspectionPath?: (row: CommitSummary) => string | undefined): Buffer {
   const ordered = orderSummaries(rows);
-  const commits = ordered.map(({ counts, detail, revision, profileDigest, profileBoundary, subject, author, tags, ...row }, index): CommitSummary => {
+  const commits = ordered.map((current, index): CommitSummary => {
+    const { counts, detail, revision, profileDigest, profileBoundary, subject, author, tags, ...row } = current;
     const previous = ordered[index + 1];
     const boundary = !previous ? undefined : !profileDigest || !previous.profileDigest ? 'unavailable'
       : profileDigest === previous.profileDigest ? undefined : 'changed';
     return {
-      ...row, subject, author, tags, detail: mode === 'local' && revision ? `inspection/${row.sha}-${revision}.json` : details.get(row.sha),
+      ...row, subject, author, tags, detail: inspectionPath?.(current),
       counts: counts && { ...counts, componentCount: components?.length ?? 0 },
       ...(boundary === undefined ? {} : { profileBoundary: boundary }),
     };
@@ -120,18 +111,9 @@ export async function exportSite(reader: ReportReader, destination: string, opti
   await mkdir(destination, { recursive: true, mode: 0o755 });
   if (!(await lstat(destination)).isDirectory()) throw new Error('The viewer destination must be a directory');
   const entries = await readdir(destination, { withFileTypes: true });
-  const oldDetails = entries.some(entry => entry.name === 'details.json' && entry.isFile());
   const detailDirectory = entries.some(entry => entry.name === 'details' && entry.isDirectory());
-  if (entries.some(entry => !(entry.isFile() && files.has(entry.name))
-    && !(entry.name === 'details' && entry.isDirectory())
-    && !(oldDetails && entry.name === 'details.json' && entry.isFile()))) {
+  if (entries.some(entry => !(entry.isFile() && files.has(entry.name)) && !(entry.name === 'details' && entry.isDirectory()))) {
     throw new Error('Use a dedicated viewer destination containing only Repometry export files');
-  }
-  if (oldDetails) {
-    const legacy: unknown = JSON.parse(await readFile(join(destination, 'details.json'), 'utf8'));
-    if (!isRecord(legacy) || legacy.schema !== 'urn:repometry:schema:viewer-details:1') {
-      throw new Error('Existing details.json is not a Repometry export');
-    }
   }
   if (detailDirectory) {
     const existing = await readdir(join(destination, 'details'), { withFileTypes: true });
@@ -140,9 +122,9 @@ export async function exportSite(reader: ReportReader, destination: string, opti
     }
   }
   if (entries.length > 0) {
-    const existing: unknown = entries.some(entry => entry.name === 'history.json')
-      ? JSON.parse(await readFile(join(destination, 'history.json'), 'utf8')) : undefined;
-    if (!isRecord(existing) || existing.schema !== historySchema) throw new Error('Choose an empty viewer directory or an existing Repometry export');
+    const existing: unknown = entries.some(entry => entry.name === 'summary.json')
+      ? JSON.parse(await readFile(join(destination, 'summary.json'), 'utf8')) : undefined;
+    if (!validateSummaryIndex(existing)) throw new Error('Choose an empty viewer directory or an existing Repometry export');
   }
 
   const staging = join(destination, `.export-${randomUUID()}`);
@@ -153,13 +135,11 @@ export async function exportSite(reader: ReportReader, destination: string, opti
     for (const [name, bytes] of files) await writeFile(join(staging, name), bytes, { mode: 0o644 });
     const afterDependencies = ['viewer.js', 'summary.json', 'index.html'];
     const install = (name: string) => rename(join(staging, name), join(destination, name));
-    await install('history.json');
     if (hasDetails && !detailDirectory) await mkdir(join(destination, 'details'));
     for (const name of files.keys()) {
-      if (name !== 'history.json' && !afterDependencies.includes(name)) await install(name);
+      if (!afterDependencies.includes(name)) await install(name);
     }
     for (const name of afterDependencies) await install(name);
-    if (oldDetails) await rm(join(destination, 'details.json'));
   } finally {
     await rm(staging, { recursive: true, force: true });
   }

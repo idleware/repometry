@@ -1,6 +1,7 @@
 import { isRecord } from './plugin.js';
-import type { LegacyPlugin, MetricDescriptor, Plugin, ProductDeclaration, RuleDescriptor } from './plugin.js';
+import type { MetricDescriptor, Plugin, ProductDeclaration, RuleDescriptor } from './plugin.js';
 import { definitions } from '../model/measurement.js';
+import { isLanguageDisplay } from '../model/language.js';
 
 const kinds = new Set(['language', 'analysis', 'coverage', 'security', 'import', 'source']);
 const persistence = new Set(['report', 'cache', 'transient']);
@@ -19,10 +20,9 @@ export function isCoreReportProduct(contract: string): boolean {
   return coreProducts.has(contract);
 }
 
-export function manifestProducts(plugin: Plugin | LegacyPlugin, allowLegacy: boolean): ReadonlyMap<string, ProductDeclaration> | undefined {
-  const { id, kinds: declaredKinds, claims, produces, rules, config } = plugin as Partial<Plugin> & LegacyPlugin;
-  if (declaredKinds === undefined && claims === undefined && produces === undefined) {
-    if (allowLegacy) return undefined;
+export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDeclaration> {
+  const { id, kinds: declaredKinds, claims, providesLanguages, produces, rules, config } = plugin;
+  if (declaredKinds === undefined && claims === undefined && providesLanguages === undefined && produces === undefined) {
     throw new Error(`Missing plugin manifest for ${id}. Declare kinds and produces.`);
   }
   if (Object.hasOwn(plugin, 'languages')) throw new Error(`Plugin ${id} must declare languages in claims.languages`);
@@ -34,6 +34,9 @@ export function manifestProducts(plugin: Plugin | LegacyPlugin, allowLegacy: boo
     : !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
     || (key === 'extensions' && values.some(extension => !/^\.[\w-]+$/.test(extension)))))) {
     throw new Error(`Invalid file claims for plugin ${id}`);
+  }
+  if (providesLanguages !== undefined && (!declaredKinds.includes('language') || !validLanguages(providesLanguages))) {
+    throw new Error(`Invalid provided languages for plugin ${id}`);
   }
   if (!Array.isArray(produces)) throw new Error(`Plugin ${id} must declare its products`);
   if (rules !== undefined && (!Array.isArray(rules) || !rules.every(isRuleDescriptor)
@@ -74,6 +77,20 @@ export function manifestProducts(plugin: Plugin | LegacyPlugin, allowLegacy: boo
     }
   }
   return products;
+}
+
+function validLanguages(values: unknown): boolean {
+  if (!Array.isArray(values) || values.length === 0) return false;
+  const ids = new Set<string>();
+  for (const value of values as unknown[]) {
+    if (!isRecord(value) || !isLanguageDisplay(value) || ids.has(value.id)) return false;
+    const { extensions, globs } = value;
+    if (extensions !== undefined && (!strings(extensions) || extensions.some(extension => !/^\.[\w-]+$/.test(extension)))) return false;
+    if (globs !== undefined && !strings(globs)) return false;
+    if (!(Array.isArray(extensions) && extensions.length || Array.isArray(globs) && globs.length)) return false;
+    ids.add(value.id);
+  }
+  return true;
 }
 
 function isRuleDescriptor(value: unknown): value is RuleDescriptor {

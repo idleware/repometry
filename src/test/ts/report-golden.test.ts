@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { definitions } from '../../main/ts/core/model/measurement.js';
-import { readReportText, reportSchema, legacyReportSchema } from '../../main/ts/report/json/validation/report.js';
+import { readReportText, reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
 
@@ -29,13 +29,14 @@ const report: Report = {
 
 test('the report formats and export projections match the fixed baseline', async () => {
   const { committedAt, ...legacyFields } = report;
-  const legacy: Report = { ...legacyFields, schema: legacyReportSchema };
-  assert.deepEqual(readReportText(JSON.stringify(legacy), report.subject), legacy);
+  const old = { ...legacyFields, schema: 'urn:repometry:schema:report:1' };
+  assert.throws(() => readReportText(JSON.stringify(old), report.subject), /Unsupported or missing report schema/);
   assert.deepEqual(readReportText(JSON.stringify(packJson(report)), report.subject), report);
 
   const actual: Record<string, string> = {};
   for (const mode of ['private'] as const) {
-    const files = await site.siteFiles([report], { mode, title: 'Fixture' });
+    const files = await site.siteFiles([report], { title: 'Fixture' });
+    assert.equal(files.has('history.json') || files.has('quality-history.json'), false);
     for (const [name, bytes] of files) {
       if (name.endsWith('.json') || name.endsWith('.svg')) {
         actual[mode + '/' + name] = createHash('sha256').update(bytes).digest('hex');

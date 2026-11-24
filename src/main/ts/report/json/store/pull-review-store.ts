@@ -5,12 +5,11 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
 import comparison from '../../../../resources/report/json/comparison-v1.schema.json' with { type: 'json' };
 import diffCoverage from '../../../../resources/report/json/diff-coverage-v1.schema.json' with { type: 'json' };
-import inspection from '../../../../resources/report/json/report-v1.schema.json' with { type: 'json' };
 import currentInspection from '../../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
 import schema from '../../../../resources/report/json/pull-review-v1.schema.json' with { type: 'json' };
 import type { PullReview } from '../wire/pull-review-model.js';
 
-const ajv = new Ajv2020({ schemas: [metricCatalog, inspection, currentInspection, comparison, diffCoverage] });
+const ajv = new Ajv2020({ schemas: [metricCatalog, currentInspection, comparison, diffCoverage] });
 const validate = ajv.compile<PullReview>(schema);
 
 export async function savePullReview(output: string, review: PullReview): Promise<void> {

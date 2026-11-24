@@ -7,7 +7,8 @@ import { pluginApi } from '../../core/engine/plugin.js';
 import type { Plugin, RuleDescriptor } from '../../core/engine/plugin.js';
 import { findingResult } from '../../core/model/finding.js';
 import type { Finding, FindingResult } from '../../core/model/finding.js';
-import { sourceExtensions, sourceFile, utf8 } from '../../core/model/snapshot.js';
+import { sourceFile, utf8 } from '../../core/model/snapshot.js';
+import { jsTsExtensions } from './extensions.js';
 import { babelTypes, parserDefaults } from './babel-provider.js';
 import { children } from './function-facts.js';
 
@@ -55,7 +56,7 @@ export const jsSecurity: Plugin = {
   version: '1.0.0',
   api: pluginApi,
   kinds: ['security'],
-  claims: { extensions: sourceExtensions },
+  claims: { extensions: jsTsExtensions },
   produces: [{ contract: findingResult.id, persistence: 'report' }],
   tools: { '@babel/parser': require('@babel/parser/package.json').version as string, ...babelTypes },
   rules: jsSecurityRules,

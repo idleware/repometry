@@ -25,10 +25,10 @@
       "type": "object",
       "required": ["subject", "generatedAt", "status", "scope"],
       "properties": {
-        "subject": { "$ref": "urn:repometry:schema:report:1#/$defs/subject" },
-        "generatedAt": { "$ref": "urn:repometry:schema:report:1#/properties/generatedAt" },
-        "status": { "$ref": "urn:repometry:schema:report:1#/properties/status" },
-        "scope": { "$ref": "urn:repometry:schema:report:1#/properties/scope" }
+        "subject": { "$ref": "urn:repometry:schema:report:2#/$defs/subject" },
+        "generatedAt": { "$ref": "urn:repometry:schema:report:2#/properties/generatedAt" },
+        "status": { "$ref": "urn:repometry:schema:report:2#/properties/status" },
+        "scope": { "$ref": "urn:repometry:schema:report:2#/properties/scope" }
       },
       "additionalProperties": false
     },
@@ -38,8 +38,8 @@
       "properties": {
         "status": { "enum": ["complete", "partial", "not-applicable", "unavailable"] },
         "value": { "type": ["number", "null"], "minimum": 0 },
-        "covered": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
-        "total": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+        "covered": { "$ref": "urn:repometry:schema:report:2#/$defs/count" },
+        "total": { "$ref": "urn:repometry:schema:report:2#/$defs/count" }
       },
       "dependentRequired": { "covered": ["total"], "total": ["covered"] },
       "additionalProperties": false

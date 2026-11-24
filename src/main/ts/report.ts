@@ -1,10 +1,9 @@
-export { legacyReportSchema, readReport, reportSchema } from './report/json/validation/report.js';
+export { readReport, reportSchema } from './report/json/validation/report.js';
 export type { Diagnostic, Report, ReportReader, ReportStore } from './report/json/validation/report.js';
 export type { ReportWriter } from './core/ports/report.js';
 export { LocalOperationCache } from './report/json/store/operation-cache.js';
 export { validateSummary } from './report/json/validation/summary-validation.js';
-export { historySchema } from './report/json/wire/public-history-model.js';
-export type { PublicHistory, PublicHistoryEntry, QualityHistory } from './report/json/wire/public-history-model.js';
+export type { PublicHistoryEntry } from './report/json/wire/public-history-model.js';
 export { summarySchema } from './report/json/wire/summary-model.js';
 export type { CommitSummary, RepositorySummary } from './report/json/wire/summary-model.js';
 export type { SourceLocator } from './report/json/wire/summary-model.js';

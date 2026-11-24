@@ -6,11 +6,12 @@ import { pluginApi } from '../../core/engine/plugin.js';
 import type { Plugin } from '../../core/engine/plugin.js';
 import { codeStructure } from '../../core/model/code-structure.js';
 import type { CodeStructure } from '../../core/model/code-structure.js';
-import { physicalLines, sourceExtensions, sourceFile, utf8 } from '../../core/model/snapshot.js';
+import { physicalLines, sourceFile, utf8 } from '../../core/model/snapshot.js';
 import { cloneCandidates } from './clone-candidates.js';
 import { classifyLines } from './code-lines.js';
 import { functionFacts } from './function-facts.js';
 import { structuralObservations } from './structural-observations.js';
+import { javaScriptExtensions, jsTsExtensions, typeScriptExtensions } from './extensions.js';
 
 const require = createRequire(import.meta.url);
 export const parserDefaults = { sourceType: 'unambiguous', errorRecovery: false, attachComment: false } as const;
@@ -22,7 +23,12 @@ export const babelProvider: Plugin = {
   version: '1.0.0',
   api: pluginApi,
   kinds: ['language'],
-  claims: { extensions: sourceExtensions, languages: ['javascript', 'typescript'] },
+  claims: { extensions: jsTsExtensions, languages: ['javascript', 'typescript'] },
+  providesLanguages: [
+    { id: 'javascript', label: 'JavaScript', color: '#f1e05a', extensions: javaScriptExtensions },
+    { id: 'typescript', label: 'TypeScript', color: '#3178c6', extensions: typeScriptExtensions },
+  ],
+  settings: parserDefaults,
   produces: [{ contract: codeStructure.id, persistence: 'transient' }],
   tools: { '@babel/parser': require('@babel/parser/package.json').version as string },
   operations: [{

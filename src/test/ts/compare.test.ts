@@ -6,14 +6,15 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import comparisonV1 from '../../main/resources/report/json/comparison-v1.schema.json' with { type: 'json' };
-import reportV1 from '../../main/resources/report/json/report-v1.schema.json' with { type: 'json' };
+import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
+import reportV2 from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
 import { compareInspections, comparisonSchema } from '../../main/ts/core/usecases/compare.js';
 import type { InspectionComparison } from '../../main/ts/core/usecases/compare.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
-const validator = new Ajv2020().addSchema(reportV1).compile<InspectionComparison>(comparisonV1);
+const validator = new Ajv2020({ schemas: [metricCatalog, reportV2] }).compile<InspectionComparison>(comparisonV1);
 const first = 'a'.repeat(40);
 const head = 'b'.repeat(40);
 const beforeSource = 'export function f() {\n  return 1;\n}\n';

@@ -1,5 +1,5 @@
 import { isRecord } from '../../../core/engine/plugin.js';
-import { definitions } from '../../../core/model/measurement.js';
+import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import type { Report } from '../validation/report.js';
 import type { ChurnWindow } from '../../../core/model/churn.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
@@ -14,7 +14,8 @@ export function fileMetrics(report: Report): FileMetricsReport {
   const byPath = new Map<string, Metrics>();
   const duplicatedLines = new Map<string, number>();
   const pluginMetrics = metricProjection(report);
-  const languages: { id: string; analysed: boolean }[] = [];
+  const languages: { id: string; label?: string; color?: string; analysed: boolean }[] = [];
+  const languageCatalog = new Map(report.pluginData?.languages?.map(language => [language.id, language]));
   const languageIndexes = new Map<string, number>();
   function file(path: string): Metrics {
     const existing = byPath.get(path);
@@ -24,12 +25,12 @@ export function fileMetrics(report: Report): FileMetricsReport {
     return metrics;
   }
 
-  for (const { path, lines, bytes, language, analysed } of report.pluginData?.inventory ?? []) {
+  for (const { path, lines, bytes, language, analysed, provider } of report.pluginData?.inventory ?? []) {
     let index = languageIndexes.get(language);
     if (index === undefined) {
       index = languages.length;
       languageIndexes.set(language, index);
-      languages.push({ id: language, analysed });
+      languages.push({ id: language, ...languageCatalog.get(language), analysed });
     } else if (analysed) {
       languages[index]!.analysed = true;
     }
@@ -38,19 +39,21 @@ export function fileMetrics(report: Report): FileMetricsReport {
     if (bytes !== undefined) entry.bytes = bytes;
     entry.language = index;
     entry.analysed = analysed;
+    if (provider !== undefined) entry.provider = provider;
   }
 
   for (const row of report.measurements) {
     if (!row.path) continue;
+    const id = canonicalMetricId(row.definition);
     if (pluginMetrics) file(row.path);
-    if (row.target === 'file' && row.definition === definitions.coverage && row.covered !== undefined && row.total !== undefined) {
+    if (row.target === 'file' && id === definitions.coverage && row.covered !== undefined && row.total !== undefined) {
       file(row.path).lineCoverage = { covered: row.covered, total: row.total };
     }
     if (row.value === null || !Number.isSafeInteger(row.value) || row.value < 0) continue;
-    if (row.target === 'file' && row.definition === definitions.lines) file(row.path).lines = row.value;
-    if (row.target === 'file' && row.definition === definitions.functions) file(row.path).functions = row.value;
+    if (row.target === 'file' && id === definitions.lines) file(row.path).lines = row.value;
+    if (row.target === 'file' && id === definitions.functions) file(row.path).functions = row.value;
     if (row.target === 'file') {
-      switch (row.definition) {
+      switch (id) {
         case definitions.codeLines: quality(file(row.path)).codeLines = row.value; break;
         case definitions.comments: quality(file(row.path)).commentLines = row.value; break;
         case definitions.classes: quality(file(row.path)).classes = row.value; break;
@@ -59,7 +62,7 @@ export function fileMetrics(report: Report): FileMetricsReport {
         case definitions.duplicatedLines: duplicatedLines.set(row.path, row.value); break;
       }
     }
-    if (row.target === 'function' && row.definition === definitions.complexity) {
+    if (row.target === 'function' && id === definitions.complexity) {
       const target = file(row.path);
       target.complexity = addComplexity(target.complexity, { sum: row.value, maximum: row.value, measuredFunctions: 1 });
     }
@@ -72,19 +75,7 @@ export function fileMetrics(report: Report): FileMetricsReport {
       quality(entry).duplication = { duplicatedLines: duplicateCount, codeLines };
     }
   }
-  if (report.findings !== undefined) {
-    for (const entry of byPath.values()) {
-      if (entry.quality?.duplication) entry.quality.maintainability = { smells: 0, effortMinutes: 0 };
-    }
-    for (const finding of report.findings) {
-      if (!finding.path || (finding.category !== 'structure' && finding.category !== 'duplication')) continue;
-      const observations = byPath.get(finding.path)?.quality;
-      if (!observations?.maintainability) continue;
-      observations.maintainability = addMaintainability(observations.maintainability, {
-        smells: 1, effortMinutes: finding.effortMinutes ?? null,
-      });
-    }
-  }
+  addFileFindings(byPath, report.findings);
 
   let unassignedDiagnostics = 0;
   for (const diagnostic of report.diagnostics) {
@@ -140,6 +131,21 @@ export function fileMetrics(report: Report): FileMetricsReport {
     hotspots: { complexity: complexity.map(entry => entry.path), missedLines: coverage.map(entry => entry.path),
       ...(cognitive === undefined ? {} : { cognitive }), ...(duplication === undefined ? {} : { duplication }),
       ...(churn === undefined ? {} : { churn }) } };
+}
+
+function addFileFindings(byPath: ReadonlyMap<string, Metrics>, findings: Report['findings']): void {
+  if (findings === undefined) return;
+  for (const entry of byPath.values()) {
+    if (entry.quality?.duplication) entry.quality.maintainability = { smells: 0, effortMinutes: 0 };
+  }
+  for (const finding of findings) {
+    if (!finding.path || (finding.category !== 'structure' && finding.category !== 'duplication')) continue;
+    const observations = byPath.get(finding.path)?.quality;
+    if (!observations?.maintainability) continue;
+    observations.maintainability = addMaintainability(observations.maintainability, {
+      smells: 1, effortMinutes: finding.effortMinutes ?? null,
+    });
+  }
 }
 
 function emptyMetrics(path: string): Metrics {

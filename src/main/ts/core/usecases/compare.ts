@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { isRecord } from '../engine/plugin.js';
-import { definitions } from '../model/measurement.js';
+import { canonicalMetricId, definitions } from '../model/measurement.js';
 import type { Measurement } from '../model/measurement.js';
 import type { Report } from '../model/report.js';
 import { comparePaths } from '../model/snapshot.js';
@@ -52,8 +52,8 @@ function observe(report: Report, metric: Metric): Observation {
   if (metric.definition === definitions.coverage) return observeCoverage(report);
   const maximum = metric.definition === definitions.complexity;
   const target = maximum ? 'function' : 'file';
-  const rows = report.measurements.filter(row => row.definition === metric.definition && row.target === target);
-  const partial = report.scope.parsed < report.scope.files || hasDiagnostic(report, metric.operation, 'babel-syntax/parse');
+  const rows = report.measurements.filter(row => row.target === target && canonicalMetricId(row.definition) === metric.definition);
+  const partial = report.scope.parsed < report.scope.files || hasDiagnostic(report, metric.operation) || hasParserDiagnostic(report);
   const expected = maximum ? fileCount(report.measurements, definitions.functions, report.scope.files) : report.scope.files;
   const value = integerAggregate(rows, maximum);
   if (partial) return { status: 'partial', value };
@@ -98,6 +98,18 @@ function hasDiagnostic(report: Report, ...operations: string[]): boolean {
   return report.diagnostics.some(item => operations.includes(item.operation));
 }
 
+function hasParserDiagnostic(report: Report): boolean {
+  const references = parserReferences(report);
+  if (references.size === 0) return hasDiagnostic(report, 'babel-syntax/parse');
+  const operations = new Set(references.values());
+  return report.diagnostics.some(({ path, operation }) => path === undefined
+    ? operations.has(operation) : references.get(path) === operation);
+}
+
+function parserReferences(report: Report): ReadonlyMap<string, string> {
+  return new Map((report.pluginData?.inventory ?? []).flatMap(({ path, provider }) => provider === undefined ? [] : [[path, provider]]));
+}
+
 function sourceScope(report: Report) {
   const { source, profile } = report.appliedConfig;
   if (!isRecord(source)) return null;
@@ -105,9 +117,10 @@ function sourceScope(report: Report) {
   const defaults = orderedStrings(source.defaultExclusions ?? []);
   const directories = orderedStrings(source.excludedDirectories);
   const extensions = orderedStrings(source.extensions);
+  const globs = orderedStrings(source.globs ?? []);
   const excludedOutput = source.excludedOutput;
-  if (!paths || !defaults || !directories || !extensions || (excludedOutput !== null && typeof excludedOutput !== 'string')) return null;
-  return { kind: report.subject.kind, paths: orderedStrings([...paths, ...defaults]), directories, extensions, excludedOutput,
+  if (!paths || !defaults || !directories || !extensions || !globs || (excludedOutput !== null && typeof excludedOutput !== 'string')) return null;
+  return { kind: report.subject.kind, paths: orderedStrings([...paths, ...defaults]), directories, extensions, globs, excludedOutput,
     generatedSourcePolicy: source.generatedSourcePolicy ?? null };
 }
 
@@ -117,19 +130,47 @@ function orderedStrings(value: unknown): readonly string[] | null {
 }
 
 function method(report: Report, metric: Metric) {
-  const definition = report.definitions[metric.definition];
-  const { plugins, operations, parser, coverage } = report.appliedConfig;
-  const importsCoverage = metric.definition === definitions.coverage;
-  const pluginIds = importsCoverage ? ['lcov'] : ['babel-syntax', 'structure'];
-  const operationKeys = importsCoverage ? [metric.operation] : ['babel-syntax/parse', metric.operation];
-  const toolchain = recordedEntries(plugins, 'id', pluginIds);
-  const bindings = recordedEntries(operations, 'key', operationKeys);
-  const settings = importsCoverage ? coverage : parser;
-  if (typeof definition !== 'string' || !toolchain || !bindings || !isRecord(settings)) return null;
-  if (importsCoverage && typeof settings.merge !== 'string') return null;
-  if (!importsCoverage) return { definition, toolchain, bindings, settings };
+  const definition = report.definitions[metric.definition] ?? Object.entries(report.definitions)
+    .find(([id]) => canonicalMetricId(id) === metric.definition)?.[1];
+  if (typeof definition !== 'string') return null;
+  if (metric.definition !== definitions.coverage) {
+    const details = structureMethod(report, metric.operation);
+    return details === null ? null : { definition, ...details };
+  }
+  const { plugins, operations, coverage: settings } = report.appliedConfig;
+  const toolchain = recordedEntries(plugins, 'id', ['lcov']);
+  const bindings = recordedEntries(operations, 'key', [metric.operation]);
+  if (!toolchain || !bindings || !isRecord(settings) || typeof settings.merge !== 'string') return null;
   const { inputDigest, inputDigests, pathBase, ...importSettings } = settings;
   return { definition, toolchain, bindings, settings: importSettings };
+}
+
+function structureMethod(report: Report, operation: string) {
+  const { plugins, operations, parser } = report.appliedConfig;
+  if (!Array.isArray(operations)) return null;
+  const scopes = new Set(parserReferences(report).values());
+  const candidates = operations.filter(isRecord).filter(entry => entry.key === operation);
+  const bindings: Record<string, unknown>[] = [];
+  const providerKeys = new Set<string>();
+  for (const candidate of candidates) {
+    const port = isRecord(candidate.inputs) ? candidate.inputs.syntax : undefined;
+    if (!isRecord(port)) return null;
+    const provider = typeof candidate.syntaxProvider === 'string' ? candidate.syntaxProvider : port.operation;
+    if (typeof provider !== 'string' || !provider.includes('/')) return null;
+    if (scopes.size && !scopes.has(provider)) continue;
+    providerKeys.add(provider);
+    bindings.push(candidate);
+  }
+  if (providerKeys.size === 0 || [...scopes].some(provider => !providerKeys.has(provider))) return null;
+  const providerBindings = recordedEntries(operations, 'key', [...providerKeys].sort(comparePaths));
+  const pluginIds = [...new Set([operation, ...providerKeys].map(key => key.slice(0, key.indexOf('/'))))].sort(comparePaths);
+  const toolchain = recordedEntries(plugins, 'id', pluginIds);
+  if (!providerBindings || !toolchain) return null;
+  // The original reports carried the Babel configuration at report level.
+  const configured = toolchain.map(({ id, version, api, tools, settings }) => ({
+    id, version, api, tools, settings: id === 'babel-syntax' && isRecord(parser) ? parser : settings ?? null,
+  }));
+  return { toolchain: configured, bindings: [...providerBindings, ...bindings.sort((a, b) => comparePaths(JSON.stringify(a), JSON.stringify(b)))] };
 }
 
 function recordedEntries(value: unknown, key: 'id' | 'key', names: readonly string[]) {

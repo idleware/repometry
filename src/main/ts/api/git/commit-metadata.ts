@@ -7,11 +7,13 @@ export function commitMetadataReader(repository: string): ReadCommitMetadata {
     for (let start = 0; start < revisions.length; start += 128) {
       const batch = revisions.slice(start, start + 128);
       const log = await gitText(repository, ['log', '--ignore-missing', '--no-walk=unsorted', '-z', '--no-show-signature',
-        '--format=%H%x00%an%x00%ae%x00%B', ...batch, '--']);
+        '--format=%H%x00%cI%x00%an%x00%ae%x00%B', ...batch, '--']);
       const fields = log.split('\0');
-      for (let index = 0; index + 3 < fields.length; index += 4) {
-        const [sha, name, email, message] = fields.slice(index, index + 4) as [string, string, string, string];
-        result.set(sha, { subject: message.split(/\r?\n/, 1)[0]!, author: { name, email } });
+      for (let index = 0; index + 4 < fields.length; index += 5) {
+        const [sha, date, name, email, message] = fields.slice(index, index + 5) as [string, string, string, string, string];
+        const time = Date.parse(date);
+        result.set(sha, { ...(Number.isFinite(time) ? { committedAt: new Date(time).toISOString() } : {}),
+          subject: message.split(/\r?\n/, 1)[0]!, author: { name, email } });
       }
     }
     const requested = new Set(revisions);

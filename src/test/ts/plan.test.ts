@@ -104,12 +104,10 @@ test('language claims go through claims.languages only', () => {
   assert.doesNotThrow(() => catalogPlan({ ...catalogPlugin, claims: { languages: ['javascript'] } }));
 });
 
-test('the planner requires a manifest unless an exact legacy plugin is opted in', () => {
+test('the planner requires every plugin to declare a manifest', () => {
   const legacy = { id: 'legacy-fixture', api: pluginApi, version: '1', operations: [] };
-  const request = { plugins: [legacy], select: [], inputs: new Map() };
+  const request = { plugins: [legacy as unknown as Plugin], select: [], inputs: new Map() };
   assert.throws(() => plan(request), /missing plugin manifest.*legacy-fixture/i);
-  const permitted = { ...request, legacyPluginIds: ['legacy-fixture'] };
-  assert.doesNotThrow(() => plan(permitted));
-  const partial = { ...permitted, plugins: [{ ...legacy, kinds: ['analysis'] as const }] };
+  const partial = { ...request, plugins: [{ ...legacy, kinds: ['analysis'] } as unknown as Plugin] };
   assert.throws(() => plan(partial), /must declare its products/i);
 });

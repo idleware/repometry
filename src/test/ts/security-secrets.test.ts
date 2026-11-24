@@ -275,9 +275,9 @@ test('binary and oversized files are skipped, keystores are flagged by path alon
 });
 
 test('the manifest declares a security plugin with one documented rule per secret kind', () => {
-  const products = manifestProducts(secrets, false);
-  assert.deepEqual([...products?.keys() ?? []], [findingResult.id]);
-  assert.equal(products?.get(findingResult.id)?.metrics, undefined);
+  const products = manifestProducts(secrets);
+  assert.deepEqual([...products.keys()], [findingResult.id]);
+  assert.equal(products.get(findingResult.id)?.metrics, undefined);
   assert.deepEqual(secrets.kinds, ['security']);
   assert.deepEqual(secrets.rules?.map(rule => rule.id), [
     'aws-access-key-id', 'aws-secret-access-key', 'github-token', 'gitlab-token', 'slack-token', 'slack-webhook', 'stripe-secret-key',

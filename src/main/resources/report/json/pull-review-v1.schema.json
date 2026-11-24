@@ -35,8 +35,8 @@
       "required": ["status", "covered", "total", "percent", "files", "gaps", "excludedPaths", "coverageInputDigest", "uncovered", "gate"],
       "properties": {
         "status": { "enum": ["complete", "partial", "not-applicable", "unavailable"] },
-        "covered": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
-        "total": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+        "covered": { "$ref": "urn:repometry:schema:report:2#/$defs/count" },
+        "total": { "$ref": "urn:repometry:schema:report:2#/$defs/count" },
         "percent": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/percent" },
         "files": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/files" },
         "gaps": { "$ref": "urn:repometry:schema:diff-coverage:1#/properties/gaps" },
@@ -60,7 +60,7 @@
           "properties": {
             "status": { "$ref": "#/$defs/gateStatus" },
             "minimumPercent": { "$ref": "urn:repometry:schema:diff-coverage:1#/$defs/percent" },
-            "minimumLines": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+            "minimumLines": { "$ref": "urn:repometry:schema:report:2#/$defs/count" }
           },
           "additionalProperties": false
         }
@@ -72,14 +72,14 @@
       "required": ["added", "qualityCount", "reason", "gate"],
       "properties": {
         "added": { "type": ["array", "null"], "items": { "$ref": "urn:repometry:schema:report:2#/$defs/finding" } },
-        "qualityCount": { "anyOf": [{ "type": "null" }, { "$ref": "urn:repometry:schema:report:1#/$defs/count" }] },
+        "qualityCount": { "anyOf": [{ "type": "null" }, { "$ref": "urn:repometry:schema:report:2#/$defs/count" }] },
         "reason": { "enum": [null, "reports-unavailable", "findings-unavailable", "partial-inspection", "analysis-changed"] },
         "gate": {
           "type": ["object", "null"],
           "required": ["status", "maximum"],
           "properties": {
             "status": { "$ref": "#/$defs/gateStatus" },
-            "maximum": { "$ref": "urn:repometry:schema:report:1#/$defs/count" }
+            "maximum": { "$ref": "urn:repometry:schema:report:2#/$defs/count" }
           },
           "additionalProperties": false
         }

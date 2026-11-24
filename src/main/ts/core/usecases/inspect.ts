@@ -4,7 +4,7 @@ import { normalizeFindingIgnore, partitionFindings } from '../model/finding-igno
 import type { FindingIgnoreRule } from '../model/finding-ignore.js';
 import { reportSchema } from '../model/report.js';
 import type { Report } from '../model/report.js';
-import { digest, isSourcePath } from '../model/snapshot.js';
+import { digest } from '../model/snapshot.js';
 import type { SourceSnapshot } from '../model/source.js';
 import { normalizeExclusions, sourceExclusionMatcher } from '../profile/exclusions.js';
 
@@ -68,7 +68,7 @@ export async function executeInspection(options: InspectionOptions, ports: Inspe
     appliedConfig: { ...findings.appliedConfig, findingIgnore: ignore },
     ...(findings.findings === undefined ? {} : partitionFindings(findings.findings, ignore)) };
   const result = snapshot.subject.kind === 'commit' && ports.recordChurn
-    ? await ports.recordChurn(filtered, root, snapshot.files.filter(file => isSourcePath(file.path)).map(file => file.path)) : filtered;
+    ? await ports.recordChurn(filtered, root, snapshot.files.map(file => file.path)) : filtered;
   await source.save(result);
   return result;
 }

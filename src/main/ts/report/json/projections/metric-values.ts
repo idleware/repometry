@@ -1,18 +1,20 @@
 import type { MetricDescriptor, MetricValues } from '../wire/summary-model.js';
 import type { Measurement } from '../../../core/model/measurement.js';
+import { canonicalMetricId } from '../../../core/model/measurement.js';
 import type { Report } from '../../../core/model/report.js';
 
 export function metricProjection(report: Report) {
   const metadata = report.pluginData;
   if (!metadata?.metrics.length) return undefined;
-  const measured = new Set(metadata.measured);
-  const metrics = metadata.metrics.filter(metric => measured.has(metric.id));
+  const measured = new Set(metadata.measured.map(canonicalMetricId));
+  const metrics = metadata.metrics.map(canonicalMetricDescriptor).filter(metric => measured.has(metric.id));
   if (metrics.length === 0) return undefined;
   const rows = new Map<string, Measurement[]>();
   for (const row of report.measurements) {
-    const existing = rows.get(row.definition);
+    const id = canonicalMetricId(row.definition);
+    const existing = rows.get(id);
     if (existing) existing.push(row);
-    else rows.set(row.definition, [row]);
+    else rows.set(id, [row]);
   }
 
   function values(path?: string, directory = false): MetricValues {
@@ -33,8 +35,16 @@ export function metricProjection(report: Report) {
     return result;
   }
 
-  const privateMetrics = metadata.privateMetrics?.filter(id => measured.has(id));
+  const privateMetrics = metadata.privateMetrics?.map(canonicalMetricId).filter(id => measured.has(id));
   return { catalog: metrics, privateMetrics: privateMetrics?.length ? privateMetrics : undefined, values };
+}
+
+export function canonicalMetricDescriptor(metric: MetricDescriptor): MetricDescriptor {
+  const id = canonicalMetricId(metric.id);
+  if (!metric.ratio) return metric.id === id ? metric : { ...metric, id };
+  const { of, over } = metric.ratio;
+  const ratio = { of: canonicalMetricId(of), over: canonicalMetricId(over) };
+  return metric.id === id && ratio.of === of && ratio.over === over ? metric : { ...metric, id, ratio };
 }
 
 function rollup(rows: readonly Measurement[], aggregate: MetricDescriptor['aggregate'], path: string | undefined, directory: boolean): number | null {

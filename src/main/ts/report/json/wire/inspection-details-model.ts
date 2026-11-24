@@ -49,12 +49,6 @@ export interface ProfileRule {
   readonly help?: string;
 }
 
-export interface DetailsBundle {
-  readonly schema: 'urn:repometry:schema:viewer-details:1';
-  readonly context: Record<string, InspectionContext>;
-  readonly inspections: Record<string, InspectionDetails>;
-}
-
 export interface InspectionAsset {
   readonly schema: 'urn:repometry:schema:viewer-inspection:1';
   readonly sha: string;

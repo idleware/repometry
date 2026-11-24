@@ -1,4 +1,4 @@
-import { definitions } from '../../../core/model/measurement.js';
+import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import { lcovLines } from '../../../core/model/line-coverage.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
@@ -10,7 +10,7 @@ import { componentFiles } from './components.js';
 import type { Component } from './components.js';
 
 import type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
-export type { DetailsBundle, InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
+export type { InspectionAsset, InspectionDetails, ProfileSettings } from '../wire/inspection-details-model.js';
 
 export function inspectionAsset(report: Report, components: readonly Component[] | undefined,
   context = inspectionHistory([report])[report.subject.id]): InspectionAsset {
@@ -79,7 +79,7 @@ function strings(value: unknown): string[] {
 export function complexFunctions(report: Report): readonly ComplexFunction[] {
   const functions: ComplexFunction[] = [];
   for (const row of report.measurements) {
-    if (row.definition === definitions.complexity && row.target === 'function' && row.path !== undefined && row.value !== null) {
+    if (canonicalMetricId(row.definition) === definitions.complexity && row.target === 'function' && row.path !== undefined && row.value !== null) {
       functions.push({ name: row.name ?? '(anonymous)', path: row.path, line: row.line ?? null, complexity: row.value });
     }
   }

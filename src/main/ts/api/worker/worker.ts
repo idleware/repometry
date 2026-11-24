@@ -5,7 +5,8 @@ import type { AnalysisExecutor } from '../../core/usecases/inspect.js';
 import { utf8 } from '../../core/model/snapshot.js';
 import { decodeWorkerInput, maxWorkerInput, maxWorkerResult, workerRoute } from './worker-protocol.js';
 
-export async function serveWorker(host: '127.0.0.1' | '0.0.0.0', port: number, token: string, analyze: AnalysisExecutor): Promise<{ url: string; close: () => void }> {
+export async function serveWorker(host: '127.0.0.1' | '0.0.0.0', port: number, token: string, analyze: AnalysisExecutor,
+  isSource: (path: string) => boolean): Promise<{ url: string; close: () => void }> {
   let busy = false;
   const server = createServer({ headersTimeout: 10_000, requestTimeout: 30_000, connectionsCheckingInterval: 5_000 }, (request, response) => {
     if (request.url !== workerRoute) { reply(response, 404, 'Unknown worker route'); return; }
@@ -13,7 +14,7 @@ export async function serveWorker(host: '127.0.0.1' | '0.0.0.0', port: number, t
     if (!authorized(request, token)) { reply(response, 401, 'Invalid token'); return; }
     if (busy) { reply(response, 503, 'Worker is busy'); return; }
     busy = true;
-    void handle(request, response, analyze).finally(() => { busy = false; });
+    void handle(request, response, analyze, isSource).finally(() => { busy = false; });
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -27,7 +28,8 @@ export async function serveWorker(host: '127.0.0.1' | '0.0.0.0', port: number, t
   return { url: `http://${host}:${address.port}/`, close: () => server.close() };
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse, analyze: AnalysisExecutor): Promise<void> {
+async function handle(request: IncomingMessage, response: ServerResponse, analyze: AnalysisExecutor,
+  isSource: (path: string) => boolean): Promise<void> {
   const declared = Number(request.headers['content-length']);
   if (declared > maxWorkerInput) { reply(response, 413, 'Worker input exceeds 16 MiB'); return; }
   const parts: Buffer[] = [];
@@ -40,7 +42,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, analyz
       if (size > maxWorkerInput) { reply(response, 413, 'Worker input exceeds 16 MiB'); return; }
       parts.push(bytes);
     }
-    payload = decodeWorkerInput(JSON.parse(utf8(Buffer.concat(parts))) as unknown);
+    payload = decodeWorkerInput(JSON.parse(utf8(Buffer.concat(parts))) as unknown, isSource);
   } catch {
     reply(response, 400, 'Invalid worker input');
     return;

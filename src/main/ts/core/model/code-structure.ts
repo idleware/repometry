@@ -74,3 +74,10 @@ export const codeStructure: DataContract<CodeStructure> = {
     && Array.isArray(value.observations) && value.observations.every(isObservation)
     && isCloneSource(value.clones) && value.clones.path === value.path,
 };
+
+/** A repository provider returns at most one structure per input path. */
+export const codeStructures: DataContract<readonly CodeStructure[]> = {
+  id: 'repometry.code-structures/v1',
+  accepts: (value): value is readonly CodeStructure[] => Array.isArray(value) && value.every(codeStructure.accepts)
+    && new Set(value.map(({ path }) => path)).size === value.length,
+};

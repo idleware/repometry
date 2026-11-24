@@ -8,6 +8,7 @@ import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '.
 import { remoteExecutor } from '../api/worker/remote-executor.js';
 import { serveWorker } from '../api/worker/worker.js';
 import { workerToken } from '../api/worker/worker-protocol.js';
+import { defaultLanguages } from '../compose/languages.js';
 import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
 import { prepareMetabranch } from '../compose/prepare-metabranch.js';
@@ -140,7 +141,7 @@ const commands: Readonly<Record<string, Command>> = {
     async run(input) {
       const host = input.text('listen') ?? '127.0.0.1';
       if (host !== '127.0.0.1' && host !== '0.0.0.0') throw new Error('--listen must be 127.0.0.1 or 0.0.0.0');
-      announce(await serveWorker(host, port(input.text('port') ?? '7331'), workerToken(), analyzeSnapshot));
+      announce(await serveWorker(host, port(input.text('port') ?? '7331'), workerToken(), analyzeSnapshot, defaultLanguages.isSource));
     } },
 };
 
@@ -172,7 +173,7 @@ async function analyze(input: Invocation): Promise<number> {
     : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
       lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore,
       findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined },
-    worker === undefined ? undefined : remoteExecutor(worker, workerToken()));
+    worker === undefined ? undefined : remoteExecutor(worker, workerToken(), defaultLanguages.isSource));
   if (github) await writeGitHubResult(report);
   const requested = input.many('report');
   const reports = await outputReports(root, store, requested.length ? requested : config.reports, input, config);
@@ -193,7 +194,7 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   const { base, head, commits } = await firstParentRange(root, range.base, range.head);
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
   const worker = input.text('worker');
-  const executor = worker === undefined ? undefined : remoteExecutor(worker, workerToken());
+  const executor = worker === undefined ? undefined : remoteExecutor(worker, workerToken(), defaultLanguages.isSource);
   const exclude = [...config.exclude, ...input.many('exclude')];
   const analyzed: string[] = [], partial: string[] = [], skipped: string[] = [];
   const failed: { commit: string; error: string }[] = [];

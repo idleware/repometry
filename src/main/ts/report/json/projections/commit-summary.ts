@@ -1,5 +1,4 @@
-import { isRecord } from '../../../core/engine/plugin.js';
-import { definitions } from '../../../core/model/measurement.js';
+import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import { qualitySummary } from '../../../core/model/quality-summary.js';
 import { securityCounts } from './security-summary.js';
 import { compareHistoryEntries } from '../wire/public-history-model.js';
@@ -7,7 +6,7 @@ import type { PublicHistoryEntry } from '../wire/public-history-model.js';
 import { inspectionProfileDigest } from './inspection-context.js';
 import { reportRevision } from '../validation/report.js';
 import type { Report } from '../validation/report.js';
-import { metricProjection } from './metric-values.js';
+import { canonicalMetricDescriptor, metricProjection } from './metric-values.js';
 
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary, MetricDescriptor, RepositorySummary } from '../wire/summary-model.js';
@@ -39,16 +38,20 @@ export function orderSummaries(rows: readonly CommitSummary[]): CommitSummary[] 
   return [...rows].sort(compareHistoryEntries);
 }
 
-export type CommitMetadata = Pick<PublicHistoryEntry, 'subject' | 'author' | 'tags'>;
+export type CommitMetadata = Pick<PublicHistoryEntry, 'subject' | 'author' | 'tags' | 'committedAt'>;
 export type ReadCommitMetadata = (revisions: readonly string[]) => Promise<ReadonlyMap<string, CommitMetadata>>;
 
-/** Values recorded at analysis win; Git fills in older inspections and adds tags, which can land after analysis. */
+/** Values recorded at analysis win; Git fills in missing metadata and adds current tag names. */
 export async function withCommitMetadata(rows: readonly CommitSummary[], read?: ReadCommitMetadata): Promise<readonly CommitSummary[]> {
   if (!read || !rows.length) return rows;
   const metadata = await read(rows.map(row => row.sha));
   return rows.map(row => {
     const found = metadata.get(row.sha);
-    return found === undefined ? row : { ...found, ...row, ...(found.tags === undefined ? {} : { tags: found.tags }) };
+    if (found === undefined) return row;
+    const { committedAt: gitTime, ...gitFields } = found;
+    const { sha, generatedAt, committedAt = gitTime, ...rest } = row;
+    return { ...gitFields, sha, generatedAt, ...(committedAt === undefined ? {} : { committedAt }), ...rest,
+      ...(gitFields.tags === undefined ? {} : { tags: gitFields.tags }) };
   });
 }
 
@@ -59,10 +62,11 @@ export function expandSummaryCatalog(summary: RepositorySummary): CommitSummary[
 
 export function repositorySummary(rows: readonly CommitSummary[], pullReviewCount?: number, includePrivateMetrics = true): RepositorySummary {
   const ordered = orderSummaries(rows);
-  const privateMetrics = new Set(ordered.flatMap(row => row.privateMetrics ?? []));
+  const privateMetrics = new Set(ordered.flatMap(row => row.privateMetrics ?? []).map(canonicalMetricId));
   const catalog = new Map<string, MetricDescriptor>();
   for (const row of ordered) {
-    for (const metric of row.metrics ?? []) {
+    for (const descriptor of row.metrics ?? []) {
+      const metric = canonicalMetricDescriptor(descriptor);
       if ((includePrivateMetrics || !privateMetrics.has(metric.id)) && !catalog.has(metric.id)) catalog.set(metric.id, metric);
     }
   }
@@ -73,8 +77,9 @@ export function repositorySummary(rows: readonly CommitSummary[], pullReviewCoun
     const mapped: Record<number, number | null> = {};
     for (const [index, value] of Object.entries(values)) {
       const id = local[Number(index)]?.id;
-      const position = id === undefined ? undefined : positions.get(id);
-      if (position !== undefined) mapped[position] = value;
+      const canonical = id === undefined ? undefined : canonicalMetricId(id);
+      const position = canonical === undefined ? undefined : positions.get(canonical);
+      if (position !== undefined && (canonical === id || !Object.hasOwn(mapped, position))) mapped[position] = value;
     }
     return Object.keys(mapped).length ? { ...row, values: mapped } : row;
   });
@@ -98,24 +103,16 @@ export function historyEntry(report: Report): PublicHistoryEntry {
       if (item.definition === definitions.lines) lines = (lines ?? 0) + item.value;
       if (item.definition === definitions.functions) functions = (functions ?? 0) + item.value;
     }
-    if (item.target === 'function' && item.definition === definitions.complexity && Number.isSafeInteger(item.value)) {
+    if (item.target === 'function' && canonicalMetricId(item.definition) === definitions.complexity && Number.isSafeInteger(item.value)) {
       maxComplexity = Math.max(maxComplexity ?? 0, item.value);
     }
     if (item.target === 'repository' && item.definition === definitions.coverage && item.covered !== undefined && item.total !== undefined && item.total > 0) {
       lineCoverage = { covered: item.covered, total: item.total };
     }
   }
-  const committedAt = commitTime(report);
+  const committedAt = Date.parse(report.committedAt ?? '');
   const generatedAt = Date.parse(report.generatedAt);
   return { sha: report.subject.id, generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : '',
-    ...(committedAt === null ? {} : { committedAt }), status: report.status,
+    ...(Number.isFinite(committedAt) ? { committedAt: new Date(committedAt).toISOString() } : {}), status: report.status,
     files: report.scope.files, parsed: report.scope.parsed, lines, functions, maxComplexity, lineCoverage };
-}
-
-/** Earlier reports only recorded the committer time in the churn window. */
-function commitTime(report: Report): string | null {
-  const window = report.appliedConfig.churnWindow;
-  const legacy = isRecord(window) && typeof window.endingAt === 'string' ? window.endingAt : '';
-  const time = Date.parse(report.committedAt ?? legacy);
-  return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }

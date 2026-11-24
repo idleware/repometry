@@ -18,10 +18,10 @@
       "const": "urn:repometry:schema:report:2"
     },
     "subject": {
-      "$ref": "urn:repometry:schema:report:1#/properties/subject"
+      "$ref": "#/$defs/subject"
     },
     "generatedAt": {
-      "$ref": "urn:repometry:schema:report:1#/properties/generatedAt"
+      "type": "string"
     },
     "committedAt": {
       "type": "string"
@@ -41,22 +41,49 @@
       "additionalProperties": false
     },
     "appliedConfig": {
-      "$ref": "urn:repometry:schema:report:1#/properties/appliedConfig"
+      "type": "object",
+      "minProperties": 1
     },
     "definitions": {
-      "$ref": "urn:repometry:schema:report:1#/properties/definitions"
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "scope": {
-      "$ref": "urn:repometry:schema:report:1#/properties/scope"
+      "type": "object",
+      "required": [
+        "files",
+        "parsed"
+      ],
+      "properties": {
+        "files": {
+          "$ref": "#/$defs/count"
+        },
+        "parsed": {
+          "$ref": "#/$defs/count"
+        }
+      },
+      "additionalProperties": false
     },
     "status": {
-      "$ref": "urn:repometry:schema:report:1#/properties/status"
+      "enum": [
+        "complete",
+        "partial",
+        "not-applicable"
+      ]
     },
     "measurements": {
-      "$ref": "urn:repometry:schema:report:1#/properties/measurements"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/measurement"
+      }
     },
     "diagnostics": {
-      "$ref": "urn:repometry:schema:report:1#/properties/diagnostics"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
     },
     "findings": {
       "type": "array",
@@ -83,6 +110,19 @@
             "additionalProperties": false
           }
         },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "label": { "type": "string", "minLength": 1 },
+              "color": { "type": "string", "pattern": "^#[a-fA-F0-9]{6}$" }
+            },
+            "additionalProperties": false
+          }
+        },
         "inventory": {
           "type": "array",
           "items": {
@@ -93,6 +133,7 @@
               "lines": { "type": ["integer", "null"], "minimum": 0 },
               "bytes": { "type": "integer", "minimum": 0 },
               "language": { "type": "string" },
+              "provider": { "type": "string", "minLength": 1 },
               "analysed": { "type": "boolean" }
             },
             "additionalProperties": false
@@ -139,6 +180,111 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "measurement": {
+      "type": "object",
+      "required": [
+        "definition",
+        "target",
+        "value"
+      ],
+      "properties": {
+        "definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "enum": [
+            "repository",
+            "file",
+            "function"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "covered": {
+          "$ref": "#/$defs/count"
+        },
+        "total": {
+          "$ref": "#/$defs/count"
+        }
+      },
+      "dependentRequired": {
+        "covered": [
+          "total"
+        ],
+        "total": [
+          "covered"
+        ],
+        "line": [
+          "path"
+        ],
+        "column": [
+          "line"
+        ]
+      },
+      "if": {
+        "properties": {
+          "target": {
+            "enum": [
+              "file",
+              "function"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "operation",
+        "state",
+        "message"
+      ],
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "failed",
+            "blocked",
+            "partial"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "reportProduct": {
       "type": "object",
       "required": ["operation", "value"],
@@ -302,10 +448,51 @@
       "additionalProperties": false
     },
     "count": {
-      "$ref": "urn:repometry:schema:report:1#/$defs/count"
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
     },
     "subject": {
-      "$ref": "urn:repometry:schema:report:1#/$defs/subject"
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "commit",
+            "working-tree"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "commit"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
     }
   }
 }

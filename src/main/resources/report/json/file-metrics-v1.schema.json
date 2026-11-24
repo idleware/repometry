@@ -5,10 +5,10 @@
   "required": ["schema", "subject", "generatedAt", "status", "scope", "files", "directories", "unassignedDiagnostics", "hotspots"],
   "properties": {
     "schema": { "const": "urn:repometry:schema:file-metrics:1" },
-    "subject": { "$ref": "urn:repometry:schema:report:1#/$defs/subject" },
-    "generatedAt": { "$ref": "urn:repometry:schema:report:1#/properties/generatedAt" },
-    "status": { "$ref": "urn:repometry:schema:report:1#/properties/status" },
-    "scope": { "$ref": "urn:repometry:schema:report:1#/properties/scope" },
+    "subject": { "$ref": "urn:repometry:schema:report:2#/$defs/subject" },
+    "generatedAt": { "$ref": "urn:repometry:schema:report:2#/properties/generatedAt" },
+    "status": { "$ref": "urn:repometry:schema:report:2#/properties/status" },
+    "scope": { "$ref": "urn:repometry:schema:report:2#/properties/scope" },
     "files": { "type": "array", "items": { "$ref": "#/$defs/file" } },
     "directories": { "type": "array", "items": { "$ref": "#/$defs/directory" } },
     "languages": {
@@ -16,7 +16,7 @@
       "items": {
         "type": "object",
         "required": ["id", "analysed"],
-        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "analysed": { "type": "boolean" } },
+        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string", "pattern": "^#[a-fA-F0-9]{6}$" }, "analysed": { "type": "boolean" } },
         "additionalProperties": false
       }
     },
@@ -50,13 +50,14 @@
   },
   "additionalProperties": false,
   "$defs": {
-    "count": { "$ref": "urn:repometry:schema:report:1#/$defs/count" },
+    "count": { "$ref": "urn:repometry:schema:report:2#/$defs/count" },
     "optionalCount": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
     "observations": {
       "type": "object",
       "required": ["path", "lines", "functions", "complexity", "lineCoverage", "diagnosticCount"],
       "properties": {
         "language": { "type": "integer", "minimum": 0 },
+        "provider": { "type": "string", "minLength": 1 },
         "analysed": { "type": "boolean" },
         "values": {
           "type": "object",

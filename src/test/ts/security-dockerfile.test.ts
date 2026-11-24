@@ -59,7 +59,7 @@ test('the plugin declares a security manifest with one scan inspection over cont
   assert.equal(operation?.role, 'inspection');
   assert.deepEqual(operation?.inputs, { source: sourceFile });
   assert.equal(operation?.output, findingResult);
-  assert.ok(manifestProducts(dockerfile, false)?.has(findingResult.id));
+  assert.ok(manifestProducts(dockerfile).has(findingResult.id));
 });
 
 test('unpinned-base-image flags untagged and latest images but not digests, scratch or earlier stages', () => {

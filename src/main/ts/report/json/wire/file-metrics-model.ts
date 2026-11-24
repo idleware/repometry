@@ -47,6 +47,7 @@ export interface Metrics {
   quality?: Quality;
   values?: MetricValues;
   language?: number;
+  provider?: string;
   analysed?: boolean;
 }
 
@@ -66,7 +67,7 @@ export interface FileMetricsReport {
   readonly directories: readonly DirectoryMetrics[];
   readonly unassignedDiagnostics: number;
   readonly catalog?: readonly MetricDescriptor[];
-  readonly languages?: readonly { readonly id: string; readonly label?: string; readonly analysed: boolean }[];
+  readonly languages?: readonly { readonly id: string; readonly label?: string; readonly color?: string; readonly analysed: boolean }[];
   readonly churnWindow?: ChurnWindow & { readonly lookbackDays: number; readonly maxCommits: number };
   readonly hotspots: {
     readonly complexity: readonly string[];

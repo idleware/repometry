@@ -40,6 +40,116 @@
     }
   },
   "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nullableCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "quality": {
+      "type": "object",
+      "required": [
+        "codeLines",
+        "comments",
+        "classes",
+        "cognitiveComplexity",
+        "duplication",
+        "maintainability"
+      ],
+      "properties": {
+        "codeLines": {
+          "$ref": "#/$defs/nullableCount"
+        },
+        "comments": {
+          "$ref": "#/$defs/nullableCount"
+        },
+        "classes": {
+          "$ref": "#/$defs/nullableCount"
+        },
+        "cognitiveComplexity": {
+          "$ref": "#/$defs/nullableCount"
+        },
+        "duplication": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "duplicatedLines",
+            "codeLines",
+            "ratio"
+          ],
+          "properties": {
+            "duplicatedLines": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "codeLines": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "maintainability": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "smells",
+            "effortMinutes",
+            "debtRatio",
+            "grade"
+          ],
+          "properties": {
+            "smells": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "effortMinutes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "debtRatio": {
+              "$ref": "#/$defs/ratio"
+            },
+            "grade": {
+              "enum": [
+                "A",
+                "B",
+                "C",
+                "D",
+                "F",
+                null
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "commit": {
       "type": "object",
       "required": [
@@ -63,46 +173,83 @@
           "additionalProperties": { "type": ["number", "null"] }
         },
         "sha": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/sha"
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
         },
         "generatedAt": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/generatedAt"
+          "type": "string"
         },
         "status": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/status"
+          "enum": [
+            "complete",
+            "partial",
+            "not-applicable"
+          ]
         },
         "files": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/files"
+          "$ref": "#/$defs/count"
         },
         "parsed": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/parsed"
+          "$ref": "#/$defs/count"
         },
         "lines": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/lines"
+          "$ref": "#/$defs/nullableCount"
         },
         "functions": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/functions"
+          "$ref": "#/$defs/nullableCount"
         },
         "maxComplexity": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/maxComplexity"
+          "$ref": "#/$defs/nullableCount"
         },
         "lineCoverage": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/lineCoverage"
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "covered",
+            "total"
+          ],
+          "properties": {
+            "covered": {
+              "$ref": "#/$defs/count"
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
         },
         "committedAt": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/committedAt"
+          "type": "string"
         },
         "subject": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/subject"
+          "type": "string"
         },
         "author": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/author"
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          }
         },
         "tags": {
-          "$ref": "urn:repometry:schema:public-history:1#/properties/reports/items/properties/tags"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "quality": {
-          "$ref": "urn:repometry:schema:quality-history:1#/$defs/quality"
+          "$ref": "#/$defs/quality"
         },
         "revision": {
           "type": "string",

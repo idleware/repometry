@@ -15,7 +15,7 @@ import type { Invocation } from './arguments.js';
 import { findRepository, invocationDirectory, isDirectory, selectStore } from './store.js';
 import type { Store } from './store.js';
 
-const reporters = { html: '.repometry/report/html', json: '.repometry/report/history.json' } as const;
+const reporters = { html: '.repometry/report/html', json: '.repometry/report/summary.json' } as const;
 export const reporterIds = Object.keys(reporters);
 
 export async function outputReports(root: string, store: Store, requested: readonly string[], input: Invocation,

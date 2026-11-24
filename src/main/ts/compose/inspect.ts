@@ -16,6 +16,7 @@ import type { AnalysisExecutor, InspectionPorts } from '../core/usecases/inspect
 import { LocalReportStore } from '../report/json/store/local-store.js';
 import { analyzeSnapshot, inspectionFileMatcher } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
+import { defaultLanguages, languageRegistry } from './languages.js';
 
 export { analyzeSnapshot } from './analyze-snapshot.js';
 export type { AnalysisExecutor, AnalysisInput, InspectionPorts } from '../core/usecases/inspect.js';
@@ -39,21 +40,24 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
   if ((plugins.length || operationCache) && (typeof overrides === 'function' || overrides?.analyze)) {
     throw new Error('Configure plugins and the operation cache on the custom executor');
   }
-  const claims = inspectionFileMatcher(plugins);
+  const languages = plugins.length ? languageRegistry(plugins) : defaultLanguages;
+  const claims = inspectionFileMatcher(plugins, languages);
+  const { isSource } = languages;
   const ports: InspectionPorts = {
-    readSource: excludes => readSource(request, excludes, claims),
+    readSource: excludes => readSource(request, excludes, isSource, claims),
     analyze: input => analyzeSnapshot(input, plugins, operationCache),
     ...(lcov === undefined ? {} : { readCoverage: () => readLcovFiles(lcov) }),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),
-    recordChurn: attachChurn,
+    recordChurn: (report, root, paths) => attachChurn(report, root, paths.filter(isSource)),
     ...(typeof overrides === 'function' ? { analyze: overrides } : overrides),
   };
   return executeInspection(request, ports);
 }
 
-async function readSource(request: InspectRequest, excludes: (path: string) => boolean, claims: (path: string) => boolean) {
-  const source = await readInspectionSource(request, excludes, claims);
+async function readSource(request: InspectRequest, excludes: (path: string) => boolean, isSource: (path: string) => boolean,
+  claims: (path: string) => boolean) {
+  const source = await readInspectionSource(request, excludes, isSource, claims);
   const store = new LocalReportStore(source.output);
   return { ...source, save: (report: Report) => store.save(report) };
 }

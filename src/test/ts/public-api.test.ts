@@ -8,9 +8,9 @@ const entries: Readonly<Record<string, readonly string[]>> = {
     'measureDiffCoverage', 'plan', 'pluginApi', 'pullReviewSchema', 'pullReviewsSchema', 'qualitySummary', 'readReport',
     'reportSchema', 'review', 'reviewExitCode', 'reviewPull',
   ],
-  'repometry/plugin': ['DockerToolRunner', 'codeStructure', 'findingResult', 'measurements', 'pluginApi', 'processPlugin',
+  'repometry/plugin': ['DockerToolRunner', 'codeStructure', 'codeStructures', 'findingResult', 'measurements', 'pluginApi', 'processPlugin',
     'processPluginProtocol', 'sourceFile', 'sourceFiles'],
-  'repometry/report': ['LocalOperationCache', 'fileMetricsSchema', 'historySchema', 'legacyReportSchema', 'readReport', 'reportSchema',
+  'repometry/report': ['LocalOperationCache', 'fileMetricsSchema', 'readReport', 'reportSchema',
     'summarySchema', 'validateSummary'],
 };
 

@@ -31,12 +31,12 @@ test('a plugin metric the viewer has no code for gets a column, a query key, a h
 test('a metric without a better is listed but neither shown first nor ranked, and without a roll-up has no trend', () => {
   const owners = spec('fixture.file-owners/v1');
   assert.deepEqual([owners.column, owners.hotspot, owners.trend], [false, false, false]);
-  const lines = spec('repometry.code-lines-babel/v1');
+  const lines = spec('repometry.code-lines/v1');
   assert.deepEqual([lines.key, lines.short, lines.column, lines.hotspot, lines.trend], ['lines', 'Code lines', false, false, true]);
 });
 
 test('built-in metrics keep their query words and plugin metrics group under the plugin after the curated groups', () => {
-  assert.equal(spec('repometry.cyclomatic-babel/v1').key, 'complexity');
+  assert.equal(spec('repometry.cyclomatic-complexity/v1').key, 'complexity');
   assert.equal(coverage.key, 'coverage');
   assert.deepEqual(trendGroups(specs).map(([group, members]) => [group, members.map(member => member.key)]), [
     ['Maintainability', ['complexity', 'remediation-minutes']],
@@ -70,7 +70,7 @@ test('file values resolve against the detail’s own catalog, whatever order the
   assert.deepEqual(details.files.map(file => entryValue(local, file, todo)), [5, 2, 0, null]);
   assert.deepEqual(details.files.map(file => entryValue(local, file, coverage)), [0.75, 0.9, 0, null]);
   assert.equal(entryValue(local, details.directories[0]!, todo), 7);
-  assert.equal(entryValue(local, details.files[0]!, spec('repometry.cyclomatic-babel/v1')), null);
+  assert.equal(entryValue(local, details.files[0]!, spec('repometry.cyclomatic-complexity/v1')), null);
 });
 
 test('a folder the viewer gathers rolls its files up by each metric’s aggregate, skipping files nobody analysed', () => {
@@ -88,7 +88,7 @@ test('values format and change by unit, coloured only where the metric has a bet
   assert.deepEqual(difference(todo, 7, 9), { text: '−2', direction: 'better' });
   assert.deepEqual(difference(coverage, 0.75, 150 / 230), { text: '+9.8 pp', direction: 'better' });
   assert.deepEqual(difference(spec('repometry.remediation-minutes/v1'), 95, 110), { text: '−15 min', direction: 'better' });
-  assert.deepEqual(difference(spec('repometry.code-lines-babel/v1'), 300, 280), { text: '+20', direction: 'neutral' });
+  assert.deepEqual(difference(spec('repometry.code-lines/v1'), 300, 280), { text: '+20', direction: 'neutral' });
   assert.deepEqual(difference(todo, 7, 7), { text: 'No change', direction: 'same' });
 });
 
@@ -102,11 +102,11 @@ test('the first sort puts the worst first and missing values last in both direct
 
 test('bands come from the limits where the descriptor has them, otherwise from the highest value shown', () => {
   assert.equal(bandScale(todo), 'heat');
-  assert.equal(bandScale(spec('repometry.code-lines-babel/v1')), 'neutral');
+  assert.equal(bandScale(spec('repometry.code-lines/v1')), 'neutral');
   assert.deepEqual([0, 2, 5].map(value => bandOf(todo, value, 5)), [0, 2, 4]);
   assert.equal(bandOf(todo, 0, 0), 0);
   assert.equal(bandLabels(todo), null);
-  const complexity = spec('repometry.cyclomatic-babel/v1');
+  const complexity = spec('repometry.cyclomatic-complexity/v1');
   assert.deepEqual([1, 5, 6, 20, 51].map(value => bandOf(complexity, value, 51)), [0, 0, 1, 2, 4]);
   assert.deepEqual(bandLabels(complexity), ['≤5', '6–10', '11–20', '21–50', '51+']);
 });

@@ -1,5 +1,6 @@
 import type { MetricDescriptor, PluginConfigSchema, RuleDescriptor } from '../engine/plugin.js';
 import type { InventoryFile } from './source.js';
+import type { LanguageDisplay } from './language.js';
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
@@ -29,5 +30,6 @@ export interface PluginData {
   readonly rules: readonly { readonly plugin: string; readonly rules: readonly RuleDescriptor[] }[];
   readonly products: Readonly<Record<string, readonly PersistedProduct[]>>;
   readonly contracts?: Readonly<Record<string, PluginConfigSchema>>;
-  readonly inventory?: readonly (InventoryFile & { readonly language: string; readonly analysed: boolean })[];
+  readonly languages?: readonly LanguageDisplay[];
+  readonly inventory?: readonly (InventoryFile & { readonly language: string; readonly analysed: boolean; readonly provider?: string })[];
 }

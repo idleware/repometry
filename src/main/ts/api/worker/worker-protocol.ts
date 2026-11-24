@@ -2,7 +2,7 @@ import { isRecord } from '../../core/engine/plugin.js';
 import type { AnalysisInput } from '../../core/usecases/inspect.js';
 import { validSubjectId } from '../../report/json/validation/report.js';
 import { exclusionMatcher, normalizeExclusions, sourceExclusionMatcher } from '../../core/profile/exclusions.js';
-import { comparePaths, isExcludedDirectory, isSourcePath, workingSnapshot } from '../../core/model/snapshot.js';
+import { comparePaths, isExcludedDirectory, workingSnapshot } from '../../core/model/snapshot.js';
 import type { SourceFile, Subject } from '../../core/model/snapshot.js';
 import { isClaimedText } from '../../core/model/source.js';
 import type { InventoryFile } from '../../core/model/source.js';
@@ -19,10 +19,10 @@ export function workerToken(value = process.env.REPOMETRY_WORKER_TOKEN): string 
   return value;
 }
 
-export function encodeWorkerInput(input: AnalysisInput): string {
+export function encodeWorkerInput(input: AnalysisInput, isSource: (path: string) => boolean): string {
   const { subject, files, inventory, generatedExcluded, oversizedClaims } = input.snapshot;
   const excludedPaths = input.excludedPaths ?? [];
-  const hasClaims = oversizedClaims?.length || files.some(file => !isSourcePath(file.path));
+  const hasClaims = oversizedClaims?.length || files.some(file => !isSource(file.path));
   const profile = hasClaims ? { schema: schemaV3, excludedPaths, oversizedClaims: oversizedClaims ?? [] }
     : excludedPaths.length === 0 ? { schema: schemaV1 } : { schema: schemaV2, excludedPaths };
   return JSON.stringify({ ...profile, subject, excludedOutput: input.excludedOutput, coverage: input.coverage ?? null,
@@ -30,7 +30,7 @@ export function encodeWorkerInput(input: AnalysisInput): string {
     ...(inventory === undefined ? {} : { inventory }), ...(generatedExcluded?.length ? { generatedExcluded } : {}) });
 }
 
-export function decodeWorkerInput(value: unknown): AnalysisInput {
+export function decodeWorkerInput(value: unknown, isSource: (path: string) => boolean): AnalysisInput {
   if (!isRecord(value) || (value.schema !== schemaV1 && value.schema !== schemaV2 && value.schema !== schemaV3)
     || !isSubject(value.subject) || !Array.isArray(value.files)) {
     throw new Error('Invalid worker input envelope');
@@ -50,7 +50,7 @@ export function decodeWorkerInput(value: unknown): AnalysisInput {
     if (paths.has(item.path)) throw new Error('Duplicate worker source path');
     const bytes = Buffer.from(item.base64, 'base64');
     if (bytes.toString('base64') !== item.base64) throw new Error('Invalid worker source encoding');
-    if (!isSourcePath(item.path) && (value.schema !== schemaV3 || !isClaimedText(bytes) || excludedParent(item.path))) {
+    if (!isSource(item.path) && (value.schema !== schemaV3 || !isClaimedText(bytes) || excludedParent(item.path))) {
       throw new Error('Invalid worker claimed file');
     }
     paths.add(item.path);
@@ -61,7 +61,7 @@ export function decodeWorkerInput(value: unknown): AnalysisInput {
   }
   files.sort((a, b) => comparePaths(a.path, b.path));
   const inventory = readInventory(value.inventory, excludes);
-  const generatedExcluded = readGeneratedExclusions(value.generatedExcluded, paths, inventory);
+  const generatedExcluded = readGeneratedExclusions(value.generatedExcluded, paths, isSource, inventory);
   const oversizedClaims = value.schema === schemaV3 ? readOversizedClaims(value.oversizedClaims, paths, excludes) : [];
   return { snapshot: { subject, files, ...(inventory === undefined ? {} : { inventory }), generatedExcluded,
     ...(oversizedClaims.length ? { oversizedClaims } : {}) },
@@ -84,13 +84,14 @@ function excludedParent(path: string): boolean {
   return path.split('/').slice(0, -1).some(isExcludedDirectory);
 }
 
-function readGeneratedExclusions(value: unknown, sourcePaths: ReadonlySet<string>, inventory?: readonly InventoryFile[]) {
+function readGeneratedExclusions(value: unknown, sourcePaths: ReadonlySet<string>, isSource: (path: string) => boolean,
+  inventory?: readonly InventoryFile[]) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error('Invalid worker generated exclusions');
   const listed = new Set([...sourcePaths, ...(inventory ?? []).map(file => file.path)]);
   const excluded = new Set<string>();
   for (const path of value as unknown[]) {
-    if (typeof path !== 'string' || !safePath(path) || !isSourcePath(path) || listed.has(path) || excluded.has(path)) {
+    if (typeof path !== 'string' || !safePath(path) || !isSource(path) || listed.has(path) || excluded.has(path)) {
       throw new Error('Invalid worker generated exclusion');
     }
     excluded.add(path);
