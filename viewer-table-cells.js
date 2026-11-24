@@ -35,7 +35,7 @@ function entryIcon(row) {
     const icon = element('span', icons[row.kind]);
     icon.setAttribute('aria-hidden', 'true');
     if (row.kind === 'file')
-        icon.style.color = isLockfile(row.entry.path) ? 'var(--lockfile)' : languageColor(languageOf(row.entry.path));
+        icon.style.color = isLockfile(row.entry.path) ? 'var(--lockfile)' : languageColor(languageOf(row.entry));
     return icon;
 }
 function cell(entry, column) {

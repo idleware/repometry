@@ -149,7 +149,7 @@ function anyOf(clauses, kind, test) {
  */
 export function matches(entry, clauses, facts, text = '') {
     const path = entry.path.toLowerCase();
-    const language = languageOf(entry.path).toLowerCase();
+    const language = languageOf(entry).toLowerCase();
     const components = (facts.components.get(entry.path) ?? []).map(name => name.toLowerCase());
     const widened = [
         path.includes(text.toLowerCase()),

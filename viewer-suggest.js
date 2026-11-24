@@ -25,7 +25,7 @@ function tallied(names) {
     return counts;
 }
 function languageSuggestions(files, typing) {
-    const counts = [...tallied(files.map(file => languageOf(file.path)))].sort((a, b) => b[1] - a[1]);
+    const counts = [...tallied(files.map(file => languageOf(file)))].sort((a, b) => b[1] - a[1]);
     return counts.flatMap(([language, total]) => {
         const clause = { kind: 'lang', value: language };
         if (typing.taken(clause) || !offered(typing, language, 'lang'))
