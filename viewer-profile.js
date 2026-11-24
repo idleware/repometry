@@ -1,5 +1,8 @@
-import { copyIcon, multiChoice, navigationButtons, searchField, splitter } from './viewer-files.js';
-import { count, duration, securityGrades, securityRisks } from './viewer-metrics.js';
+import { count, element } from './viewer-dom.js';
+import { splitter } from './viewer-layout.js';
+import { duration } from './viewer-metrics.js';
+import { badges } from './viewer-profile-badges.js';
+import { pagedTable } from './viewer-profile-table.js';
 /** What each structural rule measures, and in what unit its limit and its cost are counted. */
 const ruleNames = {
     'function-complexity': ['Cognitive complexity of a function', 'point'],
@@ -25,7 +28,7 @@ export function renderProfile(container, data) {
         section.append(chips(scanners.map(({ name, version }) => version ? `${name} ${version}` : name)));
         main.append(section);
     }
-    split.append(main, splitter(split), badges(data));
+    split.append(main, splitter(split), badges(data.latest, data.details));
     view.append(split);
     container.replaceChildren(view);
 }
@@ -113,113 +116,6 @@ function exclusions(profile, context) {
     }));
     return section;
 }
-const tableSize = 50;
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-/**
- * A list that may run to tens of thousands of rows, as a profile's rules and patterns do in a monorepo: searched,
- * narrowed by one facet, sorted by any column, and paged, with the count beside the page buttons as in Metrics.
- * Only the page in view is built.
- */
-function pagedTable(spec) {
-    const box = element('div', 'profile-table');
-    if (!spec.rows.length) {
-        box.append(element('p', 'detail', spec.empty));
-        return box;
-    }
-    const haystacks = spec.rows.map(row => spec.search(row).toLowerCase());
-    let page = 0;
-    let sortBy = -1;
-    let ascending = true;
-    const reset = () => { page = 0; render(); };
-    const tools = element('div', 'fx-tools profile-table-tools');
-    const search = searchField(`Search ${spec.noun[1]}`, `Search ${spec.noun[1]}`);
-    search.label.classList.add('fx-field-bare');
-    search.input.addEventListener('input', reset);
-    const facet = spec.facet && multiChoice(spec.facet.text, spec.facet.all, spec.facet.plural, [...spec.rows.reduce((counts, row) => {
-            const key = spec.facet.key(row);
-            return counts.set(key, (counts.get(key) ?? 0) + 1);
-        }, new Map())].sort((a, b) => collator.compare(a[0], b[0])).map(([key, total]) => [key, key, total]), reset);
-    // A short list needs no controls: it is read at a glance.
-    if (spec.controls || spec.rows.length > 10)
-        tools.append(search.label);
-    if (facet && !facet.element.hidden)
-        tools.append(facet.element);
-    const table = element('table', 'fx-table profile-list');
-    table.setAttribute('aria-label', spec.label);
-    const head = element('tr');
-    const headers = spec.columns.map((column, index) => {
-        const cell = element('th', column.numeric ? 'numeric' : '');
-        cell.scope = 'col';
-        const button = element('button', 'fx-sort', column.label);
-        button.type = 'button';
-        button.addEventListener('click', () => {
-            ascending = sortBy === index ? !ascending : !column.numeric;
-            sortBy = index;
-            reset();
-        });
-        cell.append(button);
-        head.append(cell);
-        return cell;
-    });
-    const thead = element('thead');
-    thead.append(head);
-    const body = element('tbody');
-    table.append(thead, body);
-    const frame = element('div', 'table-scroll fx-table-scroll');
-    frame.append(table);
-    const pager = element('div', 'fx-pager');
-    const result = element('p', 'fx-note fx-results');
-    result.setAttribute('aria-live', 'polite');
-    const buttons = navigationButtons(`${spec.label} pages`, () => { page -= 1; render(); }, () => { page += 1; render(); });
-    pager.append(result, buttons.section);
-    if (tools.childElementCount)
-        box.append(tools);
-    box.append(frame, pager);
-    function render() {
-        const words = search.input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-        const chosen = facet?.values;
-        let shown = spec.rows.flatMap((row, index) => (!chosen?.size || chosen.has(spec.facet.key(row)))
-            && words.every(word => haystacks[index].includes(word)) ? [row] : []);
-        if (sortBy >= 0) {
-            const key = spec.columns[sortBy].sort;
-            const direction = ascending ? 1 : -1;
-            shown = shown.sort((a, b) => {
-                const left = key(a);
-                const right = key(b);
-                return direction * (typeof left === 'number' && typeof right === 'number' ? left - right : collator.compare(String(left), String(right)));
-            });
-        }
-        for (const [index, cell] of headers.entries()) {
-            if (index === sortBy)
-                cell.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
-            else
-                cell.removeAttribute('aria-sort');
-        }
-        const pages = Math.max(1, Math.ceil(shown.length / tableSize));
-        page = Math.min(page, pages - 1);
-        const visible = shown.slice(page * tableSize, (page + 1) * tableSize);
-        body.replaceChildren(...visible.map(row => {
-            const line = element('tr');
-            for (const column of spec.columns) {
-                const cell = element('td', column.numeric ? 'numeric' : '');
-                cell.append(column.cell(row));
-                line.append(cell);
-            }
-            return line;
-        }));
-        frame.hidden = shown.length === 0;
-        const [one, many] = spec.noun;
-        const filtered = shown.length !== spec.rows.length;
-        result.textContent = shown.length === 0 ? `No ${many} match.`
-            : shown.length > tableSize ? `${count(page * tableSize + 1)}–${count(page * tableSize + visible.length)} of ${count(shown.length)} ${many}`
-                : filtered ? `${count(shown.length)} of ${count(spec.rows.length)} ${many}`
-                    : `${count(shown.length)} ${shown.length === 1 ? one : many}`;
-        buttons.section.hidden = shown.length <= tableSize;
-        buttons.update(page, pages);
-    }
-    render();
-    return box;
-}
 /** Until the details arrive only the exclusions are known; the summary does not carry the profile itself. */
 function fallback(data) {
     const section = block('Files');
@@ -233,136 +129,6 @@ function fallback(data) {
     if (data.details)
         section.append(element('p', 'detail', 'This inspection did not record its profile.'));
     return section;
-}
-const formatKey = 'repometry.badge-format';
-/** The badges as a README shows them: each with the scale it grades by, and the snippet that embeds it. */
-function badges(data) {
-    const panel = element('aside', 'fx-aside profile-aside');
-    panel.setAttribute('aria-label', 'Badges');
-    const heading = element('div', 'fx-aside-heading');
-    heading.append(element('h2', '', 'Badges'));
-    let format = 'markdown';
-    try {
-        if (localStorage.getItem(formatKey) === 'html')
-            format = 'html';
-    }
-    catch {
-        // Blocked storage only forgets the choice.
-    }
-    const snippets = [];
-    const toggle = element('div', 'fx-segmented profile-format');
-    toggle.setAttribute('role', 'group');
-    toggle.setAttribute('aria-label', 'Snippet format');
-    for (const [value, label] of [['markdown', 'Markdown'], ['html', 'HTML']]) {
-        const button = element('button', '', label);
-        button.type = 'button';
-        button.setAttribute('aria-pressed', String(value === format));
-        button.addEventListener('click', () => {
-            format = value;
-            for (const other of toggle.querySelectorAll('button'))
-                other.setAttribute('aria-pressed', String(other === button));
-            try {
-                localStorage.setItem(formatKey, value);
-            }
-            catch {
-                // As above.
-            }
-            for (const update of snippets)
-                update();
-        });
-        toggle.append(button);
-    }
-    heading.append(toggle);
-    panel.append(heading);
-    const { report, quality, context } = data.latest;
-    const lines = report.lineCoverage;
-    const coverage = lines && lines.total > 0 ? lines.covered / lines.total : null;
-    const ratio = quality?.maintainability?.debtRatio ?? null;
-    const security = context?.security;
-    const worst = !security ? null : security.critical ? 4 : security.high ? 3 : security.medium ? 2 : security.low || security.unknown ? 1 : 0;
-    const areas = [
-        ['maintainability', 'Maintainability', [['A', '<5%'], ['B', '<10%'], ['C', '<20%'], ['D', '<50%'], ['F', '50%+']],
-            ratio === null ? null : [.05, .1, .2, .5, Infinity].findIndex(limit => ratio < limit), true],
-        ['coverage', 'Coverage', [['A', '90%+'], ['B', '80%+'], ['C', '70%+'], ['D', '60%+'], ['F', '<60%']],
-            coverage === null ? null : [.9, .8, .7, .6, -Infinity].findIndex(limit => coverage >= limit), true],
-        ['security', 'Security', securityGrades.map((grade, index) => [grade, securityRisks[index]]), worst, security !== undefined],
-    ];
-    for (const [name, label, steps, current, published] of areas) {
-        const section = element('section', 'fx-aside-section profile-badge-area');
-        section.append(element('h3', '', label));
-        if (published) {
-            const image = element('img', 'profile-badge');
-            image.src = `./${name}.svg`;
-            image.alt = `${label} badge`;
-            image.height = 22;
-            section.append(image);
-        }
-        section.append(scale(steps, current));
-        if (published) {
-            const url = new URL(`./${name}.svg`, location.href).href;
-            const home = new URL('./', location.href).href;
-            const box = element('div', 'profile-snippet');
-            const text = element('code');
-            box.append(text, copyButton(`Copy the ${label.toLowerCase()} badge snippet`, () => text.textContent ?? ''));
-            const update = () => {
-                text.textContent = format === 'markdown' ? `[![${label}](${url})](${home})`
-                    : `<a href="${home}"><img src="${url}" alt="${label}"></a>`;
-            };
-            update();
-            snippets.push(update);
-            section.append(box);
-        }
-        else
-            section.append(element('p', 'fx-note', 'No scanner report, so no badge.'));
-        panel.append(section);
-    }
-    // Footnotes close the sidebar, under the last badge: how the maintainability grade's ratio is made, and what badges show.
-    const model = data.details?.profile?.debtModel;
-    panel.append(element('p', 'fx-note profile-badge-note', model
-        ? `Debt ratio: remediation time over the time to write the code, by ${model.name === 'basic-cocomo-organic' ? 'basic COCOMO (organic)' : model.name}: ${model.scale} × KLOC^${model.exponent} person-months of ${count(Math.round(model.minutesPerPersonMonth / 60))} hours.`
-        : 'Debt ratio: remediation time over the estimated time to write the code.'));
-    panel.append(element('p', 'fx-note profile-footnote', 'Badges show the latest inspection; their links work once the report is hosted.'));
-    return panel;
-}
-/** The scale as one strip in the grade colours, the latest inspection's step at full strength. */
-function scale(steps, current) {
-    const box = element('div', 'profile-scale');
-    const strip = element('div', 'profile-scale-strip');
-    const words = element('div', 'profile-scale-words');
-    for (const [index, [grade, range, word]] of steps.entries()) {
-        const segment = element('span', 'profile-scale-grade', word ?? grade);
-        segment.dataset.grade = grade;
-        if (index === current)
-            segment.setAttribute('aria-current', 'true');
-        strip.append(segment);
-        words.append(element('span', '', range));
-    }
-    box.append(strip, words);
-    return box;
-}
-function copyButton(label, text) {
-    const button = element('button', 'fx-copy profile-copy');
-    button.type = 'button';
-    button.title = label;
-    button.setAttribute('aria-label', label);
-    button.append(copyIcon());
-    let reset;
-    button.addEventListener('click', async () => {
-        clearTimeout(reset);
-        try {
-            await navigator.clipboard.writeText(text());
-            button.classList.add('fx-copied');
-            reset = setTimeout(() => button.classList.remove('fx-copied'), 1500);
-        }
-        catch {
-            // Without clipboard access the snippet is selected, ready for the copy shortcut.
-            const range = document.createRange();
-            range.selectNodeContents(button.previousElementSibling);
-            getSelection()?.removeAllRanges();
-            getSelection()?.addRange(range);
-        }
-    });
-    return button;
 }
 function order(rule) {
     const index = ruleOrder.indexOf(rule);
@@ -390,12 +156,4 @@ function none(text = 'None') {
 }
 function code(text) {
     return element('code', '', text);
-}
-function element(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className)
-        node.className = className;
-    if (text !== undefined)
-        node.textContent = text;
-    return node;
 }

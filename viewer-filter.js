@@ -1,15 +1,19 @@
+import { isIgnored, isLockfile, languageOf } from './viewer-languages.js';
 import { labelOf } from './viewer-metrics.js';
+function byKind(table, clause) {
+    return table[clause.kind](clause);
+}
+function ratio(part, whole) {
+    return part !== undefined && whole !== undefined && whole > 0 ? part / whole : null;
+}
 const measures = {
     complexity: { label: labelOf('complexity'), read: entry => entry.complexity?.maximum ?? null },
     cognitive: { label: labelOf('cognitive'), read: entry => entry.quality?.cognitiveComplexity ?? null },
     lines: { label: labelOf('code-lines'), read: entry => entry.quality?.codeLines ?? entry.lines },
     functions: { label: 'Functions', read: entry => entry.functions },
-    coverage: { label: labelOf('coverage'), percent: true,
-        read: entry => entry.lineCoverage && entry.lineCoverage.total > 0 ? entry.lineCoverage.covered / entry.lineCoverage.total : null },
-    duplication: { label: 'Duplication', percent: true, read: entry => {
-            const duplication = entry.quality?.duplication;
-            return duplication && duplication.codeLines > 0 ? duplication.duplicatedLines / duplication.codeLines : null;
-        } },
+    coverage: { label: labelOf('coverage'), percent: true, read: entry => ratio(entry.lineCoverage?.covered, entry.lineCoverage?.total) },
+    duplication: { label: 'Duplication', percent: true,
+        read: entry => ratio(entry.quality?.duplication?.duplicatedLines, entry.quality?.duplication?.codeLines) },
     remediation: { label: labelOf('effort'), minutes: true, read: entry => entry.quality?.maintainability?.effortMinutes ?? null },
     changes: { label: 'Git changes', read: entry => entry.quality?.churn ?? null },
 };
@@ -18,102 +22,12 @@ let pluginMeasures = new Map();
 export function usePluginMeasures(entries) {
     pluginMeasures = new Map(entries);
 }
-function measureOf(name) {
+/** Other plugins' metrics the query can name, by key. */
+export function pluginMeasureList() {
+    return [...pluginMeasures];
+}
+export function measureOf(name) {
     return name in measures ? measures[name] : pluginMeasures.get(name);
-}
-/**
- * Dependency lockfiles, by exact file name. They are generated, often the largest files in a repository, and no
- * plugin reads them: the language bar and the Metrics list give them a category of their own beside the ignored files.
- */
-export const lockfileNames = new Set([
-    'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', 'deno.lock',
-    'Cargo.lock', 'Gemfile.lock', 'composer.lock', 'poetry.lock', 'Pipfile.lock', 'uv.lock', 'go.sum', 'flake.lock',
-    'mix.lock', 'pubspec.lock', 'packages.lock.json', 'gradle.lockfile',
-]);
-/** Whether a path names a lockfile: its file name, at any depth, exactly as the tools write it. */
-export function isLockfile(path) {
-    return lockfileNames.has(path.slice(path.lastIndexOf('/') + 1));
-}
-/** Whether no plugin read a file and it is not a lockfile: what the interface calls ignored. */
-export function isIgnored(entry) {
-    return entry.analysed === false && !isLockfile(entry.path);
-}
-/** The language bar's names for the two categories that are not languages. */
-export const lockfilesLabel = 'Lockfiles';
-export const ignoredLabel = 'Ignored';
-/** Whether every file carries its size: inspections made before sizes were recorded carry none. */
-export function sized(files) {
-    return files.length > 0 && files.every(entry => entry.bytes !== undefined);
-}
-/**
- * What the language bar weighs, largest language first, then lockfiles, then the ignored files. Size in bytes when
- * every file has it: one measure for code, lockfiles and ignored files alike, untouched by formatting. Without sizes,
- * physical lines where any file is only counted (the one line measure all files have), otherwise code lines.
- */
-export function languageShares(files) {
-    const measure = sized(files) ? 'bytes'
-        : files.some(entry => entry.analysed === false || isLockfile(entry.path)) ? 'lines' : 'code-lines';
-    const weightOf = (entry) => (measure === 'bytes' ? entry.bytes
-        : measure === 'lines' ? entry.lines : entry.quality?.codeLines ?? entry.lines) ?? 0;
-    const weights = new Map();
-    let lockfiles = 0;
-    let ignored = 0;
-    for (const entry of files) {
-        if (isLockfile(entry.path))
-            lockfiles += weightOf(entry);
-        else if (entry.analysed === false)
-            ignored += weightOf(entry);
-        else {
-            const language = languageOf(entry.path);
-            weights.set(language, (weights.get(language) ?? 0) + weightOf(entry));
-        }
-    }
-    const shares = [...weights].filter(([, weight]) => weight > 0).sort((a, b) => b[1] - a[1]);
-    if (lockfiles > 0)
-        shares.push([lockfilesLabel, lockfiles]);
-    if (ignored > 0)
-        shares.push([ignoredLabel, ignored]);
-    return { measure, shares };
-}
-/** Ready-made conditions offered before anything is typed: the questions people ask of a codebase most. */
-const presets = [
-    { text: 'complexity>10', label: 'Complex functions' },
-    { text: 'coverage<80%', label: 'Under 80% covered' },
-    { text: 'duplication>0', label: 'Has duplication' },
-    { text: 'remediation>0', label: 'Has technical debt' },
-    { text: 'changes>0', label: 'Changed recently' },
-    { text: 'has:findings', label: 'Has findings' },
-];
-const languages = {
-    ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
-    js: 'JavaScript', jsx: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
-    py: 'Python', go: 'Go', rs: 'Rust', java: 'Java', kt: 'Kotlin', kts: 'Kotlin', rb: 'Ruby', php: 'PHP', cs: 'C#',
-    c: 'C', h: 'C', cc: 'C++', cpp: 'C++', cxx: 'C++', hpp: 'C++', hh: 'C++', swift: 'Swift', scala: 'Scala',
-    vue: 'Vue', svelte: 'Svelte', sh: 'Shell', bash: 'Shell', css: 'CSS', scss: 'SCSS', less: 'Less', html: 'HTML',
-    yaml: 'YAML', yml: 'YAML', json: 'JSON', dockerfile: 'Dockerfile',
-};
-/** Files a name alone types: Dockerfile and Containerfile, with or without a suffix such as Dockerfile.dev. */
-const namedLanguages = [[/^(?:dockerfile|containerfile)(?:\..+)?$/i, 'Dockerfile']];
-/** Language colours follow the conventions people already know from code hosts. */
-const languageColors = {
-    TypeScript: '#3178c6', JavaScript: '#f1e05a', Python: '#3572a5', Go: '#00add8', Rust: '#dea584', Java: '#b07219',
-    Kotlin: '#a97bff', Ruby: '#701516', PHP: '#4f5d95', 'C#': '#178600', C: '#555555', 'C++': '#f34b7d', Swift: '#f05138',
-    Scala: '#c22d40', Vue: '#41b883', Svelte: '#ff3e00', Shell: '#89e051', CSS: '#663399', SCSS: '#c6538c', Less: '#1d365d',
-    HTML: '#e34c26',
-    // Configuration reads beside the code, so it takes quieter tones than the code hosts give it.
-    YAML: '#c47d84', JSON: '#9b86b5', Dockerfile: '#4f9a94',
-};
-export function languageOf(path) {
-    const name = path.slice(path.lastIndexOf('/') + 1);
-    const named = namedLanguages.find(([pattern]) => pattern.test(name));
-    if (named)
-        return named[1];
-    const dot = name.lastIndexOf('.');
-    const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
-    return languages[extension] ?? (extension ? extension.toUpperCase() : 'Other');
-}
-export function languageColor(language) {
-    return languageColors[language] ?? 'var(--neutral-2)';
 }
 /** Splits the query into clauses; a word that names nothing known becomes a path fragment. */
 export function parseQuery(text) {
@@ -125,376 +39,123 @@ export function parseQuery(text) {
     }
     return clauses;
 }
+/** A condition's number in the measure's own unit: a ratio for percentages (80 and 80% alike), minutes for hours. */
+function conditionValue(spec, number, unit) {
+    if (spec.percent)
+        return unit === '%' || number > 1 ? number / 100 : number;
+    return unit === 'h' ? number * 60 : number;
+}
 export function parseWord(word) {
     const keyedWord = /^(\w+):(.+)$/.exec(word);
     if (keyedWord)
         return keyed(keyedWord[1], keyedWord[2]);
     const condition = /^([\w.-]+)(>=|<=|>|<|=)(\d+(?:\.\d+)?)(%|h|min)?$/i.exec(word);
-    if (condition) {
-        const measure = condition[1].toLowerCase();
-        const spec = measureOf(measure);
-        if (!spec)
-            return null;
-        const number = Number(condition[3]);
-        const unit = condition[4]?.toLowerCase();
-        const value = spec.percent ? (unit === '%' || number > 1 ? number / 100 : number) : unit === 'h' ? number * 60 : number;
-        return { kind: 'measure', measure, operator: condition[2], value };
-    }
-    return word ? { kind: 'path', value: word } : null;
+    if (!condition)
+        return word ? { kind: 'path', value: word } : null;
+    const measure = condition[1].toLowerCase();
+    const spec = measureOf(measure);
+    if (!spec)
+        return null;
+    return { kind: 'measure', measure, operator: condition[2], value: conditionValue(spec, Number(condition[3]), condition[4]?.toLowerCase()) };
 }
+const yesNo = (value) => value === 'yes' || value === 'no';
+const flag = (kind, read = value => value) => (value) => yesNo(value) ? { kind, value: read(value) } : null;
+const named = (kind) => (value) => ({ kind, value });
+/** The keys a clause is written with. The interface calls the files no plugin read "ignored"; `analysed:` stays a silent alias. */
+const keys = new Map([
+    ['lang', named('lang')], ['language', named('lang')],
+    ['component', named('component')],
+    ['path', named('path')], ['in', named('path')],
+    ['has', (value) => value === 'findings' || value === 'diagnostics' ? { kind: 'has', value } : null],
+    ['analysed', flag('analysed')], ['analyzed', flag('analysed')],
+    ['ignored', flag('analysed', value => value === 'yes' ? 'no' : 'yes')],
+    ['lockfile', flag('lockfile')], ['lockfiles', flag('lockfile')],
+]);
 function keyed(key, value) {
-    switch (key.toLowerCase()) {
-        case 'lang':
-        case 'language': return { kind: 'lang', value };
-        case 'component': return { kind: 'component', value };
-        case 'path':
-        case 'in': return { kind: 'path', value };
-        case 'has': return value === 'findings' || value === 'diagnostics' ? { kind: 'has', value } : null;
-        // The interface and the query call the files no plugin read "ignored"; `analysed:` stays as a silent alias.
-        case 'analysed':
-        case 'analyzed': return value === 'yes' || value === 'no' ? { kind: 'analysed', value } : null;
-        case 'ignored': return value === 'yes' || value === 'no' ? { kind: 'analysed', value: value === 'yes' ? 'no' : 'yes' } : null;
-        case 'lockfile':
-        case 'lockfiles': return value === 'yes' || value === 'no' ? { kind: 'lockfile', value } : null;
-        default: return null;
-    }
+    return keys.get(key.toLowerCase())?.(value) ?? null;
 }
 export function formatQuery(clauses) {
     return clauses.map(clauseText).join(' ');
 }
-export function clauseText(clause) {
-    const quoted = (value) => /\s|"/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
-    switch (clause.kind) {
-        case 'lang': return `lang:${quoted(clause.value)}`;
-        case 'component': return `component:${quoted(clause.value)}`;
-        case 'path': return /^\w+:|[<>=]/.test(clause.value) || /\s/.test(clause.value) ? `path:${quoted(clause.value)}` : clause.value;
-        case 'has': return `has:${clause.value}`;
-        case 'analysed': return `ignored:${clause.value === 'no' ? 'yes' : 'no'}`;
-        case 'lockfile': return `lockfile:${clause.value}`;
-        case 'measure': {
-            const percent = measureOf(clause.measure)?.percent;
-            const value = percent ? `${Math.round(clause.value * 1000) / 10}%` : String(clause.value);
-            return `${clause.measure}${clause.operator}${value}`;
-        }
-    }
+const quoted = (value) => /\s|"/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
+/** A measure's bound as written: percentages as percentages, everything else as the number. */
+function boundText(clause) {
+    return measureOf(clause.measure)?.percent ? `${Math.round(clause.value * 1000) / 10}%` : String(clause.value);
 }
+/** A path that reads as anything else is written out as one. */
+function pathText(value) {
+    return /^\w+:|[<>=]/.test(value) || /\s/.test(value) ? `path:${quoted(value)}` : value;
+}
+const clauseTexts = {
+    lang: clause => `lang:${quoted(clause.value)}`,
+    component: clause => `component:${quoted(clause.value)}`,
+    path: clause => pathText(clause.value),
+    has: clause => `has:${clause.value}`,
+    analysed: clause => `ignored:${clause.value === 'no' ? 'yes' : 'no'}`,
+    lockfile: clause => `lockfile:${clause.value}`,
+    measure: clause => `${clause.measure}${clause.operator}${boundText(clause)}`,
+};
+export function clauseText(clause) {
+    return byKind(clauseTexts, clause);
+}
+const operatorSigns = { '>': '>', '>=': '≥', '<': '<', '<=': '≤', '=': '=' };
+const yesNoWords = { yes: 'Yes', no: 'No' };
+function measureLabel(clause) {
+    const { label, percent, minutes } = measureOf(clause.measure) ?? { label: clause.measure };
+    const bound = percent ? `${Math.round(clause.value * 1000) / 10}%` : minutes ? `${clause.value} min` : String(clause.value);
+    return { key: label, value: `${operatorSigns[clause.operator]} ${bound}` };
+}
+const clauseLabels = {
+    lang: clause => ({ key: 'Language', value: clause.value }),
+    component: clause => ({ key: 'Component', value: clause.value }),
+    path: clause => ({ key: 'Path', value: clause.value }),
+    has: clause => ({ key: 'Has', value: clause.value }),
+    analysed: clause => ({ key: 'Ignored', value: clause.value === 'no' ? 'Yes' : 'No' }),
+    lockfile: clause => ({ key: 'Lockfile', value: yesNoWords[clause.value] }),
+    measure: measureLabel,
+};
 /** The chip's words: what it selects, in the interface's language rather than the query's. */
 export function clauseLabel(clause) {
-    switch (clause.kind) {
-        case 'lang': return { key: 'Language', value: clause.value };
-        case 'component': return { key: 'Component', value: clause.value };
-        case 'path': return { key: 'Path', value: clause.value };
-        case 'has': return { key: 'Has', value: clause.value };
-        case 'analysed': return { key: 'Ignored', value: clause.value === 'no' ? 'Yes' : 'No' };
-        case 'lockfile': return { key: 'Lockfile', value: clause.value === 'yes' ? 'Yes' : 'No' };
-        case 'measure': {
-            const { label, percent, minutes } = measureOf(clause.measure) ?? { label: clause.measure };
-            const value = percent ? `${Math.round(clause.value * 1000) / 10}%` : minutes ? `${clause.value} min` : String(clause.value);
-            return { key: label, value: `${clause.operator === '>=' ? '≥' : clause.operator === '<=' ? '≤' : clause.operator} ${value}` };
-        }
-    }
+    return byKind(clauseLabels, clause);
 }
 export function sameClause(a, b) {
     return clauseText(a) === clauseText(b);
+}
+const comparisons = {
+    '>': (value, bound) => value > bound,
+    '>=': (value, bound) => value >= bound,
+    '<': (value, bound) => value < bound,
+    '<=': (value, bound) => value <= bound,
+    '=': (value, bound) => value === bound,
+};
+const conditions = {
+    has: (clause, entry, facts) => clause.value === 'findings' ? (facts.findings.get(entry.path) ?? 0) > 0 : entry.diagnosticCount > 0,
+    analysed: (clause, entry) => isIgnored(entry) === (clause.value === 'no'),
+    lockfile: (clause, entry) => isLockfile(entry.path) === (clause.value === 'yes'),
+    measure: (clause, entry) => {
+        const { measure, operator, value: bound } = clause;
+        const value = measureOf(measure)?.read(entry) ?? null;
+        return value !== null && comparisons[operator](value, bound);
+    },
+};
+/** Whether the file passes the chips of one kind: any of them, or no chip of that kind at all. */
+function anyOf(clauses, kind, test) {
+    const values = clauses.flatMap(clause => clause.kind === kind ? [clause.value.toLowerCase()] : []);
+    return values.length === 0 || values.some(test);
 }
 /**
  * Whether a file passes the query. Chips of one kind widen the selection (TypeScript or JavaScript), chips of
  * different kinds narrow it (TypeScript in the core component), and every condition must hold.
  */
 export function matches(entry, clauses, facts, text = '') {
-    const any = (kind, test) => {
-        const values = clauses.flatMap(clause => clause.kind === kind ? [clause.value] : []);
-        return values.length === 0 || values.some(test);
-    };
     const path = entry.path.toLowerCase();
-    if (text && !path.includes(text.toLowerCase()))
-        return false;
-    if (!any('lang', value => languageOf(entry.path).toLowerCase() === value.toLowerCase()))
-        return false;
-    if (!any('component', value => (facts.components.get(entry.path) ?? []).some(name => name.toLowerCase() === value.toLowerCase())))
-        return false;
-    if (!any('path', value => path.includes(value.toLowerCase())))
-        return false;
-    return clauses.every(clause => {
-        if (clause.kind === 'has')
-            return clause.value === 'findings' ? (facts.findings.get(entry.path) ?? 0) > 0 : entry.diagnosticCount > 0;
-        if (clause.kind === 'analysed')
-            return isIgnored(entry) === (clause.value === 'no');
-        if (clause.kind === 'lockfile')
-            return isLockfile(entry.path) === (clause.value === 'yes');
-        if (clause.kind !== 'measure')
-            return true;
-        const value = measureOf(clause.measure)?.read(entry) ?? null;
-        if (value === null)
-            return false;
-        switch (clause.operator) {
-            case '>': return value > clause.value;
-            case '>=': return value >= clause.value;
-            case '<': return value < clause.value;
-            case '<=': return value <= clause.value;
-            case '=': return value === clause.value;
-        }
-    });
-}
-/** What the field offers for the typed text: the facets of this codebase first, then conditions, then the path. */
-export function suggest(text, files, facts, chosen) {
-    const query = text.trim().toLowerCase();
-    const taken = (clause) => chosen.some(other => sameClause(other, clause));
-    const result = [];
-    const counts = new Map();
-    for (const file of files)
-        counts.set(languageOf(file.path), (counts.get(languageOf(file.path)) ?? 0) + 1);
-    for (const [language, total] of [...counts].sort((a, b) => b[1] - a[1])) {
-        const clause = { kind: 'lang', value: language };
-        if (!taken(clause) && (!query || language.toLowerCase().includes(query) || 'lang'.startsWith(query))) {
-            result.push({ group: 'Languages', label: language, detail: quantity(total), clause, color: languageColor(language) });
-        }
-    }
-    const members = new Map();
-    for (const names of facts.components.values())
-        for (const name of names)
-            members.set(name, (members.get(name) ?? 0) + 1);
-    for (const [name, total] of members) {
-        const clause = { kind: 'component', value: name };
-        if (!taken(clause) && (!query || name.toLowerCase().includes(query) || 'component'.startsWith(query))) {
-            result.push({ group: 'Components', label: name, detail: quantity(total), clause });
-        }
-    }
-    // Files only counted, never read by a plugin, are one condition away once the text names them.
-    const named = (words) => query.length >= 3
-        && words.some(phrase => phrase.startsWith(query) || (phrase.includes(' ') && phrase.includes(query)));
-    const unread = files.filter(isIgnored).length;
-    const notAnalysed = { kind: 'analysed', value: 'no' };
-    if (unread && !taken(notAnalysed) && named(['ignored files', 'ignored:yes', 'not analysed', 'analysed:no'])) {
-        result.push({ group: 'Conditions', label: 'Ignored files', detail: quantity(unread), clause: notAnalysed });
-    }
-    const lockfiles = files.filter(file => isLockfile(file.path)).length;
-    const lockfile = { kind: 'lockfile', value: 'yes' };
-    if (lockfiles && !taken(lockfile) && named(['lockfiles', 'lockfile:yes'])) {
-        result.push({ group: 'Conditions', label: lockfilesLabel, detail: quantity(lockfiles), clause: lockfile });
-    }
-    const typed = query ? parseWord(text.trim()) : null;
-    if (typed && (typed.kind === 'measure' || typed.kind === 'has' || typed.kind === 'analysed' || typed.kind === 'lockfile') && !taken(typed)) {
-        const { key, value } = clauseLabel(typed);
-        result.push({ group: 'Conditions', label: `${key} ${value}`, clause: typed });
-    }
-    else {
-        // Other plugins' metrics are offered once the typed text names them; the presets stay Repometry's own.
-        if (query)
-            for (const [key, { label }] of pluginMeasures) {
-                const clause = { kind: 'measure', measure: key, operator: '>', value: 0 };
-                if (!taken(clause) && (key.startsWith(query) || label.toLowerCase().includes(query))) {
-                    result.push({ group: 'Conditions', label: `${label} above zero`, detail: `${label} > 0`, clause });
-                }
-            }
-        for (const preset of presets) {
-            const clause = parseWord(preset.text);
-            const { key, value } = clauseLabel(clause);
-            if (!taken(clause) && (!query || preset.label.toLowerCase().includes(query) || preset.text.startsWith(query) || key.toLowerCase().includes(query))) {
-                result.push({ group: 'Conditions', label: preset.label, detail: `${key} ${value}`, clause });
-            }
-        }
-    }
-    if (query && !(typed && typed.kind !== 'path')) {
-        result.push({ group: 'Path', label: `Path contains “${text.trim()}”`, clause: { kind: 'path', value: text.trim() } });
-    }
-    return result;
-}
-function quantity(total) {
-    return `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`;
-}
-/**
- * The field: chips for the chosen clauses, then a text input; the list of suggestions hangs from it in one frame.
- * Backspace in an empty input takes the last chip back into text, so a chip can be edited, not just removed.
- */
-export function queryField(clauses, options) {
-    let chosen = [...clauses];
-    let active = 0;
-    let shown = [];
-    const root = element('div', 'qf');
-    const box = element('div', 'qf-box');
-    const chips = element('span', 'qf-chips');
-    const input = element('input', 'qf-input');
-    input.type = 'text';
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    input.setAttribute('role', 'combobox');
-    input.setAttribute('aria-label', 'Filter files');
-    input.setAttribute('aria-autocomplete', 'list');
-    input.setAttribute('aria-expanded', 'false');
-    const list = element('ul', 'qf-options');
-    list.id = `qf-options-${Math.random().toString(36).slice(2, 8)}`;
-    list.setAttribute('role', 'listbox');
-    input.setAttribute('aria-controls', list.id);
-    const popover = element('div', 'qf-popover');
-    popover.hidden = true;
-    const help = element('p', 'qf-help', 'Combine chips: same kind widens, different kinds narrow. Type complexity>10 or coverage<80% for a condition.');
-    popover.append(list, help);
-    box.append(chips, input);
-    root.append(box, popover);
-    function placeholder() {
-        input.placeholder = chosen.length ? 'Add a filter' : 'Filter by language, component, condition or path';
-    }
-    function renderChips() {
-        chips.replaceChildren(...chosen.map((clause, index) => {
-            const chip = element('span', `qf-chip qf-chip-${clause.kind}`);
-            const { key, value } = clauseLabel(clause);
-            if (clause.kind === 'lang') {
-                const dot = element('span', 'qf-dot');
-                dot.style.background = languageColor(clause.value);
-                chip.append(dot);
-            }
-            chip.append(element('span', 'qf-chip-key', key), element('span', 'qf-chip-value', value));
-            const remove = element('button', 'qf-remove');
-            remove.type = 'button';
-            remove.setAttribute('aria-label', `Remove ${key} ${value}`);
-            remove.addEventListener('click', () => {
-                chosen.splice(index, 1);
-                commit();
-                input.focus();
-            });
-            chip.append(remove);
-            return chip;
-        }));
-        placeholder();
-    }
-    function commit() {
-        renderChips();
-        options.change(chosen, input.value.trim());
-        if (!popover.hidden)
-            update();
-    }
-    function update() {
-        shown = options.suggestions(input.value);
-        active = Math.min(active, Math.max(0, shown.length - 1));
-        let group = '';
-        list.replaceChildren(...shown.flatMap((suggestion, index) => {
-            const items = [];
-            if (suggestion.group !== group) {
-                group = suggestion.group;
-                const heading = element('li', 'qf-group', group);
-                heading.setAttribute('role', 'presentation');
-                items.push(heading);
-            }
-            const item = element('li', 'qf-option');
-            item.id = `${list.id}-${index}`;
-            item.setAttribute('role', 'option');
-            if (suggestion.color) {
-                const dot = element('span', 'qf-dot');
-                dot.style.background = suggestion.color;
-                item.append(dot);
-            }
-            item.append(element('span', 'qf-option-label', suggestion.label));
-            if (suggestion.detail)
-                item.append(element('span', 'qf-option-detail', suggestion.detail));
-            item.addEventListener('mousedown', event => event.preventDefault());
-            item.addEventListener('click', () => choose(suggestion));
-            item.addEventListener('mousemove', () => { if (active !== index) {
-                active = index;
-                highlight();
-            } });
-            items.push(item);
-            return items;
-        }));
-        highlight();
-    }
-    function highlight() {
-        for (const item of list.querySelectorAll('.qf-option'))
-            item.classList.toggle('active', item.id === `${list.id}-${active}`);
-        const current = list.querySelector(`#${list.id}-${active}`);
-        if (current) {
-            input.setAttribute('aria-activedescendant', current.id);
-            current.scrollIntoView({ block: 'nearest' });
-        }
-        else
-            input.removeAttribute('aria-activedescendant');
-    }
-    function open() {
-        if (!popover.hidden)
-            return;
-        popover.hidden = false;
-        root.classList.add('open');
-        input.setAttribute('aria-expanded', 'true');
-        active = 0;
-        update();
-        document.addEventListener('pointerdown', outside, true);
-    }
-    function close() {
-        if (popover.hidden)
-            return;
-        popover.hidden = true;
-        root.classList.remove('open');
-        input.setAttribute('aria-expanded', 'false');
-        document.removeEventListener('pointerdown', outside, true);
-    }
-    function outside(event) {
-        if (!root.contains(event.target))
-            close();
-    }
-    function choose(suggestion) {
-        if (!chosen.some(clause => sameClause(clause, suggestion.clause)))
-            chosen.push(suggestion.clause);
-        input.value = '';
-        active = 0;
-        commit();
-    }
-    box.addEventListener('pointerdown', event => {
-        if (event.target === box || event.target === chips) {
-            event.preventDefault();
-            input.focus();
-        }
-    });
-    input.addEventListener('focus', open);
-    input.addEventListener('input', () => {
-        open();
-        active = 0;
-        update();
-        options.change(chosen, input.value.trim());
-    });
-    input.addEventListener('keydown', event => {
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            open();
-            if (shown.length)
-                active = (active + (event.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length;
-            highlight();
-        }
-        else if (event.key === 'Enter') {
-            event.preventDefault();
-            const typed = input.value.trim();
-            const suggestion = shown[active];
-            if (suggestion && !popover.hidden)
-                choose(suggestion);
-            else if (typed)
-                choose({ group: '', label: typed, clause: parseWord(typed) ?? { kind: 'path', value: typed } });
-        }
-        else if (event.key === 'Escape') {
-            if (!popover.hidden) {
-                event.preventDefault();
-                close();
-            }
-        }
-        else if (event.key === 'Backspace' && input.value === '' && chosen.length) {
-            event.preventDefault();
-            input.value = clauseText(chosen.pop());
-            commit();
-        }
-    });
-    renderChips();
-    return {
-        element: root,
-        text: () => input.value.trim(),
-        set(next) {
-            chosen = [...next];
-            commit();
-        },
-    };
-}
-function element(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className)
-        node.className = className;
-    if (text !== undefined)
-        node.textContent = text;
-    return node;
+    const language = languageOf(entry.path).toLowerCase();
+    const components = (facts.components.get(entry.path) ?? []).map(name => name.toLowerCase());
+    const widened = [
+        path.includes(text.toLowerCase()),
+        anyOf(clauses, 'lang', value => language === value),
+        anyOf(clauses, 'component', value => components.includes(value)),
+        anyOf(clauses, 'path', value => path.includes(value)),
+    ];
+    return widened.every(Boolean) && clauses.every(clause => conditions[clause.kind]?.(clause, entry, facts) ?? true);
 }
