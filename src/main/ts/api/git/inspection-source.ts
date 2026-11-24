@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { gitRoot, gitUtf8, readGitCommit } from './git.js';
+import { gitRoot, gitWorkingTreePaths, readGitCommit } from './git.js';
 import { containsPath, readWorkingTree } from './local.js';
 
 export interface SourceSelection {
@@ -17,17 +17,11 @@ export async function readInspectionSource(request: SourceSelection, excludes: (
     throw new Error('Choose a dedicated report directory outside Git metadata');
   }
   const snapshot = 'workingTree' in request.source
-    ? await readWorkingTree(root, output, excludes, await trackedClaims(root, claims))
+    ? await readWorkingTree(root, output, excludes, claims, await gitWorkingTreePaths(root))
     : await readGitCommit(root, request.source.revision, excludes, claims);
   const excludedOutput = snapshot.subject.kind === 'working-tree' && containsPath(root, output)
     ? relative(root, output).split(sep).join('/') : null;
   return { root, snapshot, excludedOutput, output };
-}
-
-async function trackedClaims(directory: string, claims: ((path: string) => boolean) | undefined) {
-  if (!claims || !await gitRoot(directory).catch(() => undefined)) return claims;
-  const tracked = new Set((await gitUtf8(directory, ['ls-files', '--cached', '-z', '--', '.'])).split('\0'));
-  return (path: string) => tracked.has(path) && claims(path);
 }
 
 async function physicalPath(path: string): Promise<string> {

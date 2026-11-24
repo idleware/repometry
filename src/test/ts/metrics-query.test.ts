@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { clauseLabel, formatQuery, isLockfile, languageOf, languageShares, matches, parseQuery, suggest } from '../../main/ts/report/html/app/viewer-filter.js';
+import { clauseLabel, formatQuery, matches, parseQuery } from '../../main/ts/report/html/app/viewer-filter.js';
+import { isLockfile, languageOf, languageShares } from '../../main/ts/report/html/app/viewer-languages.js';
+import { suggest } from '../../main/ts/report/html/app/viewer-suggest.js';
 import { size } from '../../main/ts/report/html/app/viewer-metrics.js';
 import type { FileFacts } from '../../main/ts/report/html/app/viewer-filter.js';
 

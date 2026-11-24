@@ -8,8 +8,10 @@ const entries: Readonly<Record<string, readonly string[]>> = {
     'measureDiffCoverage', 'plan', 'pluginApi', 'pullReviewSchema', 'pullReviewsSchema', 'qualitySummary', 'readReport',
     'reportSchema', 'review', 'reviewExitCode', 'reviewPull',
   ],
-  'repometry/plugin': ['codeStructure', 'findingResult', 'measurements', 'pluginApi', 'sourceFile'],
-  'repometry/report': ['fileMetricsSchema', 'historySchema', 'legacyReportSchema', 'readReport', 'reportSchema', 'summarySchema', 'validateSummary'],
+  'repometry/plugin': ['DockerToolRunner', 'codeStructure', 'findingResult', 'measurements', 'pluginApi', 'processPlugin',
+    'processPluginProtocol', 'sourceFile', 'sourceFiles'],
+  'repometry/report': ['LocalOperationCache', 'fileMetricsSchema', 'historySchema', 'legacyReportSchema', 'readReport', 'reportSchema',
+    'summarySchema', 'validateSummary'],
 };
 
 test('package entry points expose the stable API and compatibility names', async () => {

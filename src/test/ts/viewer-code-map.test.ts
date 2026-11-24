@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { band, relativePeaks, spreadLevels, unreadFolders } from '../../main/ts/report/html/app/viewer-files.js';
+import { band, relativePeaks, spreadLevels } from '../../main/ts/report/html/app/viewer-map-scale.js';
+import { entryRange } from '../../main/ts/report/html/app/viewer-table-rows.js';
+import { unreadFolders } from '../../main/ts/report/html/app/viewer-totals.js';
 
 test('a folder on the security map takes the worst level of the files inside it', () => {
   const levels = spreadLevels(new Map([['src/a/x.js', 1], ['src/a/y.js', 3], ['src/b/z.js', 2], ['root.js', 1]]));
@@ -41,8 +43,7 @@ test('a relative scale compares files with files and folders with the folders at
   assert.equal(band(file, 'churn', 24, 120), 1);
 });
 
-test('a page counts its entries, not the fold of ignored files, so the last page never passes the total', async () => {
-  const { entryRange } = await import('../../main/ts/report/html/app/viewer-files.js');
+test('a page counts its entries, not the fold of ignored files, so the last page never passes the total', () => {
   const rows = (count: number) => Array.from({ length: count }, () => ({ kind: 'file' }));
   // 160 read files, the fold, then 37 ignored ones unfolded: 198 places, 197 files.
   const display = [...rows(160), { kind: 'unread' }, ...rows(37)];

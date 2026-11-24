@@ -1,5 +1,5 @@
 import { lstat, readdir, realpath, readFile } from 'node:fs/promises';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { isAbsolute, join, posix, relative, sep } from 'node:path';
 import { comparePaths, isExcludedDirectory, isSourcePath, workingSnapshot } from '../../core/model/snapshot.js';
 import type { SourceFile, SourceSnapshot } from '../../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
@@ -11,7 +11,7 @@ export function containsPath(parent: string, path: string): boolean {
 }
 
 export async function readWorkingTree(directory: string, output: string, excludes: (path: string) => boolean,
-  claims?: (path: string) => boolean): Promise<SourceSnapshot> {
+  claims?: (path: string) => boolean, gitPaths?: readonly string[]): Promise<SourceSnapshot> {
   const root = await realpath(directory);
   const files: SourceFile[] = [];
   const generatedExcluded: string[] = [];
@@ -29,7 +29,7 @@ export async function readWorkingTree(directory: string, output: string, exclude
     }
   }
 
-  async function read(path: string, absolute: string): Promise<void> {
+  async function read(path: string, absolute: string, size?: number): Promise<void> {
     if (isSourcePath(path)) {
       const bytes = await readFile(absolute);
       if (isGeneratedSource(bytes)) generatedExcluded.push(path);
@@ -37,7 +37,7 @@ export async function readWorkingTree(directory: string, output: string, exclude
       return;
     }
     if (!claims?.(path)) return;
-    if ((await lstat(absolute)).size > maxClaimedFileBytes) {
+    if ((size ?? (await lstat(absolute)).size) > maxClaimedFileBytes) {
       oversizedClaims.push(path);
       return;
     }
@@ -46,7 +46,37 @@ export async function readWorkingTree(directory: string, output: string, exclude
     else if (isClaimedText(bytes)) files.push({ path, bytes });
   }
 
-  await visit(root, '');
+  if (gitPaths === undefined) {
+    await visit(root, '');
+  } else {
+    const directories = new Map<string, boolean>([['.', true]]);
+
+    async function regularDirectory(path: string): Promise<boolean> {
+      const cached = directories.get(path);
+      if (cached !== undefined) return cached;
+      const allowed = !isExcludedDirectory(posix.basename(path)) && await regularDirectory(posix.dirname(path))
+        && (await statIfPresent(join(root, path)))?.isDirectory() === true;
+      directories.set(path, allowed);
+      return allowed;
+    }
+
+    for (const path of gitPaths) {
+      const absolute = join(root, path);
+      if (excludes(path) || !containsPath(root, absolute) || containsPath(output, absolute)) continue;
+      if (!(isSourcePath(path) || claims?.(path)) || !await regularDirectory(posix.dirname(path))) continue;
+      const stat = await statIfPresent(absolute);
+      if (stat?.isFile()) await read(path, absolute, stat.size);
+    }
+  }
   return { ...workingSnapshot(files), generatedExcluded: generatedExcluded.sort(comparePaths),
     ...(oversizedClaims.length ? { oversizedClaims: oversizedClaims.sort(comparePaths) } : {}) };
+}
+
+async function statIfPresent(path: string) {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return undefined;
+    throw error;
+  }
 }

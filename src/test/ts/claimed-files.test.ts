@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { gitText } from '../../main/ts/api/git/git.js';
 import { decodeWorkerInput, encodeWorkerInput } from '../../main/ts/api/worker/worker-protocol.js';
 import { analyzeSnapshot, inspect } from '../../main/ts/compose/inspect.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
@@ -43,4 +44,32 @@ test('scan-only claims preserve findings without marking files analysed', async 
   assert.deepEqual(report.pluginData?.inventory?.map(({ path, analysed }) => [path, analysed]), [
     ['.env', false], ['README.md', false],
   ]);
+});
+
+test('working trees include tracked and unignored files and skip symlinks', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-working-tree-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const repo = join(directory, 'repo');
+  const outside = join(directory, 'outside');
+  await Promise.all([mkdir(join(repo, 'ignored'), { recursive: true }), mkdir(join(repo, 'replaced'), { recursive: true }), mkdir(outside)]);
+  await gitText(repo, ['init', '--quiet']);
+  const source = 'export const value = 1;\n';
+  await Promise.all([
+    writeFile(join(repo, '.gitignore'), 'ignored/\n*.ignored.js\n'),
+    writeFile(join(repo, 'tracked.ignored.js'), source),
+    writeFile(join(repo, 'replaced', 'tracked.js'), source),
+    writeFile(join(repo, 'ignored', 'discard.js'), source),
+    writeFile(join(repo, 'new.js'), source),
+    writeFile(join(repo, 'new.txt'), 'A new text file\n'),
+    writeFile(join(outside, 'tracked.js'), source),
+  ]);
+  await gitText(repo, ['add', '-f', '--', 'tracked.ignored.js', 'replaced/tracked.js']);
+  await rm(join(repo, 'replaced'), { recursive: true });
+  await symlink(outside, join(repo, 'replaced'), 'junction');
+  await symlink(join(outside, 'tracked.js'), join(repo, 'linked.js'), 'file');
+
+  const report = await inspect({ directory: repo, output: join(repo, '.repometry'), source: { workingTree: true } });
+
+  assert.deepEqual(report.pluginData?.inventory?.map(file => file.path), ['.gitignore', 'new.js', 'new.txt', 'tracked.ignored.js']);
+  assert.deepEqual(report.scope, { files: 2, parsed: 2 });
 });

@@ -1,4 +1,4 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 
 export interface Candidate {
   readonly start: number;

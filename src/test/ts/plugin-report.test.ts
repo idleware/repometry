@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { inspect } from '../../main/ts/compose/inspect.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract, MetricDescriptor, Plugin } from '../../main/ts/core/engine/plugin.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
@@ -43,6 +44,23 @@ const fixture: Plugin = {
 const input = { excludedOutput: null, snapshot: { subject: { kind: 'commit', id: 'a'.repeat(40) } as const,
   files: [{ path: 'a.js', bytes: new TextEncoder().encode('// TODO\nexport const a = 1;') }],
   inventory: [{ path: 'a.js', lines: 2 }, { path: 'README.md', lines: 4 }] } };
+
+test('inspect routes files claimed by a registered plugin and saves its results', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-registered-plugin-'));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const output = join(directory, '.repometry');
+  await Promise.all(['notes.txt', 'other.md', 'excluded.txt'].map(path => writeFile(join(directory, path), 'TODO\n')));
+  const plugin = { ...fixture, claims: { extensions: ['.txt'] } };
+  const request = { directory, output, source: { workingTree: true } as const, exclude: ['excluded.txt'], plugins: [plugin] };
+
+  const report = await inspect(request);
+  assert.deepEqual(report.measurements.filter(row => row.definition === metric.id), [
+    { definition: metric.id, target: 'file', path: 'notes.txt', value: 1 },
+  ]);
+  assert.ok(report.pluginData?.inventory?.some(file => file.path === 'notes.txt' && file.analysed));
+  assert.deepEqual((await new LocalReportStore(output).read(report.subject)).pluginData, report.pluginData);
+  await assert.rejects(inspect(request, analyzeSnapshot), /custom executor/);
+});
 
 test('declared metrics, rules and custom JSON products round-trip through the report store', async t => {
   const output = await mkdtemp(tmpdir() + '/repometry-plugin-report-');

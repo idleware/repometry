@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { tokenizer } from '../../main/ts/report/html/app/viewer-source.js';
+import { tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
 
 const kinds = (runs: readonly (readonly [string, string])[], kind: string) => runs.filter(([run]) => run === kind).map(([, value]) => value);
 

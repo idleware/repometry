@@ -4,6 +4,8 @@ import { readInspectionSource } from '../api/git/inspection-source.js';
 import { importFindings } from '../api/import/finding-import.js';
 import { readLcovFiles } from '../api/import/lcov-files.js';
 import type { LcovFiles } from '../api/import/lcov-files.js';
+import type { OperationCacheOptions } from '../core/engine/operation-cache.js';
+import type { Plugin } from '../core/engine/plugin.js';
 import type { FindingIgnoreRule } from '../core/model/finding-ignore.js';
 import { reportSchema } from '../core/model/report.js';
 import type { Diagnostic, Report } from '../core/model/report.js';
@@ -12,7 +14,7 @@ import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { executeInspection } from '../core/usecases/inspect.js';
 import type { AnalysisExecutor, InspectionPorts } from '../core/usecases/inspect.js';
 import { LocalReportStore } from '../report/json/store/local-store.js';
-import { analyzeSnapshot, claimsNativeFile } from './analyze-snapshot.js';
+import { analyzeSnapshot, inspectionFileMatcher } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
 
 export { analyzeSnapshot } from './analyze-snapshot.js';
@@ -27,13 +29,20 @@ export interface InspectRequest {
   readonly findingInputs?: readonly FindingInput[];
   readonly findingRoot?: string;
   readonly ignore?: readonly FindingIgnoreRule[];
+  /** Trusted in-process plugins for the default executor. */
+  readonly plugins?: readonly Plugin[];
+  readonly operationCache?: OperationCacheOptions;
 }
 
 export async function inspect(request: InspectRequest, overrides?: AnalysisExecutor | Partial<InspectionPorts>): Promise<Report> {
-  const { lcov, findingInputs = [] } = request;
+  const { lcov, findingInputs = [], plugins = [], operationCache } = request;
+  if ((plugins.length || operationCache) && (typeof overrides === 'function' || overrides?.analyze)) {
+    throw new Error('Configure plugins and the operation cache on the custom executor');
+  }
+  const claims = inspectionFileMatcher(plugins);
   const ports: InspectionPorts = {
-    readSource: excludes => readSource(request, excludes),
-    analyze: analyzeSnapshot,
+    readSource: excludes => readSource(request, excludes, claims),
+    analyze: input => analyzeSnapshot(input, plugins, operationCache),
     ...(lcov === undefined ? {} : { readCoverage: () => readLcovFiles(lcov) }),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),
@@ -43,8 +52,8 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
   return executeInspection(request, ports);
 }
 
-async function readSource(request: InspectRequest, excludes: (path: string) => boolean) {
-  const source = await readInspectionSource(request, excludes, claimsNativeFile);
+async function readSource(request: InspectRequest, excludes: (path: string) => boolean, claims: (path: string) => boolean) {
+  const source = await readInspectionSource(request, excludes, claims);
   const store = new LocalReportStore(source.output);
   return { ...source, save: (report: Report) => store.save(report) };
 }

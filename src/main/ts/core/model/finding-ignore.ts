@@ -1,4 +1,4 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import { exclusionMatcher, normalizeExclusions } from '../profile/exclusions.js';
 import type { Finding } from './finding.js';
 

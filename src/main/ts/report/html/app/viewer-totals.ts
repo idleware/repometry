@@ -1,0 +1,97 @@
+import type { InspectionDetails } from '../../json/wire/inspection-details-model.js';
+import { sized } from './viewer-languages.js';
+import type { Directory, Metrics } from './viewer-inspection.js';
+import { localCatalog } from './viewer-inspection.js';
+import { rollUp } from './viewer-metric-registry.js';
+
+type Quality = NonNullable<Metrics['quality']>;
+type Read = (entry: Metrics) => number | null | undefined;
+
+/** The sum of what the files measured; null where none of them did. */
+export function sum(files: readonly Metrics[], read: Read): number | null {
+  let total: number | null = null;
+  for (const entry of files) {
+    const value = read(entry);
+    if (value != null) total = (total ?? 0) + value;
+  }
+  return total;
+}
+
+function zeroSum(files: readonly Metrics[], read: Read): number {
+  return sum(files, read) ?? 0;
+}
+
+/** The quality counts that add up, in the order a folder's totals list them. */
+const qualitySums: readonly (readonly [keyof Quality, Read])[] = [
+  ['codeLines', entry => entry.quality?.codeLines],
+  ['commentLines', entry => entry.quality?.commentLines],
+  ['classes', entry => entry.quality?.classes],
+  ['cognitiveComplexity', entry => entry.quality?.cognitiveComplexity],
+  ['churn', entry => entry.quality?.churn],
+];
+
+function qualityTotals(files: readonly Metrics[]): Quality {
+  const quality: Record<string, unknown> = {};
+  for (const [key, read] of qualitySums) {
+    const value = sum(files, read);
+    if (value !== null) quality[key] = value;
+  }
+  if (files.some(entry => entry.quality?.duplication)) {
+    quality.duplication = { duplicatedLines: zeroSum(files, entry => entry.quality?.duplication?.duplicatedLines),
+      codeLines: zeroSum(files, entry => entry.quality?.duplication?.codeLines) };
+  }
+  if (files.some(entry => entry.quality?.maintainability)) {
+    quality.maintainability = { smells: zeroSum(files, entry => entry.quality?.maintainability?.smells),
+      effortMinutes: sum(files, entry => entry.quality?.maintainability?.effortMinutes) };
+  }
+  return quality as Quality;
+}
+
+function peakComplexity(files: readonly Metrics[]): number | null {
+  const peaks = files.flatMap(entry => entry.complexity?.maximum == null ? [] : [entry.complexity.maximum]);
+  return peaks.length ? peaks.reduce((max, value) => Math.max(max, value), 0) : null;
+}
+
+/** Totals for any set of files, measured the way folder totals are: sums, the peak, and ratios of sums. */
+export function aggregate(path: string, files: readonly Metrics[]): Directory {
+  const covered = files.filter(entry => entry.lineCoverage);
+  const values = rollUp(localCatalog(), files);
+  const quality = qualityTotals(files);
+  return {
+    path, files: files.length, lines: sum(files, entry => entry.lines), functions: sum(files, entry => entry.functions),
+    complexity: files.some(entry => entry.complexity) ? { sum: zeroSum(files, entry => entry.complexity?.sum), maximum: peakComplexity(files),
+      measuredFunctions: zeroSum(files, entry => entry.complexity?.measuredFunctions) } : null,
+    lineCoverage: covered.length ? { covered: zeroSum(files, entry => entry.lineCoverage?.covered),
+      total: zeroSum(files, entry => entry.lineCoverage?.total) } : null,
+    diagnosticCount: zeroSum(files, entry => entry.diagnosticCount),
+    sizeMeasuredFiles: files.filter(entry => entry.lines !== null).length, coverageMeasuredFiles: covered.length,
+    ...(Object.keys(quality).length ? { quality } : {}),
+    ...(values ? { values } : {}),
+    // A partial sum would understate the size: only a scope where every file has one gets a total.
+    ...(sized(files) ? { bytes: zeroSum(files, entry => entry.bytes) } : {}),
+  };
+}
+
+/** The folders all of whose files are only counted, found in one pass over the files. */
+export function unreadFolders(files: readonly Pick<Metrics, 'path' | 'analysed'>[]): Set<string> {
+  const read = new Map<string, boolean>();
+  for (const file of files) {
+    const analysed = file.analysed !== false;
+    for (const folder of ancestors(file.path)) read.set(folder, read.get(folder) === true || analysed);
+  }
+  return new Set([...read].filter(([, analysed]) => !analysed).map(([folder]) => folder));
+}
+
+/** The folders above a path, nearest first. */
+export function ancestors(path: string): string[] {
+  const folders: string[] = [];
+  for (let slash = path.lastIndexOf('/'); slash > 0; slash = path.lastIndexOf('/', slash - 1)) folders.push(path.slice(0, slash));
+  return folders;
+}
+
+/** Each path's components, by name. */
+export function componentIndex(components: NonNullable<InspectionDetails['components']>): Map<string, string[]> {
+  const index = new Map<string, string[]>();
+  for (const { component, paths } of components) for (const path of paths) index.set(path, [...index.get(path) ?? [], component.name]);
+  return index;
+}

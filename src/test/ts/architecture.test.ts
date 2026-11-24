@@ -14,6 +14,7 @@ const dependencies: Readonly<Record<string, readonly string[]>> = {
   'api/git': ['core', 'report/json'],
   'api/gh': ['core'],
   'api/import': ['core'],
+  'api/process': ['core'],
   'api/worker': ['core', 'report/json'],
   'report/json/wire': [],
   'report/json': ['core', 'report/json/wire'],

@@ -1,4 +1,4 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import type { Report } from './report.js';
 import { definitions } from './measurement.js';
 

@@ -1,14 +1,19 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import type { DataContract } from '../engine/plugin.js';
+import { isMergedLineRanges } from './source.js';
+import type { SourceLineRange } from './source.js';
 
-export type CoveredLineRange = readonly [first: number, last: number];
+export type CoveredLineRange = SourceLineRange;
 export type HitRun = readonly [first: number, last: number, count: number];
+export type FunctionCallCount = readonly [line: number, calls: number];
 
 export interface FileLineCoverage {
   readonly covered: readonly CoveredLineRange[];
   readonly uncovered: readonly CoveredLineRange[];
   readonly partial?: readonly CoveredLineRange[];
   readonly hits?: readonly HitRun[];
+  readonly functionCalls?: readonly FunctionCallCount[];
+  readonly functionBodies?: readonly SourceLineRange[];
 }
 
 export type LineCoverage = Readonly<Record<string, FileLineCoverage>>;
@@ -16,19 +21,21 @@ export type LineCoverage = Readonly<Record<string, FileLineCoverage>>;
 export const lcovLines: DataContract<LineCoverage> = {
   id: 'repometry.lcov-lines/v1',
   accepts: (value): value is LineCoverage => isRecord(value) && Object.values(value).every(file =>
-    isRecord(file) && isMerged(file.covered) && isMerged(file.uncovered) &&
-    (file.partial === undefined || isMerged(file.partial)) && (file.hits === undefined || isMergedHits(file.hits))),
+    isRecord(file) && isMergedLineRanges(file.covered) && isMergedLineRanges(file.uncovered)
+    && (file.partial === undefined || isMergedLineRanges(file.partial)) && (file.hits === undefined || isMergedHits(file.hits))
+    && (file.functionCalls === undefined || isOrderedCallCounts(file.functionCalls))
+    && (file.functionBodies === undefined || isMergedLineRanges(file.functionBodies))),
 };
 
-function isMerged(value: unknown): value is readonly CoveredLineRange[] {
+function isOrderedCallCounts(value: unknown): value is readonly FunctionCallCount[] {
   if (!Array.isArray(value)) return false;
-  let previous = -1;
-  for (const range of value as unknown[]) {
-    if (!Array.isArray(range) || range.length !== 2) return false;
-    const [first, last] = range as unknown[];
-    if (typeof first !== 'number' || typeof last !== 'number' || !Number.isSafeInteger(first)
-      || !Number.isSafeInteger(last) || first <= previous + 1 || last < first) return false;
-    previous = last;
+  let previous = 1;
+  for (const call of value as unknown[]) {
+    if (!Array.isArray(call) || call.length !== 2) return false;
+    const [line, count] = call as unknown[];
+    if (typeof line !== 'number' || typeof count !== 'number' || !Number.isSafeInteger(line) || !Number.isSafeInteger(count)
+      || line < previous || count < 0) return false;
+    previous = line;
   }
   return true;
 }

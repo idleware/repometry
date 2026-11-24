@@ -2,7 +2,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { findingResult } from '../model/finding.js';
 import type { FindingResult } from '../model/finding.js';
 import { measurements } from '../model/measurement.js';
-import type { JsonValue, PersistedProduct, PluginData } from '../model/plugin-data.js';
+import { isJsonValue } from '../model/plugin-data.js';
+import type { PersistedProduct, PluginData } from '../model/plugin-data.js';
 import { isRecord } from './plugin.js';
 import { isCoreReportProduct } from './manifest.js';
 import type { MetricDescriptor, Plugin, PluginConfigSchema, Product } from './plugin.js';
@@ -51,7 +52,7 @@ export class ReportProducts {
       if (unknown) throw new Error(`Undeclared metric from ${task.key}: ${unknown.definition}`);
     }
     if (!isCoreReportProduct(contract)) {
-      if (!isJson(value)) throw new Error(`Report product ${contract} is not JSON data`);
+      if (!isJsonValue(value)) throw new Error(`Report product ${contract} is not JSON data`);
       const record = { operation: task.key, ...(path === undefined ? {} : { path }), value };
       const existing = this.products.get(contract);
       if (existing) existing.push(record);
@@ -68,13 +69,4 @@ export class ReportProducts {
       ...(this.contracts.size ? { contracts: Object.fromEntries(this.contracts) } : {}),
       rules: this.rules, products: Object.fromEntries(this.products) };
   }
-}
-
-function isJson(value: unknown, depth = 0): value is JsonValue {
-  if (depth > 512) return false;
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(item => isJson(item, depth + 1));
-  return isRecord(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-    && Object.values(value).every(item => isJson(item, depth + 1));
 }

@@ -7,7 +7,7 @@ import { mapCoverage } from '../../main/ts/plugins/coverage/coverage.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';
 
-const hits = (map: ReadonlyMap<unknown, number | boolean> | undefined) => [...map ?? []].filter(([, hit]) => hit).length;
+const hits = (map: ReadonlyMap<unknown, number> | undefined) => [...map ?? []].filter(([, hit]) => hit).length;
 
 test('LCOV branches and functions are read alongside lines, merged by any hit across reports', () => {
   const unit = [
@@ -26,6 +26,7 @@ test('LCOV branches and functions are read alongside lines, merged by any hit ac
   const merged = mapCoverage({ ...input, text: `${unit}\n${integration}` });
   assert.equal(hits(merged.branches.get('src/a.ts')), 2);
   assert.equal(hits(merged.functions.get('src/a.ts')), 2);
+  assert.deepEqual(merged.functionCalls.get('src/a.ts'), [[1, 3], [5, 2], [9, 0]]);
   assert.equal(hits(merged.files.get('src/a.ts')), 2);
 });
 
@@ -50,7 +51,7 @@ test('inspections persist sorted, merged line ranges and project only measured f
   const input = { snapshot, excludedOutput: null };
   const report = await analyzeSnapshot({ ...input, coverage: { text: `${unit}\n${integration}`, sourceRoot: '/repo' } });
   const expected = { 'src/a.js': { covered: [[2, 3], [5, 5]], uncovered: [[6, 7], [9, 9]], partial: [[5, 5], [8, 8]],
-    hits: [[2, 3, 2], [5, 5, 1], [6, 7, 0], [8, 8, 1], [9, 9, 0]] } };
+    hits: [[2, 3, 2], [5, 5, 1], [6, 7, 0], [8, 8, 1], [9, 9, 0]], functionBodies: [] } };
   assert.deepEqual(report.pluginData?.products['repometry.lcov-lines/v1'], [{ operation: 'lcov/lines', value: expected }]);
   assert.deepEqual(inspectionDetails(readReport(JSON.parse(JSON.stringify(report)))).lineCoverage, expected);
   assert.ok(!Object.hasOwn(inspectionDetails(await analyzeSnapshot(input)), 'lineCoverage'));
@@ -63,8 +64,26 @@ test('blank lines and comment-only lines are excluded from coverage totals, stat
   const report = await analyzeSnapshot({ snapshot: workingSnapshot([{ path: 'a.js', bytes: Buffer.from(source) }]),
     excludedOutput: null, coverage: { text, sourceRoot: '/repo' } });
   assert.deepEqual(inspectionDetails(report).lineCoverage, {
-    'a.js': { covered: [[1, 1]], uncovered: [[6, 6]], hits: [[1, 1, 2], [6, 6, 0]] },
+    'a.js': { covered: [[1, 1]], uncovered: [[6, 6]], hits: [[1, 1, 2], [6, 6, 0]], functionBodies: [] },
   });
   assert.deepEqual(report.measurements.find(row => row.definition === definitions.coverage && row.target === 'repository'),
     { definition: definitions.coverage, target: 'repository', covered: 1, total: 2, value: 0.5 });
+});
+
+test('LCOV distinguishes module loads from calls and sums calls for each declaration', async () => {
+  const path = 'src/a.js';
+  const source = ['const top = 1;', 'export function never() {', '  return top;', '}', 'export function run() {',
+    '  return 2;', '}', 'export const inline = () => top;'].join('\n');
+  const unit = ['SF:src/a.js', 'FN:2,never', 'FN:5,run', 'FN:8,8,inline', 'FNDA:0,never', 'FNDA:2,run',
+    'FNDA:4,inline', 'DA:1,2', 'DA:2,2', 'DA:3,0', 'DA:6,2', 'DA:8,4', 'end_of_record'];
+  const integration = ['SF:src/a.js', 'FN:2,never', 'FN:5,run', 'FNDA:0,never', 'FNDA:3,run', 'DA:6,3', 'end_of_record'];
+  const report = await analyzeSnapshot({
+    snapshot: workingSnapshot([{ path, bytes: Buffer.from(source) }]), excludedOutput: null,
+    coverage: { text: [...unit, ...integration].join('\n'), sourceRoot: '/repo' },
+  });
+  assert.deepEqual(inspectionDetails(readReport(JSON.parse(JSON.stringify(report)))).lineCoverage?.[path], {
+    covered: [[1, 2], [6, 6], [8, 8]], uncovered: [[3, 3]],
+    hits: [[1, 2, 2], [3, 3, 0], [6, 6, 5], [8, 8, 4]],
+    functionCalls: [[2, 0], [5, 5], [8, 4]], functionBodies: [[3, 3], [6, 6], [8, 8]],
+  });
 });

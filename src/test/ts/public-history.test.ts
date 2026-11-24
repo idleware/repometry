@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import historyV1 from '../../main/resources/report/json/public-history-v1.schema.json' with { type: 'json' };
 import { publicHistory } from '../../main/ts/report/json/projections/public-history.js';
-import { axisLabels, tickLabels, timeTicks } from '../../main/ts/report/html/app/viewer-chart.js';
-import { plantFlags, stableWindow } from '../../main/ts/report/html/app/viewer-trends.js';
+import { axisLabels, tickLabels, timeTicks } from '../../main/ts/report/html/app/viewer-chart-time.js';
+import { stableWindow } from '../../main/ts/report/html/app/viewer-trend-data.js';
+import { plantFlags } from '../../main/ts/report/html/app/viewer-trend-points.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 

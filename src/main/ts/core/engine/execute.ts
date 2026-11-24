@@ -1,11 +1,14 @@
+import { operationCacheKey, readCachedOperation, writeCachedOperation } from './operation-cache.js';
+import type { OperationCacheOptions } from './operation-cache.js';
 import type { DataContract, InspectionInputs, Product } from './plugin.js';
 import type { PlannedOperation } from './plan.js';
 
 export type Outcome =
-  | { readonly state: 'completed'; readonly product: Product }
+  | { readonly state: 'completed'; readonly product: Product; readonly diagnostics?: readonly string[] }
   | { readonly state: 'failed' | 'blocked'; readonly reason: string };
 
-export async function execute(plan: readonly PlannedOperation[], external: ReadonlyMap<string, Product>): Promise<ReadonlyMap<string, Outcome>> {
+export async function execute(plan: readonly PlannedOperation[], external: ReadonlyMap<string, Product>,
+  cache?: OperationCacheOptions): Promise<ReadonlyMap<string, Outcome>> {
   const results = new Map<string, Outcome>();
   for (const task of plan) {
     const inputs = new Map<string, Product>();
@@ -26,6 +29,13 @@ export async function execute(plan: readonly PlannedOperation[], external: Reado
       for (const [name, contract] of Object.entries(task.operation.inputs)) {
         readInput(inputs, name, contract);
       }
+      const key = cache && operationCacheKey(task, inputs, cache.configurationDigest);
+      const hit = key && cache ? await readCachedOperation(cache.store, key, task) : undefined;
+      if (hit) {
+        results.set(task.key, { state: 'completed', product: hit });
+        continue;
+      }
+      const diagnostics: string[] = [];
       const context: InspectionInputs = {
         read: (port, contract) => {
           if (!Object.hasOwn(task.operation.inputs, port) || task.operation.inputs[port]?.id !== contract.id) {
@@ -33,12 +43,15 @@ export async function execute(plan: readonly PlannedOperation[], external: Reado
           }
           return readInput(inputs, port, contract);
         },
+        emitDiagnostic: message => diagnostics.push(message),
       };
       const value = await task.operation.execute(context);
       const { output } = task.operation;
       if (!output.accepts(value)) throw new Error(`Invalid output for ${output.id}`);
       if (task.validateOutput && !task.validateOutput(value)) throw new Error(`Output violates the schema for ${output.id}`);
-      results.set(task.key, { state: 'completed', product: { contract: output.id, value } });
+      const product = { contract: output.id, value };
+      if (key && cache && diagnostics.length === 0) await writeCachedOperation(cache.store, key, product);
+      results.set(task.key, { state: 'completed', product, ...(diagnostics.length ? { diagnostics } : {}) });
     } catch (error) {
       results.set(task.key, { state: 'failed', reason: error instanceof Error ? error.message : String(error) });
     }

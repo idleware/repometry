@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import type { DataContract } from '../engine/plugin.js';
 
 import type { SourceFile, SourceSnapshot } from './source.js';
@@ -9,6 +9,11 @@ export type { Subject, SourceFile, SourceSnapshot } from './source.js';
 export const sourceFile: DataContract<SourceFile> = {
   id: 'repometry.source-file/v1',
   accepts: (value): value is SourceFile => isRecord(value) && typeof value.path === 'string' && value.bytes instanceof Uint8Array,
+};
+
+export const sourceFiles: DataContract<readonly SourceFile[]> = {
+  id: 'repometry.source-files/v1',
+  accepts: (value): value is readonly SourceFile[] => Array.isArray(value) && value.every(sourceFile.accepts),
 };
 
 export const sourceDirectoriesExcluded = ['.git', '.repometry', 'node_modules', 'target'] as const;

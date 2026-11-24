@@ -3,6 +3,7 @@ import type { InspectionContext } from '../../json/wire/inspection-context-model
 import type { QualitySummary } from '../../json/wire/domain-types.js';
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 import type { MetricDescriptor } from '../../json/wire/summary-model.js';
+import * as metricFormat from './viewer-metric-format.js';
 import * as registry from './viewer-metric-registry.js';
 import type { MetricSpec, Valued } from './viewer-metric-registry.js';
 
@@ -30,6 +31,14 @@ export const metricLabels: Record<BuiltinMetric, string> = {
  */
 export const securityGrades = ['A', 'B', 'C', 'D', 'F'] as const;
 export const securityRisks = ['No findings', 'Low risk', 'Medium risk', 'High risk', 'Critical risk'] as const;
+
+/** The lowest line coverage of each grade, in the steps of the coverage badge: A from 90%, F below 60%. */
+const coverageSteps = [[.9, 'A'], [.8, 'B'], [.7, 'C'], [.6, 'D']] as const;
+
+/** Line coverage as a letter, coloured as the coverage badge colours it. */
+export function coverageGrade(ratio: number): (typeof securityGrades)[number] {
+  return coverageSteps.find(([lowest]) => ratio >= lowest)?.[1] ?? 'F';
+}
 
 export const metricDefinitions: Record<BuiltinMetric, string> = {
   coverage: 'Share of measured lines executed by tests, read from LCOV.',
@@ -113,31 +122,41 @@ export function betterOf(metric: Metric): 'lower' | 'higher' | 'none' {
   return lowerIsBetter.has(metric) ? 'lower' : metric === 'coverage' ? 'higher' : 'none';
 }
 
+type Reader = (report: PublicHistoryEntry, quality: QualitySummary | undefined, context: InspectionContext | undefined) => number | null | undefined;
+
+function securityTotal(context: InspectionContext | undefined): number | null {
+  return context?.security ? Object.values(context.security).reduce((total, value) => total + value, 0) : null;
+}
+
+/** Where each of Repometry's own metrics is read: the history entry, its quality summary, or its scanner context. */
+const readers: Readonly<Record<BuiltinMetric, Reader>> = {
+  coverage: report => report.lineCoverage && report.lineCoverage.total > 0 ? report.lineCoverage.covered / report.lineCoverage.total : null,
+  lines: report => report.lines,
+  files: report => report.files,
+  functions: report => report.functions,
+  complexity: report => report.maxComplexity,
+  cognitive: (_, quality) => quality?.cognitiveComplexity,
+  duplication: (_, quality) => quality?.duplication?.ratio,
+  debt: (_, quality) => quality?.maintainability?.debtRatio,
+  effort: (_, quality) => quality?.maintainability?.effortMinutes,
+  smells: (_, quality) => quality?.maintainability?.smells,
+  'code-lines': (_, quality) => quality?.codeLines,
+  classes: (_, quality) => quality?.classes,
+  comments: (_, quality) => quality?.comments,
+  security: (_, __, context) => securityTotal(context),
+  'coverable-lines': report => report.lineCoverage?.total,
+  'covered-lines': report => report.lineCoverage?.covered,
+  'uncovered-lines': report => report.lineCoverage ? report.lineCoverage.total - report.lineCoverage.covered : null,
+  'security-high': (_, __, context) => context?.security?.high,
+  'security-medium': (_, __, context) => context?.security?.medium,
+  'security-low': (_, __, context) => context?.security?.low,
+};
+
+/** A metric's value at a commit; null where the commit has no such measurement. */
 export function metricValue(report: PublicHistoryEntry, metric: Metric, quality: QualitySummary | undefined, context?: InspectionContext): number | null {
   const spec = pluginSpec(metric);
   if (spec) return registry.commitValue(historyIndex, report as PublicHistoryEntry & Valued, spec);
-  switch (metric as BuiltinMetric) {
-    case 'coverage': return report.lineCoverage && report.lineCoverage.total > 0 ? report.lineCoverage.covered / report.lineCoverage.total : null;
-    case 'lines': return report.lines;
-    case 'files': return report.files;
-    case 'functions': return report.functions;
-    case 'complexity': return report.maxComplexity;
-    case 'cognitive': return quality?.cognitiveComplexity ?? null;
-    case 'duplication': return quality?.duplication?.ratio ?? null;
-    case 'debt': return quality?.maintainability?.debtRatio ?? null;
-    case 'effort': return quality?.maintainability?.effortMinutes ?? null;
-    case 'smells': return quality?.maintainability?.smells ?? null;
-    case 'code-lines': return quality?.codeLines ?? null;
-    case 'classes': return quality?.classes ?? null;
-    case 'comments': return quality?.comments ?? null;
-    case 'security': return context?.security ? Object.values(context.security).reduce((total, value) => total + value, 0) : null;
-    case 'coverable-lines': return report.lineCoverage?.total ?? null;
-    case 'covered-lines': return report.lineCoverage?.covered ?? null;
-    case 'uncovered-lines': return report.lineCoverage ? report.lineCoverage.total - report.lineCoverage.covered : null;
-    case 'security-high': return context?.security?.high ?? null;
-    case 'security-medium': return context?.security?.medium ?? null;
-    case 'security-low': return context?.security?.low ?? null;
-  }
+  return readers[metric as BuiltinMetric]?.(report, quality, context) ?? null;
 }
 
 export function isPercent(metric: Metric): boolean {
@@ -148,7 +167,7 @@ export function isPercent(metric: Metric): boolean {
 
 export function formatMetric(value: number, metric: Metric): string {
   const spec = pluginSpec(metric);
-  if (spec) return registry.format(spec, value);
+  if (spec) return metricFormat.format(spec, value);
   if (isPercent(metric)) return percent.format(value);
   return metric === 'effort' ? duration(value) : count(value);
 }
@@ -170,25 +189,30 @@ export function count(value: number | null): string {
   return value === null ? '—' : integers.format(value);
 }
 
-export function duration(minutes: number): string {
-  const rounded = Math.round(minutes);
-  if (rounded < 60) return `${count(rounded)} min`;
-  const hours = Math.floor(rounded / 60);
-  const rest = rounded % 60;
-  return rest ? `${count(hours)} h ${count(rest)} min` : `${count(hours)} h`;
-}
+/** Remediation time in hours and minutes: 45 min, 2 h, 3 h 20 min. */
+export const duration = metricFormat.duration;
 
 export type Direction = 'better' | 'worse' | 'same' | 'neutral';
 
 /** Signed change between two values of one metric, in percentage points for ratios. */
 export function difference(value: number, before: number, metric: Metric): { text: string; direction: Direction } {
   const spec = pluginSpec(metric);
-  if (spec) return registry.difference(spec, value, before);
+  if (spec) return metricFormat.difference(spec, value, before);
   const percentPoints = isPercent(metric);
   const raw = percentPoints ? (value - before) * 100 : value - before;
   const rounded = percentPoints ? Math.round(raw * 10) / 10 : Math.round(raw);
   if (rounded === 0) return { text: 'No change', direction: 'same' };
-  const magnitude = percentPoints ? `${decimal.format(Math.abs(rounded))} pp` : metric === 'effort' ? duration(Math.abs(rounded)) : count(Math.abs(rounded));
-  const better = lowerIsBetter.has(metric) ? rounded < 0 : metric === 'coverage' ? rounded > 0 : null;
-  return { text: `${rounded > 0 ? '+' : '−'}${magnitude}`, direction: better === null ? 'neutral' : better ? 'better' : 'worse' };
+  return { text: `${rounded > 0 ? '+' : '−'}${magnitudeText(metric, Math.abs(rounded), percentPoints)}`, direction: changeDirection(metric, rounded) };
+}
+
+function magnitudeText(metric: Metric, magnitude: number, percentPoints: boolean): string {
+  if (percentPoints) return `${decimal.format(magnitude)} pp`;
+  return metric === 'effort' ? duration(magnitude) : count(magnitude);
+}
+
+/** Whether a change is good news: down for what is better lower, up for coverage; other metrics are neutral. */
+function changeDirection(metric: Metric, change: number): Direction {
+  if (lowerIsBetter.has(metric)) return change < 0 ? 'better' : 'worse';
+  if (metric !== 'coverage') return 'neutral';
+  return change > 0 ? 'better' : 'worse';
 }

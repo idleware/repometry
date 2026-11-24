@@ -195,7 +195,7 @@ test('pipe-to-shell accepts a checksum-verified download and pipes into non-shel
 });
 
 test('secret-in-env flags literal secret values in ENV and ARG without echoing them', () => {
-  const values = ['s3cr3t-Pa55', 'ghp_16C7e42F292c6912E7710c838347Ae178B4a', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', 'sk-live-1234567890'];
+  const values = ['s3cr3t-Pa55', 'dockerfile-fixture-default', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', 'sk-live-1234567890'];
   const findings = scan(dockerfileOf(
     'FROM postgres:16-alpine',
     'ENV POSTGRES_USER=app \\',

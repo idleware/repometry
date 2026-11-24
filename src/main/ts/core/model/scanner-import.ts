@@ -1,4 +1,4 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import { findingCategories } from './finding.js';
 import type { Finding } from './finding.js';
 

@@ -1,7 +1,9 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import type { DataContract } from '../engine/plugin.js';
 import { isCloneSource } from './clone-source.js';
 import type { CloneSource } from './clone-source.js';
+import { isMergedLineRanges } from './source.js';
+import type { SourceLineRange } from './source.js';
 
 export const structuralCheckIds = [
   'function-parameters', 'return-statements', 'boolean-logic', 'nested-control-flow',
@@ -34,6 +36,8 @@ export interface CodeStructure {
   readonly commentLines: number;
   readonly cyclomaticFunctions: readonly FunctionComplexity[];
   readonly cognitiveFunctions: readonly FunctionComplexity[];
+  /** Sorted, merged lines containing code inside a function body. An empty list means the provider found none. */
+  readonly functionBodies?: readonly SourceLineRange[];
   readonly observations: readonly StructuralObservation[];
   readonly clones: CloneSource;
 }
@@ -65,6 +69,8 @@ export const codeStructure: DataContract<CodeStructure> = {
     && isCount(value.cognitiveComplexity) && isCount(value.commentLines)
     && Array.isArray(value.cyclomaticFunctions) && value.cyclomaticFunctions.every(isFunctionComplexity)
     && Array.isArray(value.cognitiveFunctions) && value.cognitiveFunctions.every(isFunctionComplexity)
+    && (value.functionBodies === undefined
+      || isMergedLineRanges(value.functionBodies) && (value.functionBodies.at(-1)?.[1] ?? 0) <= value.lines)
     && Array.isArray(value.observations) && value.observations.every(isObservation)
     && isCloneSource(value.clones) && value.clones.path === value.path,
 };

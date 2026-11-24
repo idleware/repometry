@@ -6,13 +6,15 @@ import { comparePaths } from '../../core/model/snapshot.js';
 import { definitions, measurements } from '../../core/model/measurement.js';
 import type { Measurement } from '../../core/model/measurement.js';
 import { lcovLines } from '../../core/model/line-coverage.js';
-import type { FileLineCoverage, HitRun, LineCoverage } from '../../core/model/line-coverage.js';
+import type { FileLineCoverage, FunctionCallCount, HitRun, LineCoverage } from '../../core/model/line-coverage.js';
+import type { SourceLineRange } from '../../core/model/source.js';
 
 export interface CoverageInput {
   readonly text: string;
   readonly root: string;
   readonly sourceLines: ReadonlyMap<string, number>;
   readonly codeLines?: ReadonlyMap<string, ReadonlySet<number>>;
+  readonly functionBodies?: ReadonlyMap<string, readonly SourceLineRange[]>;
   readonly excludes?: (path: string) => boolean;
 }
 
@@ -27,6 +29,7 @@ export const lcovInput: DataContract<CoverageInput> = {
   accepts: (value): value is CoverageInput => isRecord(value) && typeof value.text === 'string'
     && typeof value.root === 'string' && value.sourceLines instanceof Map
     && (value.codeLines === undefined || value.codeLines instanceof Map)
+    && (value.functionBodies === undefined || value.functionBodies instanceof Map)
     && (value.excludes === undefined || typeof value.excludes === 'function'),
 };
 
@@ -57,7 +60,8 @@ export const coverage: Plugin = {
     { id: definitions.coverableFunctions, label: 'Measured functions', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
   ] }, { contract: lcovLines.id, persistence: 'report',
     schema: { ...reportSchema.$defs.lcovLines,
-      $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges, lcovHitRuns: reportSchema.$defs.lcovHitRuns } } }],
+      $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges, lcovHitRuns: reportSchema.$defs.lcovHitRuns,
+        lcovFunctionCalls: reportSchema.$defs.lcovFunctionCalls } } }],
   operations: [{
     id: 'import',
     role: 'inspection',
@@ -76,10 +80,10 @@ export const coverage: Plugin = {
 export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: CoverageInput) {
   const files = new Map<string, Map<number, number>>();
   // Branches by line, block and branch. Functions by name and its occurrence in the record: tools such as c8 repeat a
-  // name for different functions and list FNDA in FN order. Several reports merge by any hit.
+  // name for different functions and list FNDA in FN order.
   const branches = new Map<string, Map<string, number>>();
-  const declared = new Map<string, Set<string>>();
-  const called = new Map<string, Map<string, boolean>>();
+  const declared = new Map<string, Map<string, number>>();
+  const called = new Map<string, Map<string, number>>();
   const occurrences = { declared: new Map<string, number>(), called: new Map<string, number>() };
   const occurrence = (seen: Map<string, number>, name: string) => {
     const count = (seen.get(name) ?? 0) + 1;
@@ -118,7 +122,7 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
       if (active === undefined) throw new Error(`LCOV data outside a source record at line ${index + 1}`);
       if (ignored || !files.has(active)) continue;
       const branch = /^BRDA:([1-9]\d*),([^,]+),([^,]+),(\d+|-)$/.exec(line);
-      const declaration = /^FN:[1-9]\d*(?:,[1-9]\d*)?,(.+)$/.exec(line);
+      const declaration = /^FN:([1-9]\d*)(?:,[1-9]\d*)?,(.+)$/.exec(line);
       const call = /^FNDA:(\d+),(.+)$/.exec(line);
       if (branch) {
         const taken = branch[4] === '-' ? 0 : Number(branch[4]);
@@ -127,11 +131,16 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
         addHits(file, key, taken, index + 1);
         branches.set(active, file);
       } else if (declaration) {
-        declared.set(active, (declared.get(active) ?? new Set<string>()).add(occurrence(occurrences.declared, declaration[1]!)));
+        const number = Number(declaration[1]);
+        if (!Number.isSafeInteger(number)) throw new Error(`Invalid LCOV function line at line ${index + 1}`);
+        const key = occurrence(occurrences.declared, declaration[2]!);
+        const file = declared.get(active) ?? new Map<string, number>();
+        if (!file.has(key)) file.set(key, number);
+        declared.set(active, file);
       } else if (call) {
         const key = occurrence(occurrences.called, call[2]!);
-        const file = called.get(active) ?? new Map<string, boolean>();
-        file.set(key, (file.get(key) ?? false) || Number(call[1]) > 0);
+        const file = called.get(active) ?? new Map<string, number>();
+        addHits(file, key, Number(call[1]), index + 1);
         called.set(active, file);
       } else {
         throw new Error(`Invalid LCOV data at line ${index + 1}`);
@@ -143,9 +152,19 @@ export function mapCoverage({ text, root, sourceLines, codeLines, excludes }: Co
   }
   if (active !== undefined) throw new Error('Unterminated LCOV source record');
   if (!sawSource && text.trim() !== '') throw new Error('LCOV contains no source records');
-  const functions = new Map([...declared].map(([path, names]) =>
-    [path, new Map([...names].map(name => [name, called.get(path)?.get(name) ?? false]))] as const));
-  return { files, branches, functions, gaps };
+  const functions = new Map<string, Map<string, number>>();
+  const functionCalls = new Map<string, readonly FunctionCallCount[]>();
+  for (const [path, declarations] of declared) {
+    const hits = called.get(path);
+    functions.set(path, new Map([...declarations.keys()].map(key => [key, hits?.get(key) ?? 0])));
+    const counts: FunctionCallCount[] = [];
+    for (const [key, first] of declarations) {
+      const count = hits?.get(key);
+      if (count !== undefined && first <= sourceLines.get(path)!) counts.push([first, count]);
+    }
+    if (counts.length) functionCalls.set(path, counts.sort(([left], [right]) => left - right));
+  }
+  return { files, branches, functions, functionCalls, gaps };
 }
 
 function addHits<Key>(hits: Map<Key, number>, key: Key, count: number, record: number): void {
@@ -155,7 +174,7 @@ function addHits<Key>(hits: Map<Key, number>, key: Key, count: number, record: n
 }
 
 function importCoverage(input: CoverageInput): CoverageResult {
-  const { files, branches, functions, gaps } = mapCoverage(input);
+  const { files, branches, functions, functionCalls, gaps } = mapCoverage(input);
   const rows: Measurement[] = [];
   const lineCoverage: [string, FileLineCoverage][] = [];
   let totalCovered = 0;
@@ -166,11 +185,14 @@ function importCoverage(input: CoverageInput): CoverageResult {
     for (const [line, hit] of hits) (hit ? hitLines : missedLines).push(line);
     const partialHits = partiallyCoveredLines(branches.get(path), input.sourceLines.get(path)!, input.codeLines?.get(path));
     const partial = mergedRanges([...partialHits.keys()]);
-    if (hits.size || partial.length) {
+    const calls = functionCalls.get(path);
+    const bodies = input.functionBodies?.get(path);
+    if (hits.size || partial.length || calls !== undefined) {
       // A BRDA-only partial line has at least as many hits as its most frequently taken branch.
       const measured = new Map([...partialHits, ...hits]);
       lineCoverage.push([path, { covered: mergedRanges(hitLines), uncovered: mergedRanges(missedLines),
-        ...(partial.length ? { partial } : {}), hits: mergedHits(measured) }]);
+        ...(partial.length ? { partial } : {}), hits: mergedHits(measured),
+        ...(calls === undefined ? {} : { functionCalls: calls }), ...(bodies === undefined ? {} : { functionBodies: bodies }) }]);
     }
     const covered = hitLines.length;
     totalCovered += covered;
@@ -224,7 +246,7 @@ function mergedHits(hits: ReadonlyMap<number, number>): readonly HitRun[] {
 }
 
 /** Per-file and repository ratios with their counts, for a kind the LCOV reports; nothing when it reports none. */
-function hitRows(files: ReadonlyMap<string, ReadonlyMap<string, number | boolean>>, gaps: ReadonlyMap<string, string>,
+function hitRows(files: ReadonlyMap<string, ReadonlyMap<string, number>>, gaps: ReadonlyMap<string, string>,
   ratioId: string, coveredId: string, totalId: string): Measurement[] {
   const rows: Measurement[] = [];
   let totalCovered = 0;

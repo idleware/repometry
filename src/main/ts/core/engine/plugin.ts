@@ -1,5 +1,7 @@
 import type { MetricDescriptor } from '../model/metric-descriptor.js';
+import type { JsonValue } from '../model/plugin-data.js';
 export type { MetricDescriptor, MetricScope } from '../model/metric-descriptor.js';
+export { isRecord } from '../model/plugin-data.js';
 
 export const pluginApi = 'repometry.plugin/v1';
 
@@ -15,13 +17,17 @@ export interface Product {
 
 export interface InspectionInputs {
   read<T>(port: string, contract: DataContract<T>): T;
+  emitDiagnostic?(message: string): void;
 }
 
 export interface Operation {
   readonly id: string;
   readonly role: 'provider' | 'inspection';
+  readonly scope?: 'file' | 'repository';
   readonly inputs: Readonly<Record<string, DataContract>>;
   readonly output: DataContract;
+  /** Fingerprint for executable details that the declared versions and inputs do not carry. */
+  readonly implementation?: string;
   execute(inputs: InspectionInputs): unknown | Promise<unknown>;
 }
 
@@ -61,13 +67,11 @@ export interface Plugin {
   readonly operations: readonly Operation[];
   readonly rules?: readonly RuleDescriptor[];
   readonly config?: PluginConfigSchema;
+  /** Effective non-secret settings saved with inspection provenance. */
+  readonly settings?: JsonValue;
   readonly kinds: readonly PluginKind[];
   readonly claims?: FileClaims;
   readonly produces: readonly ProductDeclaration[];
 }
 
 export type LegacyPlugin = Omit<Plugin, 'kinds' | 'claims' | 'produces'>;
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

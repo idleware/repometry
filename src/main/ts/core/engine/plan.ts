@@ -1,4 +1,5 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
+import { isJsonValue } from '../model/plugin-data.js';
 import { pluginApi } from './plugin.js';
 import type { LegacyPlugin, Operation, Plugin, ProductDeclaration } from './plugin.js';
 import { manifestProducts } from './manifest.js';
@@ -20,10 +21,11 @@ export interface PlannedOperation {
   readonly inputs: ReadonlyMap<string, InputBinding>;
   readonly declaration?: ProductDeclaration;
   readonly validateOutput?: (value: unknown) => boolean;
+  readonly cacheIdentity?: string;
 }
 
 export function plan(request: PlanRequest): readonly PlannedOperation[] {
-  const { operations, declarations } = indexOperations(request.plugins, new Set(request.legacyPluginIds));
+  const { operations, declarations, cacheIdentities } = indexOperations(request.plugins, new Set(request.legacyPluginIds));
   const resolved = new Map<string, PlannedOperation>();
   const path: string[] = [];
 
@@ -60,8 +62,9 @@ export function plan(request: PlanRequest): readonly PlannedOperation[] {
     path.pop();
     const declaration = declarations.get(key);
     const validateOutput = declaration?.schema === undefined ? undefined : validateSchema(declaration.schema, key);
+    const cacheIdentity = cacheIdentities.get(key);
     resolved.set(key, { key, operation, inputs, ...(declaration === undefined ? {} : { declaration }),
-      ...(validateOutput === undefined ? {} : { validateOutput }) });
+      ...(validateOutput === undefined ? {} : { validateOutput }), ...(cacheIdentity === undefined ? {} : { cacheIdentity }) });
   }
 
   for (const key of request.select) visit(key);
@@ -80,12 +83,19 @@ function indexOperations(plugins: PlanRequest['plugins'], legacyPlugins: Readonl
   const ids = new Set<string>();
   const operations = new Map<string, Operation>();
   const declarations = new Map<string, ProductDeclaration>();
+  const cacheIdentities = new Map<string, string>();
   const metricOwners = new Map<string, string>();
   for (const plugin of plugins) {
     if (plugin.api !== pluginApi) throw new Error(`Unsupported plugin API for ${plugin.id}: ${plugin.api}`);
     if (ids.has(plugin.id) || !plugin.id || plugin.id.includes('/')) throw new Error(`Invalid or duplicate plugin ID: ${plugin.id}`);
     ids.add(plugin.id);
     const products = manifestProducts(plugin, legacyPlugins.has(plugin.id));
+    if (plugin.settings !== undefined) {
+      if (!isJsonValue(plugin.settings)) throw new Error(`Plugin settings must be JSON data: ${plugin.id}`);
+      if (plugin.config !== undefined && !new Ajv2020().validate(plugin.config, plugin.settings)) {
+        throw new Error(`Plugin settings violate the configuration schema: ${plugin.id}`);
+      }
+    }
     for (const declaration of products?.values() ?? []) {
       for (const metric of declaration.metrics ?? []) {
         const owner = metricOwners.get(metric.id);
@@ -96,15 +106,24 @@ function indexOperations(plugins: PlanRequest['plugins'], legacyPlugins: Readonl
     for (const operation of plugin.operations) {
       const key = `${plugin.id}/${operation.id}`;
       if (operations.has(key) || !operation.id || operation.id.includes('/')) throw new Error(`Invalid or duplicate operation: ${key}`);
+      if (operation.scope !== undefined && operation.scope !== 'file' && operation.scope !== 'repository') {
+        throw new Error(`Invalid operation scope: ${key}`);
+      }
       if (products !== undefined) {
         const declaration = products.get(operation.output.id);
         if (!declaration) throw new Error(`Undeclared output for ${key}: ${operation.output.id}`);
         declarations.set(key, declaration);
+        if (declaration.persistence === 'cache') {
+          cacheIdentities.set(key, JSON.stringify([
+            plugin.api, plugin.version, Object.entries(plugin.tools ?? {}).sort(), plugin.settings, operation.scope, operation.implementation,
+            declaration.contract, declaration.schema,
+          ]));
+        }
       }
       operations.set(key, operation);
     }
   }
-  return { operations, declarations };
+  return { operations, declarations, cacheIdentities };
 }
 
 function candidatesFor(contract: string, inputs: ReadonlyMap<string, string>, operations: ReadonlyMap<string, Operation>): InputBinding[] {

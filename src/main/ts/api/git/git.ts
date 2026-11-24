@@ -35,6 +35,18 @@ export async function gitUtf8(directory: string, args: readonly string[], timeou
   return utf8(result.stdout);
 }
 
+export async function gitWorkingTreePaths(directory: string): Promise<readonly string[] | undefined> {
+  try {
+    const { stdout } = await git('git', ['--no-replace-objects', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'],
+      { cwd: directory, env: { ...env, LC_ALL: 'C' }, encoding: 'buffer', maxBuffer });
+    return [...new Set(utf8(stdout).split('\0').filter(Boolean))];
+  } catch (error) {
+    if (error instanceof Error && ('code' in error && error.code === 'ENOENT'
+      || 'stderr' in error && /fatal: not a git repository\b/.test(String(error.stderr)))) return undefined;
+    throw error;
+  }
+}
+
 export async function resolveGitCommit(directory: string, revision: string): Promise<string> {
   let output: string;
   try {

@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import {
-  bandLabels, bandOf, bandScale, byKey, catalogIndex, commitValue, compareValues, difference, entryValue, firstSortAscending,
-  format, isBuiltin, metricSpecs, rollUp, trendGroups,
-} from '../../main/ts/report/html/app/viewer-metric-registry.js';
+import { bandLabels, bandOf, bandScale, compareValues, difference, firstSortAscending, format } from '../../main/ts/report/html/app/viewer-metric-format.js';
+import { byKey, catalogIndex, commitValue, entryValue, isBuiltin, metricSpecs, rollUp, trendGroups } from '../../main/ts/report/html/app/viewer-metric-registry.js';
 import type { MetricDescriptor, MetricSpec, MetricValues } from '../../main/ts/report/html/app/viewer-metric-registry.js';
 
 interface Row { readonly path: string; readonly analysed?: boolean; readonly values?: MetricValues }

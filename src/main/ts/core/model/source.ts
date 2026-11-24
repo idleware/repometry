@@ -7,6 +7,22 @@ export interface SourceFile {
   readonly bytes: Uint8Array;
 }
 
+/** A 1-based inclusive range in source text. */
+export type SourceLineRange = readonly [first: number, last: number];
+
+export function isMergedLineRanges(value: unknown): value is readonly SourceLineRange[] {
+  if (!Array.isArray(value)) return false;
+  let previous = -1;
+  for (const range of value as unknown[]) {
+    if (!Array.isArray(range) || range.length !== 2) return false;
+    const [first, last] = range as unknown[];
+    if (typeof first !== 'number' || typeof last !== 'number' || !Number.isSafeInteger(first)
+      || !Number.isSafeInteger(last) || first <= previous + 1 || last < first) return false;
+    previous = last;
+  }
+  return true;
+}
+
 export const maxClaimedFileBytes = 1024 * 1024;
 
 export function isClaimedText(bytes: Uint8Array): boolean {

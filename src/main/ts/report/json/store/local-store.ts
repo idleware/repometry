@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { Subject } from '../../../core/model/snapshot.js';
@@ -11,6 +10,7 @@ import { compactJsonSchema, packJson } from '../wire/compact-json.js';
 import { compareReports, readReport, readReportText, validSubjectId } from '../validation/report.js';
 import type { Report, ReportStore } from '../validation/report.js';
 import { validateSummaryRow } from '../validation/summary-validation.js';
+import { replaceFile } from './replace-file.js';
 
 const packedHeader = `{"schema":"${compactJsonSchema}","summary":`;
 
@@ -130,16 +130,6 @@ async function readSummaryHeader(path: string, sha: string): Promise<CommitSumma
     return envelope.summary;
   } finally {
     await file.close();
-  }
-}
-
-async function replaceFile(directory: string, name: string, contents: string): Promise<void> {
-  const temporary = join(directory, `.repometry-${randomUUID()}.tmp`);
-  try {
-    await writeFile(temporary, contents, { flag: 'wx', mode: 0o600 });
-    await rename(temporary, join(directory, name));
-  } finally {
-    await rm(temporary, { force: true });
   }
 }
 

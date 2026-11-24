@@ -1,4 +1,4 @@
-import { isRecord } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
 import type { DataContract } from '../engine/plugin.js';
 
 export const definitions = {

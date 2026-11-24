@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { availableViews } from '../../main/ts/report/html/app/viewer-trends.js';
-import type { TrendData } from '../../main/ts/report/html/app/viewer-trends.js';
+import { availableViews } from '../../main/ts/report/html/app/viewer-trend-data.js';
+import type { TrendData } from '../../main/ts/report/html/app/viewer-trend-data.js';
 import { formatMetric, metricValue, pluginSpec, useCatalog } from '../../main/ts/report/html/app/viewer-metrics.js';
 import type { Metric } from '../../main/ts/report/html/app/viewer-metrics.js';
 import type { MetricDescriptor } from '../../main/ts/report/json/wire/summary-model.js';

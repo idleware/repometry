@@ -1,19 +1,23 @@
 import { extname } from 'node:path';
 import { execute } from '../core/engine/execute.js';
 import type { Outcome } from '../core/engine/execute.js';
+import type { OperationCacheOptions } from '../core/engine/operation-cache.js';
 import { plan } from '../core/engine/plan.js';
 import type { PlannedOperation } from '../core/engine/plan.js';
-import type { FileClaims, Plugin } from '../core/engine/plugin.js';
+import type { FileClaims, Operation, Plugin } from '../core/engine/plugin.js';
 import { ReportProducts } from '../core/engine/report-products.js';
 import type { CloneSource } from '../core/model/clone-source.js';
+import { codeStructure } from '../core/model/code-structure.js';
 import type { Finding } from '../core/model/finding.js';
 import { definitions } from '../core/model/measurement.js';
 import type { Measurement } from '../core/model/measurement.js';
 import { debtModel } from '../core/model/quality-summary.js';
 import { reportSchema } from '../core/model/report.js';
 import type { Diagnostic, Report } from '../core/model/report.js';
-import { comparePaths, digest, isSourcePath, sourceDirectoriesExcluded, sourceExtensions, sourceFile, sourceLineCounts, textLineCount } from '../core/model/snapshot.js';
+import { comparePaths, digest, isSourcePath, sourceDirectoriesExcluded, sourceExtensions, sourceFile,
+  sourceFiles as sourceFileSet, sourceLineCounts, textLineCount } from '../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../core/model/source.js';
+import type { SourceLineRange } from '../core/model/source.js';
 import { defaultSourceExclusions, exclusionMatcher, generatedSourcePolicy, sourceExclusionMatcher } from '../core/profile/exclusions.js';
 import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
 import type { AnalysisInput } from '../core/usecases/inspect.js';
@@ -32,8 +36,9 @@ const duplicationPlan = plan({ plugins: [duplication], select: ['duplication/det
 const coveragePlan = plan({ plugins: [coverage], select: ['lcov/import', 'lcov/lines'], inputs: new Map([['lcov', lcovInput.id]]) });
 const securityClaims = securityPlugins.map(plugin => claimMatcher(plugin.claims));
 
-export function claimsNativeFile(path: string): boolean {
-  return securityClaims.some(match => match(path));
+export function inspectionFileMatcher(additional: readonly Plugin[]): (path: string) => boolean {
+  const matches = [...securityClaims, ...additional.map(plugin => claimMatcher(plugin.claims))];
+  return path => matches.some(match => match(path));
 }
 
 const measurementDefinitions = {
@@ -49,11 +54,12 @@ const measurementDefinitions = {
 };
 
 export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths = [], coverage: inputCoverage }: AnalysisInput,
-  additional: readonly Plugin[] = []): Promise<Report> {
+  additional: readonly Plugin[] = [], cache?: OperationCacheOptions): Promise<Report> {
   const rows: Measurement[] = [];
   const diagnostics: Diagnostic[] = (snapshot.oversizedClaims ?? []).map(oversizedClaim);
   const findings: Finding[] = [];
   const cloneSources: CloneSource[] = [];
+  const functionBodies = new Map<string, readonly SourceLineRange[]>();
   const sourceFiles = snapshot.files.filter(file => isSourcePath(file.path));
   const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional];
   const enabled = [...sourcePlugins, duplication, ...(inputCoverage === undefined ? [] : [coverage])];
@@ -62,12 +68,17 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
   if (inputCoverage === undefined && additional.some(plugin => plugin.id === coverage.id)) throw new Error('An additional plugin uses a built-in plugin ID');
   const reportProducts = new ReportProducts(plugins);
   const sourcePlans = new Map<string, readonly PlannedOperation[]>([['[true]', sourcePlan]]);
-  const usedPlans = new Map(sourcePlan.map(task => [task.key, task]));
+  const usedPlans = new Map(sourcePlan.map(task => [operationBindingKey(task), task]));
   const matches = claimedPlugins.map(plugin => claimMatcher(plugin.claims));
+  const repositoryPlugins = claimedPlugins.flatMap((plugin, index) => {
+    if (!plugin.operations.some(operation => operation.scope === 'repository')) return [];
+    return [{ plugin: pluginForScope(plugin, 'repository'), matches: matches[index]! }];
+  });
+  const filePlugins = repositoryPlugins.length ? claimedPlugins.map(plugin => pluginForScope(plugin, 'file')) : claimedPlugins;
   const parsed = new Set<string>();
   const inspected = new Set<string>();
   const scanned = new Set<string>();
-  let completedFileInspection = false;
+  let completedInspection = false;
   const scanOnlyOperations = new Set(plugins.filter(plugin => plugin.claims?.scanOnly).flatMap(({ id, operations }) =>
     operations.map(operation => `${id}/${operation.id}`)));
   const securityOperations = new Map<string, string>(claimedPlugins.filter(plugin => plugin.kinds.includes('security')).flatMap(plugin =>
@@ -75,22 +86,30 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
 
   for (const file of snapshot.files) {
     const source = isSourcePath(file.path);
-    const claimed = claimedPlugins.filter((_, index) => matches[index]!(file.path));
-    const selectedPlugins = isClaimedText(file.bytes) ? claimed : [];
-    if (claimed.length && file.bytes.byteLength > maxClaimedFileBytes) diagnostics.push(oversizedClaim(file.path));
+    const matching = filePlugins.filter((_, index) => matches[index]!(file.path));
+    const selectedPlugins = isClaimedText(file.bytes) ? matching : [];
+    if (matching.length && file.bytes.byteLength > maxClaimedFileBytes) diagnostics.push(oversizedClaim(file.path));
     if (!source && !selectedPlugins.length) continue;
     const groupKey = JSON.stringify([source, ...selectedPlugins.map(plugin => plugin.id)]);
-    const tasks = sourcePlans.get(groupKey) ?? plan({
-      plugins: source ? [...sourcePlugins, ...claimedPlugins] : selectedPlugins,
-      select: [...(source ? selected : []), ...selectedPlugins.flatMap(plugin => plugin.operations
-        .filter(operation => operation.role === 'inspection').map(operation => `${plugin.id}/${operation.id}`))],
-      inputs: new Map([['file', sourceFile.id]]), ...(source ? { bindings } : {}),
-    });
-    sourcePlans.set(groupKey, tasks);
-    const results = await execute(tasks, new Map([['file', { contract: sourceFile.id, value: file }]]));
-    if (results.get('babel-syntax/parse')?.state === 'completed') parsed.add(file.path);
+    let tasks = sourcePlans.get(groupKey);
+    if (!tasks) {
+      tasks = plan({
+        plugins: source ? [...sourcePlugins, ...selectedPlugins] : selectedPlugins,
+        select: [...(source ? selected : []), ...selectedPlugins.flatMap(inspectionKeys)],
+        inputs: new Map([['file', sourceFile.id]]), ...(source ? { bindings } : {}),
+      });
+      sourcePlans.set(groupKey, tasks);
+      for (const task of tasks) usedPlans.set(operationBindingKey(task), task);
+    }
+    const results = await execute(tasks, new Map([['file', { contract: sourceFile.id, value: file }]]), cache);
+    const syntax = results.get('babel-syntax/parse');
+    if (syntax?.state === 'completed') {
+      parsed.add(file.path);
+      if (inputCoverage !== undefined && codeStructure.accepts(syntax.product.value) && syntax.product.value.functionBodies !== undefined) {
+        functionBodies.set(file.path, syntax.product.value.functionBodies);
+      }
+    }
     for (const task of tasks) {
-      usedPlans.set(task.key, task);
       const outcome = results.get(task.key)!;
       record(task, outcome, file.path);
       if (outcome.state === 'completed' && outcome.product.contract === fileQuality.id && fileQuality.accepts(outcome.product.value)) {
@@ -99,15 +118,30 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
     }
   }
 
-  const copies = (await execute(duplicationPlan, new Map([['sources', { contract: duplicationInput.id, value: cloneSources }]])))
+  for (const { plugin, matches } of repositoryPlugins) {
+    const select = inspectionKeys(plugin);
+    if (!select.length) continue;
+    const files = snapshot.files.filter(file => matches(file.path) && isClaimedText(file.bytes));
+    if (!files.length) continue;
+    const tasks = plan({ plugins: [plugin], select, inputs: new Map([['files', sourceFileSet.id]]) });
+    const results = await execute(tasks, new Map([['files', { contract: sourceFileSet.id, value: files }]]), cache);
+    const paths = files.map(({ path }) => path);
+    for (const task of tasks) {
+      usedPlans.set(operationBindingKey(task), task);
+      record(task, results.get(task.key)!, undefined, paths);
+    }
+  }
+
+  const copies = (await execute(duplicationPlan, new Map([['sources', { contract: duplicationInput.id, value: cloneSources }]]), cache))
     .get('duplication/detect')!;
   record(duplicationPlan[0]!, copies);
 
   if (inputCoverage !== undefined) {
     const value = { text: inputCoverage.text, root: inputCoverage.sourceRoot, sourceLines: sourceLineCounts(sourceFiles),
       codeLines: new Map(cloneSources.map(({ path, codeLines }) => [path, new Set(codeLines)])),
+      functionBodies,
       excludes: sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded) };
-    const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]));
+    const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]), cache);
     for (const task of coveragePlan) record(task, outcomes.get(task.key)!);
     const result = outcomes.get('lcov/import')!;
     if (result.state === 'completed' && coverageResult.accepts(result.product.value)) {
@@ -136,15 +170,16 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
       coverage: inputCoverage === undefined ? null : { inputDigest: digest(inputCoverage.text), pathBase: inputCoverage.sourceRoot,
         merge: 'any-hit', hitCounts: 'sum', lines: 'code-only' },
       ...(securityScanners.length ? { securityScanners } : {}),
-      plugins: plugins.map(({ id, version, api, tools, kinds, claims }) =>
-        ({ id, version, api, tools: tools ?? {}, ...(kinds === undefined ? {} : { kinds }), ...(claims === undefined ? {} : { claims }) })),
+      plugins: plugins.map(({ id, version, api, tools, kinds, claims, settings }) => ({ id, version, api, tools: tools ?? {},
+        ...(kinds === undefined ? {} : { kinds }), ...(claims === undefined ? {} : { claims }), ...(settings === undefined ? {} : { settings }) })),
       operations: [...usedPlans.values(), ...duplicationPlan, ...(inputCoverage === undefined ? [] : coveragePlan)]
-        .map(task => ({ key: task.key, inputs: Object.fromEntries(task.inputs) })),
+        .map(task => ({ key: task.key, inputs: Object.fromEntries(task.inputs),
+          ...(task.operation.scope === 'repository' ? { scope: task.operation.scope } : {}) })),
     },
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
     scope: { files: sourceFiles.length, parsed: parsed.size },
-    status: diagnostics.length > 0 ? 'partial' : sourceFiles.length === 0 && !completedFileInspection ? 'not-applicable' : 'complete',
+    status: diagnostics.length > 0 ? 'partial' : sourceFiles.length === 0 && !completedInspection ? 'not-applicable' : 'complete',
     measurements: rows,
     diagnostics,
     findings,
@@ -153,16 +188,21 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
         ({ path, lines, ...(bytes === undefined ? {} : { bytes }), language: languageId(path), analysed: parsed.has(path) || inspected.has(path) })) } }),
   };
 
-  function record(task: PlannedOperation, outcome: Outcome, path?: string): void {
+  function record(task: PlannedOperation, outcome: Outcome, path?: string, paths?: readonly string[]): void {
     if (outcome.state !== 'completed') {
       diagnostics.push(diagnostic(task.key, outcome, path));
       return;
     }
     try {
       const stored = reportProducts.record(task, outcome.product, path);
-      if (path !== undefined && task.operation.role === 'inspection') {
-        completedFileInspection = true;
-        if (!scanOnlyOperations.has(task.key)) inspected.add(path);
+      for (const message of outcome.diagnostics ?? []) diagnostics.push({ operation: task.key, state: 'partial', message,
+        ...(path === undefined ? {} : { path }) });
+      if (task.operation.role === 'inspection' && (path !== undefined || paths?.length)) {
+        completedInspection = true;
+        if (!scanOnlyOperations.has(task.key)) {
+          if (path !== undefined) inspected.add(path);
+          else for (const file of paths ?? []) inspected.add(file);
+        }
       }
       const scanner = securityOperations.get(task.key);
       if (scanner) scanned.add(scanner);
@@ -174,6 +214,19 @@ export async function analyzeSnapshot({ snapshot, excludedOutput, excludedPaths 
       diagnostics.push({ operation: task.key, state: 'failed', path, message: error instanceof Error ? error.message : String(error) });
     }
   }
+}
+
+function pluginForScope(plugin: Plugin, scope: NonNullable<Operation['scope']>): Plugin {
+  const operations = plugin.operations.filter(operation => (operation.scope ?? 'file') === scope);
+  return operations.length === plugin.operations.length ? plugin : { ...plugin, operations };
+}
+
+function inspectionKeys(plugin: Plugin): string[] {
+  return plugin.operations.filter(operation => operation.role === 'inspection').map(operation => `${plugin.id}/${operation.id}`);
+}
+
+function operationBindingKey(task: PlannedOperation): string {
+  return JSON.stringify([task.key, [...task.inputs]]);
 }
 
 function oversizedClaim(path: string): Diagnostic {
