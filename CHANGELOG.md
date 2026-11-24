@@ -1,3 +1,8 @@
+## [0.7.0](https://github.com/idleware/repometry/compare/v0.6.2...v0.7.0) (2026-11-24)
+
+### Features
+* feat: add language plugins from repometry.config.json ([a7c4f47](https://github.com/idleware/repometry/commit/a7c4f47eac9e526219405811f1d837e6e3f60010))
+
 ## [0.6.2](https://github.com/idleware/repometry/compare/v0.6.1...v0.6.2) (2026-11-24)
 
 ### Fixes & improvements
