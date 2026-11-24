@@ -1,6 +1,6 @@
+// The viewer's data: the repository summary, which lists every inspected commit, and each commit's inspection on demand.
 import { unpackJson } from './compact-json.js';
 import { summarySchema } from './summary-model.js';
-import { compareHistoryEntries, historySchema } from './public-history-model.js';
 import { sourceLocator } from './viewer-source.js';
 const shaPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 export class ViewerSummaryChanged extends Error {
@@ -11,8 +11,6 @@ export class ViewerSummaryChanged extends Error {
 }
 export async function loadViewerData(mode) {
     const summary = await readSummary();
-    if (!summary)
-        return legacyViewerData(mode);
     const counts = Object.fromEntries(summary.commits.map(commit => [commit.sha, commit.counts]));
     const details = new Map(summary.commits.map(commit => [commit.sha, commit.detail]));
     return {
@@ -47,8 +45,6 @@ export async function loadViewerData(mode) {
 }
 async function readSummary(cache) {
     const response = await fetch('./summary.json', { cache });
-    if (response.status === 404)
-        return null;
     if (!response.ok)
         throw new Error('Could not load the repository summary');
     const data = await response.json();
@@ -57,6 +53,7 @@ async function readSummary(cache) {
         throw new Error('Unsupported repository summary');
     return data;
 }
+/** A commit's inspection, where the summary's path names one: `inspection/` when served locally, `details/` in an export. */
 async function readInspection(path, sha, mode) {
     const prefix = `${mode === 'local' ? 'inspection' : 'details'}/${sha}-`;
     const allowed = path.startsWith(prefix) && /^[a-f0-9]{64}\.json$/.test(path.slice(prefix.length));
@@ -69,30 +66,6 @@ async function readInspection(path, sha, mode) {
     catch {
         return null;
     }
-}
-async function legacyViewerData(mode) {
-    const [history, quality, saved, localContext] = await Promise.all([
-        readOptional('./history.json'),
-        readOptional('./quality-history.json'),
-        mode === 'local' ? null : readOptional('./details.json'),
-        mode === 'local' ? readOptional('./inspection-context.json') : null,
-    ]);
-    if (history?.schema !== historySchema || !Array.isArray(history.reports))
-        throw new Error('Unsupported history format');
-    const bundle = saved?.schema === 'urn:repometry:schema:viewer-details:1' ? saved : null;
-    const context = localContext ?? bundle?.context ?? {};
-    const reports = [...history.reports].sort(compareHistoryEntries);
-    return {
-        reports, context, quality: quality?.schema === 'urn:repometry:schema:quality-history:1' ? quality.reports : {},
-        async loadDetails(sha) {
-            if (!shaPattern.test(sha))
-                return null;
-            const inspection = mode === 'local'
-                ? await readOptional(`./details/${sha}.json`)
-                : bundle?.inspections[sha];
-            return inspection ? { schema: 'urn:repometry:schema:viewer-inspection:1', sha, context: context[sha], inspection } : null;
-        },
-    };
 }
 async function readOptional(path) {
     try {

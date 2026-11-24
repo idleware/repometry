@@ -1,11 +1,11 @@
 /** Repometry's metrics keep short query words; every other key comes from the descriptor's id. */
 const builtinKeys = {
-    'repometry.cyclomatic-babel/v1': 'complexity',
-    'repometry.cognitive-babel/v1': 'cognitive',
-    'repometry.code-lines-babel/v1': 'lines',
+    'repometry.cyclomatic-complexity/v1': 'complexity',
+    'repometry.cognitive-complexity/v1': 'cognitive',
+    'repometry.code-lines/v1': 'lines',
     'repometry.functions/v1': 'functions',
     'repometry.lcov-line-coverage/v1': 'coverage',
-    'repometry.duplicated-lines-babel/v1': 'duplication',
+    'repometry.duplicated-lines/v1': 'duplication',
     'repometry.git-change-frequency/v1': 'changes',
     'repometry.lcov-branch-coverage/v1': 'branch-coverage',
     'repometry.lcov-covered-branches/v1': 'covered-branches',
@@ -16,9 +16,9 @@ const builtinKeys = {
 };
 /** The Repometry metrics the viewer draws from typed fields, with their own labels, columns and charts. */
 const handDrawn = new Set([
-    'repometry.physical-lines/v1', 'repometry.functions/v1', 'repometry.cyclomatic-babel/v1', 'repometry.cognitive-babel/v1',
-    'repometry.classes-babel/v1', 'repometry.code-lines-babel/v1', 'repometry.comment-lines-babel/v1',
-    'repometry.duplicated-lines-babel/v1', 'repometry.lcov-line-coverage/v1', 'repometry.lcov-covered-lines/v1',
+    'repometry.physical-lines/v1', 'repometry.functions/v1', 'repometry.cyclomatic-complexity/v1', 'repometry.cognitive-complexity/v1',
+    'repometry.classes/v1', 'repometry.code-lines/v1', 'repometry.comment-lines/v1',
+    'repometry.duplicated-lines/v1', 'repometry.lcov-line-coverage/v1', 'repometry.lcov-covered-lines/v1',
     'repometry.lcov-coverable-lines/v1', 'repometry.git-change-frequency/v1',
 ]);
 /** Words that already mean something: query keys, Trends views and the series the viewer draws by hand. */

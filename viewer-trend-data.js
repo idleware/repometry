@@ -48,10 +48,14 @@ export function isPeriod(value) {
 export function trendValue(data, report, metric) {
     return metricValue(report, metric, data.quality[report.sha], data.context?.[report.sha]);
 }
-/** Views that have data in this history, in display order; debt changes need remediation times. */
+/**
+ * Views that have data in this history, in display order: debt changes need remediation times, and changed-line
+ * coverage needs saved pull request reviews.
+ */
 export function availableViews(data) {
     const has = (metric) => data.reports.some(report => trendValue(data, report, metric) !== null);
-    return groups().flatMap(([, views]) => views).filter(view => view === 'diff-coverage' || has(view === 'debt-changes' ? 'effort' : view));
+    const shown = (view) => view === 'diff-coverage' ? (data.reviews ?? 0) > 0 : has(view === 'debt-changes' ? 'effort' : view);
+    return groups().flatMap(([, views]) => views).filter(shown);
 }
 /** The whole curve by default; only a very long history opens on its last hundred inspections. */
 export function defaultPeriod(total) {

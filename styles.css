@@ -286,6 +286,11 @@ main:focus { outline: none; }
 .ring svg { width: 2.5rem; height: 2.5rem; }
 .ring-track { fill: none; stroke: var(--rule); stroke-width: 4.5; }
 .ring-arc { fill: none; stroke: var(--grade-a); stroke-width: 4.5; stroke-linecap: butt; transform: rotate(-90deg); transform-origin: 20px 20px; }
+/* The ring takes the coverage grade's colour, as the coverage badge does. */
+.ring[data-grade="B"] .ring-arc { stroke: var(--grade-b); }
+.ring[data-grade="C"] .ring-arc { stroke: var(--grade-c); }
+.ring[data-grade="D"] .ring-arc { stroke: var(--grade-d); }
+.ring[data-grade="F"] .ring-arc { stroke: var(--grade-f); }
 .ring-label { fill: var(--ink); font-size: 12.5px; font-weight: 650; text-anchor: middle; }
 .severity { background: var(--grade-a); font-size: 1.125rem; }
 .severity[data-severity="none"] { background: var(--grade-none); }

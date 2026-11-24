@@ -1,6 +1,6 @@
 import { byId, count, percent, quantity } from './viewer-dom.js';
 import { codeSmellCategories, securityCategories } from './viewer-files.js';
-import { formatMetric, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
+import { coverageGrade, formatMetric, metricValue, pluginSpec, securityGrades, securityRisks } from './viewer-metrics.js';
 import { href } from './viewer-route.js';
 /** Coverage kinds beyond lines, by their registry keys, in the words the Overview card uses for them. */
 const coverageKinds = [['branch-coverage', 'Branches'], ['function-coverage', 'Functions']];
@@ -68,7 +68,13 @@ export function renderInspection(report) {
         detailText('coverage-detail', 'No coverage report');
     else
         detailText('coverage-detail', `${percent(coverage)} of ${count(lines.total)} lines`, coverage < 1 ? uncoveredLink(report.sha) : undefined);
-    byId('coverage-mark').replaceChildren(ring(coverage));
+    const mark = byId('coverage-mark');
+    mark.replaceChildren(ring(coverage));
+    // The ring is coloured by the grade the coverage badge gives it.
+    if (coverage === null)
+        delete mark.dataset.grade;
+    else
+        mark.dataset.grade = coverageGrade(coverage);
     renderCoverageKinds(report);
 }
 export function renderQuality(report, quality) {
