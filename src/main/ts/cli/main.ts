@@ -8,12 +8,12 @@ import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '.
 import { remoteExecutor } from '../api/worker/remote-executor.js';
 import { serveWorker } from '../api/worker/worker.js';
 import { workerToken } from '../api/worker/worker-protocol.js';
-import { defaultLanguages } from '../compose/languages.js';
+import { defaultLanguages, languageRegistry } from '../compose/languages.js';
 import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
 import { prepareMetabranch } from '../compose/prepare-metabranch.js';
 import { reviewExitCode, reviewPull } from '../compose/review.js';
-import { builtInPlugins, describePlugin } from '../compose/plugin-list.js';
+import { effectivePlugins } from '../compose/plugin-list.js';
 import { isRecord } from '../core/engine/plugin.js';
 import type { Plugin } from '../core/engine/plugin.js';
 import { validSubjectId } from '../core/model/report.js';
@@ -125,7 +125,7 @@ const commands: Readonly<Record<string, Command>> = {
     async run(input) {
       const { root } = await context(input);
       const config = await readConfig(root, input);
-      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: [...builtInPlugins, ...config.plugins.map(describePlugin)],
+      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: effectivePlugins(config.plugins),
         importers: importerIds, reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
     },
   },
@@ -146,7 +146,7 @@ const commands: Readonly<Record<string, Command>> = {
     async run(input) {
       const host = input.text('listen') ?? '127.0.0.1';
       if (host !== '127.0.0.1' && host !== '0.0.0.0') throw new Error('--listen must be 127.0.0.1 or 0.0.0.0');
-      announce(await serveWorker(host, port(input.text('port') ?? '7331'), workerToken(), analyzeSnapshot, defaultLanguages.isSource));
+      announce(await serveWorker(host, port(input.text('port') ?? '7331'), workerToken(), analyzeSnapshot, languageRegistry([]).isSource));
     } },
 };
 
@@ -168,7 +168,7 @@ async function analyze(input: Invocation): Promise<number> {
   const branch = input.text('branch') ?? config.branch;
   const revision = input.args[0] ?? (!input.flag('working-tree') && branch !== undefined ? await resolveGitBranch(root, branch) : 'HEAD');
   const imports = input.many('import');
-  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
+  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
   const executor = analysisExecutor(input, config.plugins);
@@ -176,7 +176,7 @@ async function analyze(input: Invocation): Promise<number> {
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
     : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-      lcov, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins: config.plugins,
+      lcov, goCover, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins: config.plugins,
       findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined },
     executor);
   if (github) await writeGitHubResult(report);
@@ -251,7 +251,7 @@ function analysisExecutor(input: Invocation, plugins: readonly Plugin[]) {
   const worker = input.text('worker');
   if (worker === undefined) return undefined;
   if (plugins.length) throw new Error('Configured process plugins require local analysis. Use --no-config with --worker.');
-  return remoteExecutor(worker, workerToken(), defaultLanguages.isSource);
+  return remoteExecutor(worker, workerToken(), languageRegistry([]).isSource);
 }
 
 async function isSaved(store: string, id: string): Promise<boolean> {
@@ -292,9 +292,9 @@ async function diffCoverage(input: Invocation): Promise<number> {
   const { directory, root } = await context(input);
   const config = await readConfig(root, input);
   const imports = input.many('import');
-  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
-  if (!lcov || (imports.length && findings.length)) throw new Error('diff-coverage requires --import lcov=PATH');
-  const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, plugins: config.plugins,
+  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
+  if ((!lcov && !goCover) || (imports.length && findings.length)) throw new Error('diff-coverage requires --import lcov=PATH or go-cover=PATH');
+  const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover, plugins: config.plugins,
     exclude: [...config.exclude, ...input.many('exclude')], minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage') });
   if (useGitHub(input)) await writeGitHubDiffCoverage(report);
   print(report);
@@ -307,7 +307,7 @@ async function review(input: Invocation): Promise<number> {
   if (input.flag('annotations') && !github) throw new Error('--annotations requires --ci github');
   const config = await readConfig(root, input);
   const imports = input.many('import');
-  const { lcov, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
+  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const baselinePath = input.text('baseline-store');
   const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath, directory);
   const exclude = [...config.exclude, ...input.many('exclude')];
@@ -322,7 +322,7 @@ async function review(input: Invocation): Promise<number> {
     },
   } : store.reader;
   const number = count(input.text('pull'), '--pull', 1);
-  const report = await reviewPull({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, exclude, number, plugins: config.plugins,
+  const report = await reviewPull({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover, exclude, number, plugins: config.plugins,
     minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage'),
     minimumLines: count(input.text('min-lines') ?? config.minLines, '--min-lines'),
     maxCoverageDrop: percent(input.text('max-coverage-drop') ?? config.maxCoverageDrop, '--max-coverage-drop'),

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { Subject } from '../../../core/model/snapshot.js';
 import { isRecord } from '../../../core/engine/plugin.js';
-import { commitSummary, orderSummaries, repositorySummary } from '../projections/commit-summary.js';
+import { commitSummary, needsMaintainabilityRefresh, orderSummaries, repositorySummary } from '../projections/commit-summary.js';
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary } from '../wire/summary-model.js';
 import { compactJsonSchema, packJson } from '../wire/compact-json.js';
@@ -127,7 +127,7 @@ async function readSummaryHeader(path: string, sha: string): Promise<CommitSumma
     const envelope: unknown = JSON.parse(first.slice(0, -1) + '}');
     if (!isRecord(envelope) || !validateSummaryRow(envelope.summary) || envelope.summary.sha !== sha
       || !envelope.summary.revision || envelope.summary.detail !== undefined) throw new Error(`Invalid report summary: ${sha}`);
-    return envelope.summary;
+    return needsMaintainabilityRefresh(envelope.summary) ? undefined : envelope.summary;
   } finally {
     await file.close();
   }

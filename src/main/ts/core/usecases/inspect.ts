@@ -34,7 +34,7 @@ interface InspectionCoverage {
 export interface InspectionPorts {
   readSource(excludes: Excludes): Promise<InspectionSource>;
   readonly analyze: AnalysisExecutor;
-  readCoverage?(): Promise<InspectionCoverage>;
+  readCoverage?(source: Pick<InspectionSource, 'root' | 'snapshot'>): Promise<InspectionCoverage>;
   importFindings?(report: Report, root: string, excludes: Excludes): Promise<Report>;
   recordChurn?(report: Report, root: string, paths: readonly string[]): Promise<Report>;
 }
@@ -49,7 +49,7 @@ export async function executeInspection(options: InspectionOptions, ports: Inspe
   const ignore = normalizeFindingIgnore(options.ignore ?? []);
   const source = await ports.readSource(sourceExclusionMatcher(excludedPaths));
   const { snapshot, root, excludedOutput } = source;
-  const lcov = await ports.readCoverage?.();
+  const lcov = await ports.readCoverage?.(source);
   const report = await ports.analyze({
     snapshot, excludedOutput, excludedPaths,
     coverage: lcov === undefined ? undefined : { text: lcov.text, sourceRoot: root },

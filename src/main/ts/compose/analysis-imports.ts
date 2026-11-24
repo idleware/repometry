@@ -25,9 +25,10 @@ export async function importAnalysisCoverage({ coverage: input, excludedPaths = 
   sources: AnalysisSources, files: FileAnalysis, results: AnalysisResults, cache?: OperationCacheOptions): Promise<void> {
   if (input === undefined) return;
   const unclassified = new Set([...results.unmeasured].filter(([, missing]) => missing.includes('codeLines')).map(([path]) => path));
+  const excludes = sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded);
   const value = { text: input.text, root: input.sourceRoot, sourceLines: sourceLineCounts(sources.sourceFiles),
     codeLines: files.codeLines, unclassified, functionBodies: files.functionBodies,
-    excludes: sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded) };
+    excludes: (path: string) => excludes(path) || sources.unavailableFiles.has(path) };
   const outcomes = await execute(coveragePlan, new Map([['lcov', { contract: lcovInput.id, value }]]), cache);
   for (const task of coveragePlan) {
     results.remember(task);

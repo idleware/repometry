@@ -10,7 +10,7 @@ import type { ProvidedLanguage } from '../core/model/language.js';
 import type { JsonValue } from '../core/model/plugin-data.js';
 import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
 import { languageRegistry } from './languages.js';
-import { builtInPlugins } from './plugin-list.js';
+import { builtInPluginIds } from './plugin-list.js';
 
 type Selectors = Pick<FileClaims, 'extensions' | 'globs'>;
 
@@ -36,13 +36,13 @@ export function readProcessPlugins(value: unknown): readonly Plugin[] {
     const error = validate.errors?.[0];
     throw new Error(`Config plugins${error?.instancePath ?? ''} ${error?.message ?? 'is invalid'}`);
   }
-  const ids = new Set(builtInPlugins.map(({ id }) => id));
+  const ids = new Set(builtInPluginIds);
   const plugins = value.map((definition, index) => {
     if (ids.has(definition.id)) throw new Error(`Config plugins/${index}/id duplicates plugin ${definition.id}`);
     ids.add(definition.id);
     return configuredPlugin(definition, index);
   });
-  languageRegistry(plugins);
+  languageRegistry(plugins, false);
   return plugins;
 }
 

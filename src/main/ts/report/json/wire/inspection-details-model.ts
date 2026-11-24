@@ -43,6 +43,7 @@ export interface ProfileLanguage {
   readonly label: string;
   readonly extensions: readonly string[];
   readonly globs: readonly string[];
+  readonly unavailableReason?: string;
 }
 
 export interface ProfileRule {

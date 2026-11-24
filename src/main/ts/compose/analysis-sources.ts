@@ -29,17 +29,24 @@ export function inspectionFileMatcher(additional: readonly Plugin[], languages =
 }
 
 export function selectAnalysisSources(snapshot: SourceSnapshot, additional: readonly Plugin[], withCoverage: boolean) {
-  const languages = additional.length ? languageRegistry(additional) : defaultLanguages;
+  const languages = languageRegistry(additional);
   const sources: SelectedSource[] = snapshot.files.map(file => ({ file, provider: languages.select(file.path) }));
   const providersByPath = new Map(sources.flatMap(({ file, provider }) => provider ? [[file.path, provider] as const] : []));
+  const unavailableFiles = new Set(sources.filter(({ file, provider }) => !provider && languages.skipped(file.path))
+    .map(({ file }) => file.path));
   const sourceFiles = sources.flatMap(({ file, provider }) => provider ? [file] : []);
   const bound = new Map(languages.providers.map(({ plugin }) => [plugin.id, plugin]));
-  const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...additional.map(plugin => bound.get(plugin.id) ?? plugin)];
+  const native = languages.native.flatMap(({ id }) => {
+    const plugin = bound.get(id);
+    return plugin ? [plugin] : [];
+  });
+  const claimedPlugins = [...securityPlugins.filter(plugin => !additional.includes(plugin)), ...native,
+    ...additional.map(plugin => bound.get(plugin.id) ?? plugin)];
   const plugins = [defaultProvider.plugin, ...structuralInspections, duplication, ...(withCoverage ? [coverage] : []), ...claimedPlugins];
   validateRegistration(plugins, additional, withCoverage);
   const claims: ClaimedPlugin[] = claimedPlugins.map(plugin => ({ plugin, matches: plugin.kinds.includes('language')
     ? path => providersByPath.get(path)?.plugin.id === plugin.id : claimMatcher(plugin.claims, languages.id) }));
-  return { languages, sources, sourceFiles, providersByPath, plugins, claimedPlugins,
+  return { languages, sources, sourceFiles, unavailableFiles, providersByPath, plugins, claimedPlugins,
     perFile: claimsForScope(claims, 'file'), repository: claimsForScope(claims, 'repository') };
 }
 

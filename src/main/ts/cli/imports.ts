@@ -9,11 +9,12 @@ const scanners = {
   osv: { format: 'osv', category: 'dependency' },
 } as const;
 
-export const importerIds = ['lcov', ...Object.keys(scanners)];
+export const importerIds = ['lcov', 'go-cover', ...Object.keys(scanners)];
 
 /** Typed imports resolve against the invocation directory, imports from the config against the repository root. */
 export function readInputs(base: string, inputs: readonly string[]) {
   const lcov: string[] = [];
+  const goCover: string[] = [];
   const findings: FindingInput[] = [];
   for (const value of inputs) {
     const equal = value.indexOf('=');
@@ -21,10 +22,11 @@ export function readInputs(base: string, inputs: readonly string[]) {
     const file = value.slice(equal + 1);
     if (equal < 1 || !/^[a-z][a-z0-9-]*$/.test(format) || file === '') throw new Error('Use --import FORMAT=PATH');
     if (format === 'lcov') lcov.push(resolve(base, file));
+    else if (format === 'go-cover') goCover.push(resolve(base, file));
     else {
       if (!Object.hasOwn(scanners, format)) throw new Error(`Unknown import format: ${format}. Choose ${importerIds.join(', ')}.`);
       findings.push({ ...scanners[format as keyof typeof scanners], file: resolve(base, file) });
     }
   }
-  return { lcov: lcov.length ? lcov : undefined, findings };
+  return { lcov: lcov.length ? lcov : undefined, goCover: goCover.length ? goCover : undefined, findings };
 }

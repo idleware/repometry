@@ -139,7 +139,7 @@ test('profile and CLI exclusions apply to source files and LCOV and are recorded
   assert.deepEqual(report.scope, { files: 1, parsed: 1 });
   assert.deepEqual(report.diagnostics, []);
   assert.deepEqual(report.appliedConfig.source, {
-    extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'],
+    extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.go', '.py'],
     excludedDirectories: ['.git', '.repometry', 'node_modules', 'target'],
     excludedOutput: '.repometry',
     excludedPaths: ['.yarn/releases', '**/vendor', 'extra bundle.js'],

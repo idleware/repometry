@@ -70,6 +70,7 @@ function gradeMeasuredFiles(report: Report, code: ReadonlyMap<string, number> | 
   const skipped = new Set(report.ruleSkips?.filter(({ plugin }) => plugin === 'maintainability' || plugin === 'duplication')
     .map(({ path }) => path));
   const measured = new Map([...code].filter(([path]) => duplication?.has(path) && !skipped.has(path)));
+  if (measured.size === 0) return null;
   const smells = report.findings.filter(finding => finding.category === 'duplication' || finding.category === 'structure');
   const totalFiles = report.scope.files;
   const complete = measured.size === totalFiles;

@@ -1,9 +1,10 @@
 import { checkMetaManifest } from '../../report/json/validation/metabranch.js';
 import { gitBlobText, gitTreeFiles, resolveGitCommit } from './git.js';
+import { qualitySummary } from '../../core/model/quality-summary.js';
 import type { Subject } from '../../core/model/snapshot.js';
 import { compareReports, readReportText, validSubjectId } from '../../report/json/validation/report.js';
 import type { Report, ReportReader } from '../../report/json/validation/report.js';
-import { commitSummary, expandSummaryCatalog, orderSummaries } from '../../report/json/projections/commit-summary.js';
+import { commitSummary, expandSummaryCatalog, needsMaintainabilityRefresh, orderSummaries } from '../../report/json/projections/commit-summary.js';
 import type { CommitSummary } from '../../report/json/wire/summary-model.js';
 import { validateSummaryIndex } from '../../report/json/validation/summary-validation.js';
 
@@ -37,9 +38,21 @@ export class GitReportReader implements ReportReader {
       if (!validateSummaryIndex(value)) throw new Error(`Invalid Repometry summary in ${this.revision}`);
       const shas = new Set(value.commits.map(row => row.sha));
       if (shas.size === value.commits.length && entries.length === shas.size && entries.every(({ id }) => shas.has(id))
-        && value.commits.every(row => row.revision && row.counts && !row.detail)) return expandSummaryCatalog(value);
+        && value.commits.every(row => row.revision && row.counts && !row.detail)) {
+        return this.refreshMaintainability(expandSummaryCatalog(value), entries);
+      }
     }
     return orderSummaries((await this.readEntries(entries)).map(commitSummary));
+  }
+
+  private refreshMaintainability(rows: readonly CommitSummary[], entries: readonly { id: string; oid: string }[]) {
+    if (!rows.some(needsMaintainabilityRefresh)) return rows;
+    const blobs = new Map(entries.map(({ id, oid }) => [id, oid]));
+    return Promise.all(rows.map(async row => {
+      if (!needsMaintainabilityRefresh(row)) return row;
+      const report = readReportText(await gitBlobText(this.directory, blobs.get(row.sha)!), { kind: 'commit', id: row.sha });
+      return { ...row, quality: { ...row.quality, maintainability: qualitySummary(report).maintainability } };
+    }));
   }
 
   private async reportEntries(commit: string): Promise<{ id: string; oid: string }[]> {

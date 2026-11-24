@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { isSourcePathname } from '../../core/ports/source-provider.js';
 import type { ToolInvocation, ToolResult, ToolRunner } from '../../core/ports/tool-runner.js';
 import { toolFailure } from './failure.js';
+import { validateToolInvocation, writeToolSnapshot } from './tool-snapshot.js';
 
 const docker = promisify(execFile);
 const proxyOverrides = ['HTTP_PROXY', 'HTTPS_PROXY', 'FTP_PROXY', 'ALL_PROXY', 'NO_PROXY']
@@ -33,26 +33,12 @@ export class DockerToolRunner implements ToolRunner {
   }
 
   async run(invocation: ToolInvocation): Promise<ToolResult> {
+    validateToolInvocation(invocation);
     const [command, ...args] = invocation.argv;
-    if (!command || invocation.argv.some(arg => arg.includes('\0'))) throw new Error('A tool command and valid arguments are required');
-    if (!Number.isSafeInteger(invocation.timeoutMs) || invocation.timeoutMs < 1 || invocation.timeoutMs > 2_147_483_647) {
-      throw new Error('Invalid tool timeout');
-    }
-    if (!Number.isSafeInteger(invocation.maxOutputBytes) || invocation.maxOutputBytes < 1) throw new Error('Invalid tool output limit');
-    const paths = new Set<string>();
-    for (const { path } of invocation.files) {
-      if (!isSourcePathname(path) || paths.has(path)) throw new Error(`Invalid or duplicate snapshot path: ${path}`);
-      paths.add(path);
-    }
-
     const directory = await mkdtemp(join(tmpdir(), 'repometry-tool-'));
     const container = `repometry-tool-${randomUUID()}`;
     try {
-      for (const file of invocation.files) {
-        const path = join(directory, file.path);
-        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-        await writeFile(path, file.bytes, { mode: 0o600, flag: 'wx' });
-      }
+      await writeToolSnapshot(directory, invocation.files);
       const mount = `type=bind,"source=${directory.replaceAll('"', '""')}",target=/snapshot,readonly`;
       const uid = process.getuid?.();
       const gid = process.getgid?.();
@@ -63,7 +49,7 @@ export class DockerToolRunner implements ToolRunner {
           'run', '--rm', '--name', container, '--interactive', '--pull', 'never', '--network', 'none', '--read-only',
           '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev', '--env', 'HOME=/tmp',
           ...this.limits, ...user, ...proxyOverrides,
-          '--mount', mount, '--workdir', '/snapshot', '--entrypoint', command, '--', this.image, ...args,
+          '--mount', mount, '--workdir', '/snapshot', '--entrypoint', command!, '--', this.image, ...args,
         ], invocation);
       } catch (error) {
         await removeContainer(container);

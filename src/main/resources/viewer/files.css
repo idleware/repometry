@@ -557,6 +557,7 @@ code.fx-function-name { font-size: .75rem; color: var(--secondary); }
 .profile-claims { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
 .profile-claims > li { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: .75rem; align-items: baseline; }
 .profile-claim { font-size: .875rem; color: var(--ink); }
+.profile-claim-patterns { display: flex; flex-wrap: wrap; align-items: baseline; gap: .375rem .75rem; }
 .profile-chips { display: flex; flex-wrap: wrap; gap: .375rem; margin: 0; padding: 0; list-style: none; }
 .profile-chips li { padding: .0625rem .5rem; border-radius: 5px; background: var(--surface-2); color: var(--ink); font: .8125rem/1.6 var(--mono); overflow-wrap: anywhere; }
 .profile-rule { font-size: .8125rem; font-weight: 600; }

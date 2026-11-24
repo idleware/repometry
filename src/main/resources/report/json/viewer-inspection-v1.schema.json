@@ -156,7 +156,8 @@
               "id": { "type": "string" },
               "label": { "type": "string" },
               "extensions": { "type": "array", "items": { "type": "string" } },
-              "globs": { "type": "array", "items": { "type": "string" } }
+              "globs": { "type": "array", "items": { "type": "string" } },
+              "unavailableReason": { "type": "string" }
             }
           }
         },

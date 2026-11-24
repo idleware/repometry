@@ -35,6 +35,12 @@ export function commitSummary(report: Report): CommitSummary {
   };
 }
 
+// Earlier indices recorded zero effort before any file supplied all inputs for a grade.
+export function needsMaintainabilityRefresh(row: CommitSummary): boolean {
+  const summary = row.quality.maintainability;
+  return summary?.grade === null && summary.debtRatio === null && summary.smells === 0 && summary.effortMinutes === 0;
+}
+
 export function orderSummaries(rows: readonly CommitSummary[]): CommitSummary[] {
   return [...rows].sort(compareHistoryEntries);
 }

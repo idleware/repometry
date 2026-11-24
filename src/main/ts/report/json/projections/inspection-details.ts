@@ -74,10 +74,11 @@ export function profileSettings(applied: unknown): ProfileSettings | undefined {
 }
 
 function profileLanguages(plugins: readonly Record<string, unknown>[], recordedExtensions: ReadonlySet<string>): ProfileLanguage[] {
-  const recorded = plugins.flatMap(({ id: plugin, providesLanguages }) => {
+  const recorded = plugins.flatMap(({ id: plugin, providesLanguages, unavailableReason }) => {
     if (typeof plugin !== 'string' || !Array.isArray(providesLanguages)) return [];
     return providesLanguages.flatMap(language => isRecord(language) && isLanguageDisplay(language)
-      ? [{ plugin, id: language.id, label: language.label, extensions: strings(language.extensions), globs: strings(language.globs) }]
+      ? [{ plugin, id: language.id, label: language.label, extensions: strings(language.extensions), globs: strings(language.globs),
+        ...(typeof unavailableReason === 'string' ? { unavailableReason } : {}) }]
       : []);
   });
   if (recorded.length) return recorded;

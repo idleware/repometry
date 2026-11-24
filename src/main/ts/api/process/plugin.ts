@@ -16,8 +16,15 @@ export interface ProcessPluginManifest extends Omit<Plugin, 'operations' | 'tool
   readonly tools: Readonly<Record<string, string>>;
 }
 
-export function processPlugin({ operations, ...manifest }: ProcessPluginManifest, runner: ToolRunner): Plugin {
+type ProcessRunner = Pick<ToolRunner, 'run' | 'implementation'>;
+
+export function processPlugin(manifest: ProcessPluginManifest, runner: ToolRunner): Plugin {
   if (runner.network !== 'none') throw new Error('Process plugins require a runner with networking disabled');
+  return bindProcessPlugin(manifest, runner);
+}
+
+// Only the packaged, first-party parsers use the host runner.
+export function bindProcessPlugin({ operations, ...manifest }: ProcessPluginManifest, runner: ProcessRunner): Plugin {
   const versions = Object.values(manifest.tools);
   if (versions.length === 0 || versions.some(version => typeof version !== 'string' || !version.trim())) {
     throw new Error('Process plugins must declare their tool versions');
@@ -25,7 +32,7 @@ export function processPlugin({ operations, ...manifest }: ProcessPluginManifest
   return { ...manifest, operations: operations.map(operation => bindOperation(manifest.id, manifest.settings ?? null, operation, runner)) };
 }
 
-function bindOperation(plugin: string, settings: JsonValue, operation: ProcessOperation, runner: ToolRunner): Operation {
+function bindOperation(plugin: string, settings: JsonValue, operation: ProcessOperation, runner: ProcessRunner): Operation {
   const { id, role, scope, inputs, output, argv, timeoutMs, maxOutputBytes } = operation;
   const implementation = digest(JSON.stringify([processPluginProtocol, operation.implementation, runner.implementation, argv, timeoutMs, maxOutputBytes]));
   return { id, role, scope, inputs, output, implementation, async execute(context) {

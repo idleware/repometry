@@ -99,3 +99,12 @@ test('a language with fewer measures leaves repository totals unknown and stays 
     gradeCoverage: { measuredFiles: 1, totalFiles: 2 },
   });
 });
+
+test('a file whose structural rules were unavailable has no maintainability summary', async () => {
+  const report = await scan({ 'complete.js': 'export const value = 1;\n' });
+  assert.equal(qualitySummary(report).maintainability?.grade, 'A');
+  const skipped = { ...report, ruleSkips: [{
+    path: 'complete.js', plugin: 'maintainability', rules: ['function-complexity'], reason: 'unmeasured' as const,
+  }] };
+  assert.equal(qualitySummary(skipped).maintainability, null);
+});

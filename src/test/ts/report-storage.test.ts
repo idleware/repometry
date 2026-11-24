@@ -113,3 +113,20 @@ test('a legacy timestamp or inconsistent duplication counts do not prevent other
   assert.equal(summaries[1]?.quality.duplication?.ratio, null);
   assert.deepEqual(await store.read(legacy.subject), legacy);
 });
+
+test('older cached zero grades are recalculated from the saved inspection', async t => {
+  const output = await mkdtemp(join(tmpdir(), 'repometry-summary-grade-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  const store = new LocalReportStore(output);
+  const base = report('a', '2026-01-01T00:00:00.000Z', 5);
+  const original = { ...base, findings: [],
+    definitions: { ...base.definitions, [definitions.codeLines]: 'Code lines' },
+    measurements: [...base.measurements, { ...base.measurements[0]!, definition: definitions.codeLines }] };
+  await store.save(original);
+  const path = join(output, 'commits', base.subject.id, 'report.json');
+  const [header, ...body] = (await readFile(path, 'utf8')).split('\n');
+  const envelope = JSON.parse(header!.slice(0, -1) + '}');
+  envelope.summary.quality.maintainability = { smells: 0, effortMinutes: 0, debtRatio: null, grade: null };
+  await writeFile(path, [JSON.stringify(envelope).slice(0, -1) + ',', ...body].join('\n'));
+  assert.equal((await store.listSummaries())[0]?.quality.maintainability, null);
+});

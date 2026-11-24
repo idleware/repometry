@@ -12,8 +12,7 @@ import type { DiffCoverageRequest } from './diff-coverage.js';
 
 export { projectReview, reviewExitCode } from '../core/usecases/review.js';
 
-export interface ReviewRequest extends Omit<DiffCoverageRequest, 'lcov'> {
-  readonly lcov?: DiffCoverageRequest['lcov'];
+export interface ReviewRequest extends DiffCoverageRequest {
   readonly number?: number;
   readonly minimumLines?: number;
   readonly maxCoverageDrop?: number;
@@ -29,7 +28,7 @@ export async function reviewPull(request: ReviewRequest, current: ReportReader, 
 
 export async function review(request: ReviewRequest & { readonly output?: string }, overrides?: Partial<ReviewPorts>): Promise<PullReview> {
   const store = new LocalReportStore(resolve(request.output ?? resolve(request.directory, '.repometry')));
-  const { lcov } = request;
+  const { lcov, goCover } = request;
   return executeReview(request, {
     readHead: id => readIfAvailable(store, id),
     readBase: id => readIfAvailable(store, id),
@@ -38,7 +37,7 @@ export async function review(request: ReviewRequest & { readonly output?: string
       const [head, base] = await Promise.all([resolveGitCommit(directory, request.revision), resolveGitCommit(directory, request.base)]);
       return { head, base, mergeBase: () => findMergeBase(directory, base, head) };
     },
-    ...(lcov === undefined ? {} : { measureChanged: () => measureChangedLines({ ...request, lcov }) }),
+    ...(lcov === undefined && goCover === undefined ? {} : { measureChanged: () => measureChangedLines(request) }),
     ...overrides,
   });
 }

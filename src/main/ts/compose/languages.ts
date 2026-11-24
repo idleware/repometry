@@ -5,6 +5,8 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { LanguageDisplay } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
+import { nativeLanguagePlugins } from './native-language-plugins.js';
+import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { restrictStructureMeasures } from './structure-measures.js';
 import { babelProvider } from '../plugins/language-js/babel-provider.js';
 
@@ -16,9 +18,9 @@ export interface LanguageProvider {
   readonly language: (path: string) => string | undefined;
 }
 
-export const defaultLanguages = languageRegistry([]);
+export const defaultLanguages = languageRegistry([], false);
 
-export function languageRegistry(plugins: readonly Plugin[]): {
+export function languageRegistry(plugins: readonly Plugin[], includeNative = true): {
   select(path: string): LanguageProvider | undefined;
   isSource(path: string): boolean;
   id(path: string): string;
@@ -26,8 +28,18 @@ export function languageRegistry(plugins: readonly Plugin[]): {
   readonly globs: readonly string[];
   readonly catalog: readonly LanguageDisplay[];
   readonly providers: readonly LanguageProvider[];
+  readonly native: readonly NativeLanguagePlugin[];
+  skipped(path: string): boolean;
 } {
-  const entries = [babelProvider, ...plugins.filter(plugin => plugin.kinds?.includes('language'))].map(plugin => {
+  const languagePlugins = plugins.filter(plugin => plugin.kinds?.includes('language'));
+  const configured = new Set(languagePlugins.flatMap(plugin => plugin.providesLanguages?.map(language => language.id) ?? []));
+  const native = includeNative ? nativeLanguagePlugins().filter(plugin =>
+    plugin.providesLanguages?.every(language => !configured.has(language.id))) : [];
+  const nativeIds = new Set(native.map(({ id }) => id));
+  const unavailable = native.filter(plugin => plugin.unavailableReason !== undefined).flatMap(plugin => plugin.providesLanguages ?? []);
+  const skippedClaims = unavailable.map(claim => claimMatcher(claim));
+  const enabled = native.filter(plugin => plugin.unavailableReason === undefined);
+  const entries = [babelProvider, ...languagePlugins, ...enabled].map(plugin => {
     const operations = plugin.operations.filter(operation => operation.role === 'provider'
       && operation.output.id === (operation.scope === 'repository' ? codeStructures.id : codeStructure.id));
     const [operation] = operations;
@@ -51,7 +63,7 @@ export function languageRegistry(plugins: readonly Plugin[]): {
     const claims: readonly FileClaims[] = declared.length ? declared : [plugin.claims!];
     return { provider, claims, matches: declared.length ? (path: string) => language(path) !== undefined : claimMatcher(plugin.claims) };
   });
-  const claims = entries.flatMap(entry => entry.claims);
+  const claims = [...entries.flatMap(entry => entry.claims), ...unavailable];
   const extensions = [...new Set(claims.flatMap(entry => entry.extensions ?? []))];
   const globs = [...new Set(claims.flatMap(entry => entry.globs ?? []))];
   const providers = entries.map(({ provider }) => provider);
@@ -59,14 +71,19 @@ export function languageRegistry(plugins: readonly Plugin[]): {
     id, label, ...(color === undefined ? {} : { color }),
   })));
   if (new Set(catalog.map(({ id }) => id)).size !== catalog.length) throw new Error('Duplicate provided language ID');
-  return { select, isSource: path => select(path) !== undefined, id: path => select(path)?.language(path) ?? fileTypeId(path), extensions, globs,
-    catalog, providers };
+  return { select, isSource: path => select(path) !== undefined || skipped(path), id: path => select(path)?.language(path) ?? fileTypeId(path), extensions, globs,
+    catalog, providers, native, skipped };
+
+  function skipped(path: string): boolean {
+    return skippedClaims.some(matches => matches(path)) && !path.split('/').slice(0, -1).some(isExcludedDirectory);
+  }
 
   function select(path: string): LanguageProvider | undefined {
     let selected: LanguageProvider | undefined;
     for (const { provider, matches } of entries) {
       if (!matches(path)) continue;
       if (!selected && path.split('/').slice(0, -1).some(isExcludedDirectory)) return undefined;
+      if (selected && nativeIds.has(provider.plugin.id)) continue;
       if (selected) throw new Error(`Multiple language providers claim ${path}: ${selected.plugin.id}, ${provider.plugin.id}`);
       selected = provider;
     }

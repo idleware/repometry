@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { pickerStatus } from '../../main/ts/report/html/app/viewer-commit-picker.js';
 import { chosenLabel } from '../../main/ts/report/html/app/viewer-controls.js';
 import { ignoreRecord, literalPath } from '../../main/ts/report/html/app/viewer-issue-group.js';
-import { toggleLanguage } from '../../main/ts/report/html/app/viewer-language-bar.js';
+import { shareText, toggleLanguage } from '../../main/ts/report/html/app/viewer-language-bar.js';
 import { coverageGrade, gradeScope } from '../../main/ts/report/html/app/viewer-metrics.js';
 import { tableSummary } from '../../main/ts/report/html/app/viewer-profile-table.js';
 import { href, readRoute } from '../../main/ts/report/html/app/viewer-route.js';
@@ -11,6 +11,7 @@ import { excerptRange } from '../../main/ts/report/html/app/viewer-source-view.j
 import { spokenList } from '../../main/ts/report/html/app/viewer-table-cells.js';
 import { hotspotScore, scorePeak } from '../../main/ts/report/html/app/viewer-file-figures.js';
 import { languageShares } from '../../main/ts/report/html/app/viewer-languages.js';
+import { percent } from '../../main/ts/report/html/app/viewer-dom.js';
 import { partialNote } from '../../main/ts/report/html/app/viewer-totals.js';
 import type { Metrics } from '../../main/ts/report/html/app/viewer-inspection.js';
 
@@ -40,6 +41,13 @@ test('a language chip toggles by name in any case; a category chip toggles its o
     [{ kind: 'path', value: 'src' }]);
   assert.deepEqual(toggleLanguage([], 'Lockfiles'), [{ kind: 'lockfile', value: 'yes' }]);
   assert.deepEqual(toggleLanguage([{ kind: 'analysed', value: 'no' }], 'Ignored'), []);
+});
+
+test('a language share too small to round to 0.1% reads as below it, never as 0%', () => {
+  assert.equal(shareText(0.0001), `<${percent(0.001)}`);
+  assert.equal(shareText(0), percent(0));
+  assert.equal(shareText(0.0005), percent(0.0005));
+  assert.equal(shareText(0.299), percent(0.299));
 });
 
 test('an ignore entry names the file only where its path can be matched literally', () => {

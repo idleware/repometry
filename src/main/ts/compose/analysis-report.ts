@@ -1,4 +1,4 @@
-import type { Plugin } from '../core/engine/plugin.js';
+import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { definitions } from '../core/model/measurement.js';
 import { debtModel } from '../core/model/quality-summary.js';
 import { reportSchema } from '../core/model/report.js';
@@ -15,12 +15,12 @@ import { fileTypeId } from '../core/model/file-types.js';
 
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
-  [definitions.functions]: 'Babel function nodes with bodies, including nested functions and methods.',
-  [definitions.complexity]: 'One plus branches in the function body: if, ternary, loops, catch, non-default switch cases and logical operators. Nested functions are measured separately. Line and column are 1-based and columns count UTF-16 units.',
+  [definitions.functions]: 'Functions, methods and function literals recognized by the language provider, including nested functions.',
+  [definitions.complexity]: 'One plus decision points in the function body. The language provider defines its decision rules and column units. Nested functions are measured separately.',
   [definitions.coverage]: 'Distinct covered lines divided by the distinct lines listed in LCOV DA records, filtered to code where classifications are available. Hit counts are summed across records. A zero denominator has no ratio.',
-  [definitions.codeLines]: 'Nonblank physical lines after removing Babel comment spans and the interpreter directive. A line containing both code and a comment counts as code.',
-  [definitions.comments]: 'Physical lines containing only a Babel comment or interpreter directive.',
-  [definitions.classes]: 'Babel class declaration and expression nodes.',
+  [definitions.codeLines]: 'Nonblank physical lines after removing comment spans and the interpreter directive. A line containing both code and a comment counts as code.',
+  [definitions.comments]: 'Physical lines containing only a comment or interpreter directive.',
+  [definitions.classes]: 'Class declarations and expressions recognized by the language provider.',
   [definitions.cognitiveComplexity]: 'Flow breaks plus nesting weight and logical operator sequences. Nested functions are measured separately. File complexity sums functions and module-level flow breaks.',
   [definitions.duplicatedLines]: 'Distinct code lines inside repeated Babel syntax subtrees, including original and repeated occurrences. Identifier and literal spellings are ignored for similar-code matches.',
 };
@@ -37,7 +37,7 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
     scope: { files: fileCount, parsed: results.parsed.size },
-    status: inspectionStatus(fileCount, results),
+    status: inspectionStatus(fileCount > 0 || sources.unavailableFiles.size > 0, results),
     measurements: results.measurements,
     diagnostics: results.diagnostics,
     findings: results.findings,
@@ -51,7 +51,7 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
   { languages, claimedPlugins, plugins }: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
   const securityScanners = results.securityScanners(claimedPlugins);
   return {
-    profile: 'js-ts/v2', mode: snapshot.subject.kind,
+    profile: 'repository/v3', mode: snapshot.subject.kind,
     source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
@@ -61,20 +61,20 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
       merge: 'any-hit', hitCounts: 'sum',
       lines: [...results.unmeasured.values()].some(measures => measures.includes('codeLines')) ? 'code-when-classified' : 'code-only' },
     ...(securityScanners.length ? { securityScanners } : {}),
-    plugins: plugins.map(pluginProvenance),
+    plugins: [...plugins, ...languages.native.filter(plugin => plugin.unavailableReason !== undefined)].map(pluginProvenance),
     operations: results.operationRecords(),
   };
 }
 
-function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages }: Plugin) {
+function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason }: NativeLanguagePlugin) {
   return { id, version, api, tools: tools ?? {}, kinds,
     ...(claims === undefined ? {} : { claims }), ...(settings === undefined ? {} : { settings }),
-    ...(providesLanguages === undefined ? {} : { providesLanguages }) };
+    ...(providesLanguages === undefined ? {} : { providesLanguages }), ...(unavailableReason === undefined ? {} : { unavailableReason }) };
 }
 
-function inspectionStatus(fileCount: number, results: AnalysisResults): Report['status'] {
+function inspectionStatus(hasSources: boolean, results: AnalysisResults): Report['status'] {
   if (results.diagnostics.length > 0) return 'partial';
-  return fileCount === 0 && !results.completedInspection ? 'not-applicable' : 'complete';
+  return !hasSources && !results.completedInspection ? 'not-applicable' : 'complete';
 }
 
 function reportInventory(snapshot: SourceSnapshot, sources: AnalysisSources, results: AnalysisResults) {

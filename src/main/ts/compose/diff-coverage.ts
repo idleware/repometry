@@ -9,9 +9,9 @@ import { coverage, lcovInput } from '../plugins/coverage/coverage.js';
 import { changesInput, diffCoverage, diffCoverageResult } from '../plugins/coverage/diff-coverage.js';
 import { diffMethod, findMergeBase, readChanges } from '../api/git/changes.js';
 import { gitText, physicalGitRoot, readGitCommit, resolveGitCommit } from '../api/git/git.js';
-import { readLcovFiles } from '../api/import/lcov-files.js';
+import { readInspectionCoverage } from './inspection-coverage.js';
 import type { LcovFiles } from '../api/import/lcov-files.js';
-import { defaultLanguages, languageRegistry } from './languages.js';
+import { languageRegistry } from './languages.js';
 
 export { diffCoverageSchema } from '../core/usecases/diff-coverage.js';
 export type { DiffCoverageReport } from '../core/usecases/diff-coverage.js';
@@ -20,7 +20,8 @@ export interface DiffCoverageRequest {
   readonly directory: string;
   readonly revision: string;
   readonly base: string;
-  readonly lcov: LcovFiles;
+  readonly lcov?: LcovFiles;
+  readonly goCover?: LcovFiles;
   readonly exclude?: readonly string[];
   readonly minimumPercent?: number;
   readonly plugins?: readonly Plugin[];
@@ -54,16 +55,18 @@ export async function measureChangedLines(request: DiffCoverageRequest, override
 
 async function readInputs(request: DiffCoverageRequest, excludedPaths: readonly string[], excludes: (path: string) => boolean) {
   const root = await physicalGitRoot(request.directory);
-  const [requestedBase, head, lcov, gitVersion] = await Promise.all([
+  const [requestedBase, head, gitVersion] = await Promise.all([
     resolveGitCommit(root, request.base),
     resolveGitCommit(root, request.revision),
-    readLcovFiles(request.lcov),
     gitText(root, ['--version']).then(text => text.trim()),
   ]);
   const base = await findMergeBase(root, requestedBase, head);
-  const { isSource, extensions, globs } = request.plugins?.length ? languageRegistry(request.plugins) : defaultLanguages;
+  const { isSource, extensions, globs } = languageRegistry(request.plugins ?? []);
   const snapshot = await readGitCommit(root, head, excludes, isSource);
-  const changes = await readChanges(root, base, snapshot, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded), isSource);
+  const [lcov, changes] = await Promise.all([
+    readInspectionCoverage(request, { root, snapshot }),
+    readChanges(root, base, snapshot, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded), isSource),
+  ]);
   return { requestedBase, base, head, snapshot, changes, root, lcovText: lcov.text, appliedConfig: {
     source: { extensions, ...(globs.length ? { globs } : {}), excludedDirectories: sourceDirectoriesExcluded, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
