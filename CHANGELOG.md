@@ -1,3 +1,8 @@
+## [0.6.0](https://github.com/idleware/repometry/compare/v0.5.0...v0.6.0) (2026-11-24)
+
+### Features
+* feat: let language plugins select and measure source files ([5366479](https://github.com/idleware/repometry/commit/536647993a17cd3a0323368a66b35ca9287c1fcb))
+
 ## [0.5.0](https://github.com/idleware/repometry/compare/v0.4.2...v0.5.0) (2026-11-24)
 
 ### Features
