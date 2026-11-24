@@ -1,3 +1,8 @@
+## [0.5.0](https://github.com/idleware/repometry/compare/v0.4.2...v0.5.0) (2026-11-24)
+
+### Features
+* feat: run external analyzers as process plugins ([3566e43](https://github.com/idleware/repometry/commit/3566e43c229d0827ff77b5b69bedcf7243017651))
+
 ## [0.4.2](https://github.com/idleware/repometry/compare/v0.4.1...v0.4.2) (2026-11-23)
 
 ### Fixes & improvements
