@@ -39,6 +39,8 @@ export interface InventoryFile {
 export interface SourceSnapshot {
   readonly subject: Subject;
   readonly files: readonly SourceFile[];
+  /** Object IDs from the immutable Git tree, keyed by repository-relative path. */
+  readonly blobIds?: ReadonlyMap<string, string>;
   readonly inventory?: readonly InventoryFile[];
   readonly generatedExcluded?: readonly string[];
   readonly oversizedClaims?: readonly string[];

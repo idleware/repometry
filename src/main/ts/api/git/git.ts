@@ -126,7 +126,8 @@ export async function readGitCommit(directory: string, revision: string, exclude
   }
   files.sort((left, right) => comparePaths(left.path, right.path));
   const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid, size }) => ({ path, lines: counts.get(oid) ?? null, ...(size === undefined ? {} : { bytes: size }) }));
-  return { subject: { kind: 'commit', id }, files, inventory, generatedExcluded: [...generated].sort(comparePaths),
+  const blobIds = new Map(tracked.map(({ path, oid }) => [path, oid]));
+  return { subject: { kind: 'commit', id }, files, blobIds, inventory, generatedExcluded: [...generated].sort(comparePaths),
     ...(oversized.size ? { oversizedClaims: [...oversized].sort(comparePaths) } : {}) };
 }
 

@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { inspect } from '../../main/ts/compose/inspect.js';
+import { readProcessPlugins } from '../../main/ts/compose/process-plugins.js';
 import { DockerToolRunner, codeStructures, pluginApi, processPlugin, sourceFiles } from '../../main/ts/plugin.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import type { FileMetricsReport } from '../../main/ts/report/json/wire/file-metrics-model.js';
@@ -20,6 +21,18 @@ const fixture = {
   tools: { node: '26' },
   providesLanguages: [{ id: 'fixture', label: 'Fixture', color: '#123456' }],
 };
+
+test('configured repository parsers opt into file independence explicitly', () => {
+  const operation = (definition: unknown) => readProcessPlugins([definition])[0]!.operations[0]!;
+  const defaultOperation = operation(fixture);
+  const independent = operation({ ...fixture, fileIndependent: true });
+  const dependent = operation({ ...fixture, fileIndependent: false });
+  assert.equal(Object.hasOwn(defaultOperation, 'fileIndependent'), false);
+  assert.equal(independent.fileIndependent, true);
+  assert.equal(dependent.fileIndependent, false);
+  assert.equal(independent.implementation, defaultOperation.implementation);
+  assert.throws(() => operation({ ...fixture, fileIndependent: 'true' }), /plugins\/0\/fileIndependent.*boolean/);
+});
 
 interface ListedPlugin {
   readonly id: string;

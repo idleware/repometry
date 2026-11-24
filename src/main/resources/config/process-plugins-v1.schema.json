@@ -21,6 +21,10 @@
         "items": { "type": "string", "pattern": "^[^\\u0000]*$" }
       },
       "scope": { "enum": ["file", "repository"] },
+      "fileIndependent": {
+        "type": "boolean",
+        "description": "Each file's results and diagnostics are independent of the other files supplied to a repository parser."
+      },
       "claims": {
         "type": "object",
         "additionalProperties": false,

@@ -17,7 +17,7 @@ const packedHeader = `{"schema":"${compactJsonSchema}","summary":`;
 export class LocalReportStore implements ReportStore {
   constructor(private readonly directory: string) {}
 
-  async save(report: Report): Promise<void> {
+  async save(report: Report, { deferSummary = false } = {}): Promise<void> {
     readReport(report);
     const base = join(this.directory, subjectFolder(report.subject.kind));
     const folder = this.folder(report.subject);
@@ -33,7 +33,7 @@ export class LocalReportStore implements ReportStore {
       ? `${packedHeader}${JSON.stringify(row)},\n${JSON.stringify({ strings, shapes, data }).slice(1)}\n`
       : `${JSON.stringify(packed)}\n`;
     await replaceFile(folder, 'report.json', contents);
-    if (report.subject.kind === 'commit') await this.refreshSummary();
+    if (report.subject.kind === 'commit' && !deferSummary) await this.refreshSummary();
   }
 
   async read(subject: Subject): Promise<Report> {
@@ -92,7 +92,7 @@ export class LocalReportStore implements ReportStore {
     return orderSummaries(summaries);
   }
 
-  private async refreshSummary(): Promise<void> {
+  async refreshSummary(): Promise<void> {
     const path = join(this.directory, 'summary.json');
     try {
       if (!(await lstat(path)).isFile()) throw new Error('Expected a regular summary.json file');

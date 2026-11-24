@@ -13,6 +13,8 @@ import { defaultProvider } from './analysis-sources.js';
 import type { AnalysisSources } from './analysis-sources.js';
 import { fileTypeId } from '../core/model/file-types.js';
 
+export const analysisProfile = 'repository/v3';
+
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
   [definitions.functions]: 'Functions, methods and function literals recognized by the language provider, including nested functions.',
@@ -51,7 +53,7 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
   { languages, claimedPlugins, plugins }: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
   const securityScanners = results.securityScanners(claimedPlugins);
   return {
-    profile: 'repository/v3', mode: snapshot.subject.kind,
+    profile: analysisProfile, mode: snapshot.subject.kind,
     source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },

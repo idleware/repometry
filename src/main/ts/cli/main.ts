@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { resolveGitBranch } from '../api/git/commit-metadata.js';
@@ -8,6 +8,7 @@ import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '.
 import { remoteExecutor } from '../api/worker/remote-executor.js';
 import { serveWorker } from '../api/worker/worker.js';
 import { workerToken } from '../api/worker/worker-protocol.js';
+import { HistoryCache } from '../compose/history-cache.js';
 import { defaultLanguages, languageRegistry } from '../compose/languages.js';
 import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
@@ -22,6 +23,7 @@ import { sourceExclusionMatcher } from '../core/profile/exclusions.js';
 import { compareInspections } from '../core/usecases/compare.js';
 import { exportProjects } from '../report/html/site/projects.js';
 import { fileMetrics } from '../report/json/projections/file-metrics.js';
+import { LocalReportStore } from '../report/json/store/local-store.js';
 import { savePullReview } from '../report/json/store/pull-review-store.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
@@ -200,10 +202,15 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
   const executor = analysisExecutor(input, config.plugins);
   const exclude = [...config.exclude, ...input.many('exclude')];
+  const { plugins, ...profile } = config;
+  const history = executor === undefined ? new HistoryCache(profile) : undefined;
   const inspectCommit = (id: string) => inspect({ directory, output, source: { revision: id }, exclude,
-    ignore: config.ignore, plugins: config.plugins }, executor);
+    ignore: config.ignore, plugins }, executor, { history, deferSummary: true });
   const skip = input.flag('skip-saved') ? (id: string) => isSaved(output, id) : undefined;
   const { interrupted, ...results } = await analyzeCommits(commits, inspectCommit, skip);
+  if (results.analyzed.length || results.skipped.length) {
+    await new LocalReportStore(await realpath(output)).refreshSummary();
+  }
   const requested = input.many('report');
   const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
   print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,

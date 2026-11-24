@@ -130,3 +130,18 @@ test('older cached zero grades are recalculated from the saved inspection', asyn
   await writeFile(path, [JSON.stringify(envelope).slice(0, -1) + ',', ...body].join('\n'));
   assert.equal((await store.listSummaries())[0]?.quality.maintainability, null);
 });
+
+test('range saves expose complete commit reports before publishing the combined summary', async t => {
+  const output = await mkdtemp(join(tmpdir(), 'repometry-deferred-summary-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  const store = new LocalReportStore(output);
+  const first = report('a', '2026-01-01T00:00:00.000Z', 20);
+  const second = report('b', '2026-02-01T00:00:00.000Z', 30);
+  await store.save(first, { deferSummary: true });
+  assert.deepEqual(await store.read(first.subject), first);
+  await assert.rejects(readFile(join(output, 'summary.json')), { code: 'ENOENT' });
+  await store.save(second, { deferSummary: true });
+  await store.refreshSummary();
+  const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
+  assert.deepEqual(summary.commits.map(({ sha }: { sha: string }) => sha), [second.subject.id, first.subject.id]);
+});

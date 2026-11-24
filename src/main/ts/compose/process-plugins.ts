@@ -20,6 +20,7 @@ interface ProcessDefinition {
   readonly image: string;
   readonly command: readonly string[];
   readonly scope: 'file' | 'repository';
+  readonly fileIndependent?: boolean;
   readonly claims?: Selectors;
   readonly limits?: Readonly<Partial<Record<'timeoutMs' | 'maxOutputBytes' | 'memoryBytes' | 'pidsLimit', number>>>;
   readonly tools: Readonly<Record<string, string>>;
@@ -46,8 +47,8 @@ export function readProcessPlugins(value: unknown): readonly Plugin[] {
   return plugins;
 }
 
-function configuredPlugin({ id, version, image, command, scope, claims, limits = {}, tools, settings, providesLanguages }: ProcessDefinition,
-  index: number): Plugin {
+function configuredPlugin(definition: ProcessDefinition, index: number): Plugin {
+  const { id, version, image, command, scope, fileIndependent, claims, limits = {}, tools, settings, providesLanguages } = definition;
   const base = `Config plugins/${index}`;
   if (!command[0]?.trim()) throw new Error(`${base}/command/0 must name an executable`);
   const languages = providesLanguages.map((language, languageIndex) => {
@@ -63,7 +64,7 @@ function configuredPlugin({ id, version, image, command, scope, claims, limits =
   return processPlugin({ id, version, api: pluginApi, kinds: ['language'], tools, claims: effective, providesLanguages: languages,
     ...(settings === undefined ? {} : { settings }),
     produces: [{ contract: output.id, persistence: 'transient' }],
-    operations: [{ id: 'parse', role: 'provider', scope, inputs: repository ? { files: sourceFiles } : { source: sourceFile },
+    operations: [{ id: 'parse', role: 'provider', scope, fileIndependent, inputs: repository ? { files: sourceFiles } : { source: sourceFile },
       output, argv: command, timeoutMs: limits.timeoutMs ?? 30_000, maxOutputBytes: limits.maxOutputBytes ?? 8 * 1024 * 1024 }],
   }, new DockerToolRunner(image, { memoryBytes: limits.memoryBytes ?? 512 * 1024 * 1024, pidsLimit: limits.pidsLimit ?? 128 }));
 }

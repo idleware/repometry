@@ -25,6 +25,8 @@ export interface Operation {
   readonly id: string;
   readonly role: 'provider' | 'inspection';
   readonly scope?: 'file' | 'repository';
+  /** A repository provider produces the same results and diagnostics for each file regardless of which siblings it receives. */
+  readonly fileIndependent?: boolean;
   readonly inputs: Readonly<Record<string, DataContract>>;
   readonly output: DataContract;
   /** Fingerprint for executable details that the declared versions and inputs do not carry. */

@@ -44,7 +44,7 @@ function createPlugin({ id, language, binary, args, versionArgs, script, measure
   }
   const parser = fileURLToPath(new URL(`../resources/languages/${script}`, import.meta.resolve('repometry/plugin')));
   return bindProcessPlugin({ ...manifest, tools: { [binary]: version }, operations: [{ id: 'parse', role: 'provider',
-    scope: 'repository', inputs: { files: sourceFiles }, output: codeStructures,
+    scope: 'repository', fileIndependent: true, inputs: { files: sourceFiles }, output: codeStructures,
     argv: [binary, ...args], timeoutMs: 90_000, maxOutputBytes: 16 * 1024 * 1024, implementation: digest(readFileSync(parser)),
   }] }, new HostLanguageRunner(path, parser));
 }

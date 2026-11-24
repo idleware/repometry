@@ -33,9 +33,9 @@ export function bindProcessPlugin({ operations, ...manifest }: ProcessPluginMani
 }
 
 function bindOperation(plugin: string, settings: JsonValue, operation: ProcessOperation, runner: ProcessRunner): Operation {
-  const { id, role, scope, inputs, output, argv, timeoutMs, maxOutputBytes } = operation;
+  const { id, role, scope, fileIndependent, inputs, output, argv, timeoutMs, maxOutputBytes } = operation;
   const implementation = digest(JSON.stringify([processPluginProtocol, operation.implementation, runner.implementation, argv, timeoutMs, maxOutputBytes]));
-  return { id, role, scope, inputs, output, implementation, async execute(context) {
+  return { id, role, scope, ...(fileIndependent === undefined ? {} : { fileIndependent }), inputs, output, implementation, async execute(context) {
     const { files, stdin } = encodeRequest(`${plugin}/${id}`, settings, operation, context);
     const result = await runner.run({ argv, timeoutMs, maxOutputBytes, files, stdin });
     if (result.exitCode !== 0) throw new Error(toolFailure(`Process plugin exited with code ${result.exitCode}`, result.stderr));

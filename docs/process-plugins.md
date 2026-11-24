@@ -32,6 +32,8 @@ A single-language plugin can put its `extensions` and `globs` in `claims` as def
 
 A language's optional `measures` array accepts `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, and `structuralRules`. Include only capabilities the parser supplies. A parser that counts functions and decisions declares `["functions", "cyclomaticComplexity"]` and returns `path`, `lines`, `functions`, and `cyclomaticFunctions`. Duplication requires `codeLines` and clone candidates. Structural rules consume `observations`. See [Language provider metrics](metrics.md) for unknown values and repository rollups.
 
+Set `"fileIndependent": true` for a repository parser if each file produces the same results and diagnostics when other files are omitted. During a local revision range, Repometry can send only changed files to a provider with a transient structure output and no repository inspection operations. Keep the default `false` for parsers that rely on other files or repository-wide context.
+
 Optional `limits` fields are `timeoutMs`, `maxOutputBytes`, `memoryBytes`, and `pidsLimit`. Defaults are 30 seconds, 8 MiB of output, 512 MiB of memory, and 128 processes. The runner uses a read-only snapshot and disables networking. Configured plugins run with local analysis.
 
 ## Input and output

@@ -16,6 +16,7 @@ import type { AnalysisExecutor, InspectionPorts } from '../core/usecases/inspect
 import { LocalReportStore } from '../report/json/store/local-store.js';
 import { analyzeSnapshot, inspectionFileMatcher } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
+import type { HistoryCache } from './history-cache.js';
 import { languageRegistry } from './languages.js';
 
 export { analyzeSnapshot } from './analyze-snapshot.js';
@@ -36,7 +37,8 @@ export interface InspectRequest {
   readonly operationCache?: OperationCacheOptions;
 }
 
-export async function inspect(request: InspectRequest, overrides?: AnalysisExecutor | Partial<InspectionPorts>): Promise<Report> {
+export async function inspect(request: InspectRequest, overrides?: AnalysisExecutor | Partial<InspectionPorts>,
+  { history, deferSummary = false }: { history?: HistoryCache; deferSummary?: boolean } = {}): Promise<Report> {
   const { lcov, goCover, findingInputs = [], plugins = [], operationCache } = request;
   if ((plugins.length || operationCache) && (typeof overrides === 'function' || overrides?.analyze)) {
     throw new Error('Configure plugins and the operation cache on the custom executor');
@@ -45,8 +47,8 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
   const claims = inspectionFileMatcher(plugins, languages);
   const { isSource } = languages;
   const ports: InspectionPorts = {
-    readSource: excludes => readSource(request, excludes, isSource, claims),
-    analyze: input => analyzeSnapshot(input, plugins, operationCache),
+    readSource: excludes => readSource(request, excludes, isSource, claims, deferSummary),
+    analyze: input => analyzeSnapshot(input, plugins, operationCache, history),
     ...(lcov === undefined && goCover === undefined ? {} : { readCoverage: source => readInspectionCoverage({ lcov, goCover }, source) }),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),
@@ -57,10 +59,10 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
 }
 
 async function readSource(request: InspectRequest, excludes: (path: string) => boolean, isSource: (path: string) => boolean,
-  claims: (path: string) => boolean) {
+  claims: (path: string) => boolean, deferSummary: boolean) {
   const source = await readInspectionSource(request, excludes, isSource, claims);
   const store = new LocalReportStore(source.output);
-  return { ...source, save: (report: Report) => store.save(report) };
+  return { ...source, save: (report: Report) => store.save(report, { deferSummary }) };
 }
 
 export async function attachFindings(report: Report, inputs: readonly FindingInput[], root: string, findingRoot: string,
