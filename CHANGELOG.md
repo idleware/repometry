@@ -1,3 +1,8 @@
+## [0.6.1](https://github.com/idleware/repometry/compare/v0.6.0...v0.6.1) (2026-11-24)
+
+### Fixes & improvements
+* fix: restore commit times in the report timeline ([e973dde](https://github.com/idleware/repometry/commit/e973ddee412e0ad049f042d3e0f3f5b2895b3bd6))
+
 ## [0.6.0](https://github.com/idleware/repometry/compare/v0.5.0...v0.6.0) (2026-11-24)
 
 ### Features
