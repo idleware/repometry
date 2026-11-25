@@ -1,3 +1,12 @@
+## [0.10.0](https://github.com/idleware/repometry/compare/v0.9.0...v0.10.0) (2026-11-25)
+
+### Features
+* feat: open the review comment with the verdict flag ([6c85a02](https://github.com/idleware/repometry/commit/6c85a024342a842a60bcd5177a44c17f8b440bd6))
+
+### Fixes & improvements
+* refactor: read churn records one at a time ([89e8f41](https://github.com/idleware/repometry/commit/89e8f41367bb8441769215a891ef5b07c5c000af))
+* docs: impr PR flow description ([ab07451](https://github.com/idleware/repometry/commit/ab07451d92649ab598d58b192703bdc611738e9c))
+
 ## [0.9.0](https://github.com/idleware/repometry/compare/v0.8.1...v0.9.0) (2026-11-25)
 
 ### Features

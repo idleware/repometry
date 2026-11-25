@@ -1,6 +1,6 @@
 {
   "name": "repometry",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Track repository metrics without SaaS",
   "license": "MIT",
   "repository": {
