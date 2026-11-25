@@ -1,3 +1,8 @@
+## [0.9.0](https://github.com/idleware/repometry/compare/v0.8.1...v0.9.0) (2026-11-25)
+
+### Features
+* feat: review pull requests on the lines they change ([988056a](https://github.com/idleware/repometry/commit/988056a00f89efedf52206dbe8e8f6e6d07403ee))
+
 ## [0.8.1](https://github.com/idleware/repometry/compare/v0.8.0...v0.8.1) (2026-11-25)
 
 ### Fixes & improvements
