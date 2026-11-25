@@ -148,6 +148,8 @@ The checkout fetches the whole history with `fetch-depth: 0`. Repometry measures
 
 `analyze --store "$RUNNER_TEMP/store"` saves the inspection in an empty store outside your checkout, and `--import` adds your coverage report.
 
+`analyze` exits with 0 when the inspection is complete, 2 when it is partial, for example when a file can't be parsed, and 1 when it can't run. A missing or failing `go` or `python3` doesn't make it partial: that language's files count as not analysed, and the report's Profile and `repometry plugins` say why. Given a range, `analyze` exits with 2 when any commit is partial or failed, and with 130 when you stop it. A failed commit saves nothing, so the next run with `--skip-saved` tries it again.
+
 The artifact holds `commits/<sha>`, the commit's report file, and `objects`, the objects it refers to. It leaves out the store's `summary.json`, which would list only this commit. The paths in the artifact start below `store/`, so the files land at `commits/<sha>/report.json` and under `objects/` when the artifact is downloaded into a checkout of the branch.
 
 ## The publish job
@@ -239,6 +241,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 ```
+
+The review checks out the pull request's own head, the commit its diff shows, because it compares that commit with the merge base. If you feed this job's coverage to your own coverage gate, so the tests run once, the gate measures that head, not its merge with the base branch, which a job on the default `pull_request` checkout would measure. Run the gate in a job of its own when that difference matters.
 
 The second posts the comment. It's triggered when a Review run completes, runs from your default branch, and holds the write token. It never checks out or runs the pull request's code, which is how it can comment on pull requests from forks safely:
 
