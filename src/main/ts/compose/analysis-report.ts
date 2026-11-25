@@ -1,3 +1,4 @@
+import { structureMeasures } from '../core/model/code-structure.js';
 import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { definitions } from '../core/model/measurement.js';
 import { debtModel } from '../core/model/quality-summary.js';
@@ -30,7 +31,7 @@ const measurementDefinitions = {
 export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSources, results: AnalysisResults): Report {
   const pluginData = results.pluginData();
   const { snapshot } = input;
-  const fileCount = sources.sourceFiles.length;
+  const fileCount = sources.sourceFiles.length + sources.unavailableFiles.size;
   return {
     schema: reportSchema,
     subject: snapshot.subject,
@@ -39,7 +40,7 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
     scope: { files: fileCount, parsed: results.parsed.size },
-    status: inspectionStatus(fileCount > 0 || sources.unavailableFiles.size > 0, results),
+    status: inspectionStatus(fileCount > 0, results),
     measurements: results.measurements,
     diagnostics: results.diagnostics,
     findings: results.findings,
@@ -86,7 +87,7 @@ function reportInventory(snapshot: SourceSnapshot, sources: AnalysisSources, res
   }
   return [...inventory].sort(([left], [right]) => comparePaths(left, right)).map(([path, { lines, bytes }]) => {
     const provider = sources.providersByPath.get(path);
-    const unmeasured = results.unmeasured.get(path);
+    const unmeasured = sources.unavailableFiles.has(path) ? structureMeasures : results.unmeasured.get(path);
     return { path, lines, ...(bytes === undefined ? {} : { bytes }), language: provider?.language(path) ?? fileTypeId(path),
       analysed: results.parsed.has(path) || results.inspected.has(path), ...(provider === undefined ? {} : { provider: provider.key }),
       ...(unmeasured === undefined ? {} : { unmeasured }) };

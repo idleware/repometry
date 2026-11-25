@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { gitTreeFiles } from '../api/git/git.js';
+import type { GitSelection } from '../api/git/git.js';
 import { readInspectionSource } from '../api/git/inspection-source.js';
 import { importFindings } from '../api/import/finding-import.js';
 import { readInspectionCoverage } from './inspection-coverage.js';
@@ -47,7 +48,7 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
   const claims = inspectionFileMatcher(plugins, languages);
   const { isSource } = languages;
   const ports: InspectionPorts = {
-    readSource: excludes => readSource(request, excludes, isSource, claims, deferSummary),
+    readSource: excludes => readSource(request, { excludes, isSource, claims, history: history?.blobs }, deferSummary),
     analyze: input => analyzeSnapshot(input, plugins, operationCache, history),
     ...(lcov === undefined && goCover === undefined ? {} : { readCoverage: source => readInspectionCoverage({ lcov, goCover }, source) }),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
@@ -58,9 +59,8 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
   return executeInspection(request, ports);
 }
 
-async function readSource(request: InspectRequest, excludes: (path: string) => boolean, isSource: (path: string) => boolean,
-  claims: (path: string) => boolean, deferSummary: boolean) {
-  const source = await readInspectionSource(request, excludes, isSource, claims);
+async function readSource(request: InspectRequest, selection: GitSelection, deferSummary: boolean) {
+  const source = await readInspectionSource(request, selection);
   const store = new LocalReportStore(source.output);
   return { ...source, save: (report: Report) => store.save(report, { deferSummary }) };
 }

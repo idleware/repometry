@@ -1,20 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { validSubjectId } from '../../core/model/report.js';
-
-export function sourceCacheRoot(env: NodeJS.ProcessEnv = process.env, system = process.platform, home = homedir()): string {
-  if (env.REPOMETRY_CACHE_DIR) return resolve(env.REPOMETRY_CACHE_DIR);
-  if (env.XDG_CACHE_HOME) return resolve(env.XDG_CACHE_HOME, 'repometry');
-  if (system === 'darwin') return join(home, 'Library', 'Caches', 'repometry');
-  if (system === 'win32' && env.LOCALAPPDATA) return resolve(env.LOCALAPPDATA, 'repometry', 'cache');
-  return join(home, '.cache', 'repometry');
-}
-
-export async function clearSourceCache(root = sourceCacheRoot()): Promise<void> {
-  await rm(join(root, 'sources'), { recursive: true, force: true });
-}
 
 export async function cachedBlob(root: string, oid: string, load: () => Promise<Buffer | undefined>): Promise<Buffer | undefined> {
   if (!validSubjectId('commit', oid)) throw new Error('Invalid source blob ID');

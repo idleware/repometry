@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
 import { nativeLanguagePlugins } from '../../main/ts/compose/native-language-plugins.js';
@@ -11,6 +14,7 @@ import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
+import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';
 
 const samples = [
@@ -46,7 +50,7 @@ for (const sample of samples) {
     const version = profile?.analyzers.find(analyzer => analyzer.id === sample.id)?.tools[sample.tool];
     assert.match(version ?? '', /^\d+\.\d+\S*$/);
     const baseline = inspectionProfileDigest(report);
-    await withoutTools(async () => {
+    await withToolPath('', async () => {
       const unavailable = await analyzeSnapshot({ snapshot, excludedOutput: null });
       assert.notEqual(inspectionProfileDigest(unavailable), baseline);
       assert.deepEqual(unavailable.subject, report.subject);
@@ -54,32 +58,68 @@ for (const sample of samples) {
   });
 }
 
-test('unavailable native languages are reported without failing inspection', async () => {
-  await withoutTools(async () => {
+test('missing native tools keep their files in scope without failing inspection', async () => {
+  await verifyUnavailableTools('', ['go not found on PATH', 'python3 not found on PATH']);
+});
+
+test('failed native tool version probes report the error or exit status', { skip: process.platform === 'win32' }, async t => {
+  const path = await mkdtemp(join(tmpdir(), 'repometry-version-probe-'));
+  t.after(() => rm(path, { recursive: true, force: true }));
+  await writeFile(join(path, 'go'), '#!/bin/sh\nprintf "toolchain unavailable\\nsecond line\\n" >&2\nexit 7\n', { mode: 0o700 });
+  await writeFile(join(path, 'python3'), '#!/bin/sh\nexit 9\n', { mode: 0o700 });
+  await verifyUnavailableTools(path, ['go version check failed: toolchain unavailable', 'python3 version check failed: exit status 9']);
+});
+
+async function verifyUnavailableTools(path: string, reasons: readonly string[]): Promise<void> {
+  await withToolPath(path, async () => {
     const snapshot = workingSnapshot(samples.map(({ path, source }) => ({ path, bytes: Buffer.from(source) })));
     const report = await analyzeSnapshot({ snapshot, excludedOutput: null,
       coverage: { text: 'SF:unit.go\nDA:3,1\nend_of_record', sourceRoot: '/repo' } });
     assert.equal(report.status, 'complete');
-    assert.deepEqual(report.scope, { files: 0, parsed: 0 });
+    assert.deepEqual(report.scope, { files: 2, parsed: 0 });
+    assert.deepEqual(report.diagnostics, []);
     assert.deepEqual(report.pluginData?.inventory?.map(({ language, analysed }) => [language, analysed]), [['go', false], ['python', false]]);
+    assert.equal(qualitySummary(report).maintainability, null);
+    assert.equal(commitSummary(report).lineCoverage, null);
     const profile = inspectionDetails(report).profile;
     const plugins = effectivePlugins([]);
-    for (const { id, language, tool } of samples) {
-      const reason = `${tool} not found on PATH`;
-      assert.equal(profile?.languages?.find(row => row.id === language)?.unavailableReason, reason);
-      assert.equal(plugins.find(plugin => plugin.id === id)?.unavailableReason, reason);
+    for (const [index, { id, language }] of samples.entries()) {
+      assert.equal(profile?.languages?.find(row => row.id === language)?.unavailableReason, reasons[index]);
+      assert.equal(plugins.find(plugin => plugin.id === id)?.unavailableReason, reasons[index]);
+    }
+  });
+}
+
+test('unavailable language facts leave mixed-repository structure totals unknown', async () => {
+  await withToolPath('', async () => {
+    const snapshot = workingSnapshot([
+      { path: 'app.js', bytes: Buffer.from('export function one() { return 1; }') },
+      { path: 'unit.go', bytes: Buffer.from(samples[0].source) },
+    ]);
+    const report = await analyzeSnapshot({ snapshot, excludedOutput: null });
+    const summary = commitSummary(report);
+    assert.deepEqual(report.scope, { files: 2, parsed: 1 });
+    assert.equal(summary.lines, null);
+    assert.equal(summary.functions, null);
+    assert.equal(summary.maxComplexity, null);
+    assert.equal(summary.quality.codeLines, null);
+    assert.equal(summary.quality.maintainability?.grade, null);
+    for (const id of [definitions.lines, definitions.functions, definitions.complexity, definitions.codeLines, definitions.duplicatedLines]) {
+      const index = summary.metrics?.findIndex(metric => metric.id === id) ?? -1;
+      assert.ok(index >= 0, id);
+      assert.equal(summary.values?.[index], null, id);
     }
   });
 });
 
-async function withoutTools(run: () => Promise<void>): Promise<void> {
-  const path = process.env.PATH;
-  process.env.PATH = '';
+async function withToolPath(path: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.PATH;
+  process.env.PATH = path;
   try {
     await run();
   } finally {
-    if (path === undefined) delete process.env.PATH;
-    else process.env.PATH = path;
+    if (previous === undefined) delete process.env.PATH;
+    else process.env.PATH = previous;
   }
 }
 

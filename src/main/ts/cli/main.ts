@@ -1,36 +1,34 @@
 #!/usr/bin/env node
-import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { gitReportObjects } from '../api/git/git-reader.js';
 import { resolveGitBranch } from '../api/git/commit-metadata.js';
-import { clearSourceCache, sourceCacheRoot } from '../api/git/source-cache.js';
+import { cacheRoot, clearCaches } from '../api/cache/root.js';
 import { gitHubPullRequest, writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
-import { remoteExecutor } from '../api/worker/remote-executor.js';
 import { serveWorker } from '../api/worker/worker.js';
 import { workerToken } from '../api/worker/worker-protocol.js';
-import { HistoryCache } from '../compose/history-cache.js';
 import { defaultLanguages, languageRegistry } from '../compose/languages.js';
 import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
 import { prepareMetabranch } from '../compose/prepare-metabranch.js';
 import { review as reviewChange, reviewExitCode, reviewReason } from '../compose/review.js';
 import { effectivePlugins } from '../compose/plugin-list.js';
-import type { Plugin } from '../core/engine/plugin.js';
 import { validSubjectId } from '../core/model/report.js';
 import type { Report } from '../core/model/report.js';
 import { sourceExclusionMatcher } from '../core/profile/exclusions.js';
 import { compareInspections } from '../core/usecases/compare.js';
 import { exportProjects } from '../report/html/site/projects.js';
 import { fileMetrics } from '../report/json/projections/file-metrics.js';
-import { LocalReportStore } from '../report/json/store/local-store.js';
 import { pullReviewMarkdown } from '../report/markdown/pull-review.js';
 import { LocalObjectStore } from '../report/json/store/object-store.js';
 import { checkStore } from '../report/json/store/store-check.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
 import type { Command, Invocation } from './arguments.js';
-import { configFile, readConfig } from './config.js';
+import { configFile, parseConfig, readConfig, readConfigValue } from './config.js';
+import { analyzeCommits, isSaved } from './range-jobs.js';
+import { analysisExecutor } from './range-inspection.js';
 import { importerIds, readInputs } from './imports.js';
 import { outputReports, reporterIds, viewTarget } from './reporting.js';
 import { parseRange } from './revisions.js';
@@ -56,10 +54,11 @@ const commands: Readonly<Record<string, Command>> = {
     description: 'Analyze and save one revision or a range of commits.', parameters: '[REVISION | BASE..[HEAD]]', max: 1,
     options: { ...configOptions, ...renderOptions, 'working-tree': flag('Analyze the working directory.'),
       'skip-saved': flag('Keep commits that already have a saved inspection.'),
+      concurrency: option('N', 'Maximum local analysis workers for a range. Defaults to the available cores.'),
       import: importOption, report: option('FORMAT[=PATH]', 'Generate a report after inspection. Repeatable.', { multiple: true }),
       exclude: excludeOption, 'import-root': option('DIR', 'Resolve scanner locations relative to this directory.'),
       worker: option('URL', 'Run analysis on a Repometry worker.'), ci: ciOption },
-    run: analyze,
+    run: runAnalysis,
   },
   show: {
     description: 'Print a saved report.', parameters: 'REVISION|DIGEST', min: 1, max: 1,
@@ -139,9 +138,9 @@ const commands: Readonly<Record<string, Command>> = {
       const action = input.args[0];
       if (action !== 'path' && action !== 'clear') throw new Error('Use cache path or cache clear');
       if (action === 'path' && input.flag('sources')) throw new Error('--sources requires cache clear');
-      const path = sourceCacheRoot();
-      if (action === 'clear') await clearSourceCache(path);
-      print({ schema: 'urn:repometry:schema:cache-result:1', path, ...(action === 'clear' ? { cleared: ['sources'] } : {}) });
+      const path = cacheRoot();
+      const cleared = action === 'clear' ? await clearCaches(path, input.flag('sources')) : undefined;
+      print({ schema: 'urn:repometry:schema:cache-result:1', path, cleared });
     },
   },
   store: {
@@ -178,9 +177,14 @@ async function context(input: Invocation) {
   return { directory, root, store: selectStore(root, input.text('store'), directory) };
 }
 
-async function analyze(input: Invocation): Promise<number> {
+function runAnalysis(input: Invocation): Promise<number> {
   const range = input.args[0] === undefined ? undefined : parseRange(input.args[0]);
   if (range) return analyzeRange(input, range);
+  if (input.text('concurrency') !== undefined) throw new Error('--concurrency requires a revision range');
+  return analyze(input);
+}
+
+async function analyze(input: Invocation): Promise<number> {
   const { directory, root, store } = await context(input);
   const output = writableStore(store);
   if (input.flag('working-tree') && input.args.length) throw new Error('Choose a revision or --working-tree');
@@ -193,7 +197,7 @@ async function analyze(input: Invocation): Promise<number> {
   const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
-  const executor = analysisExecutor(input, config.plugins);
+  const executor = analysisExecutor(input.text('worker'), config.plugins);
   const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
@@ -216,78 +220,21 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (input.many('import').length) throw new Error('--import describes one checkout and cannot be used with a range');
   if (input.text('import-root')) throw new Error('--import-root requires a scanner report');
   if (useGitHub(input)) throw new Error('--ci github needs a single revision');
-  const config = await readConfig(root, input);
+  const concurrency = count(input.text('concurrency'), '--concurrency', 1);
+  const configValue = await readConfigValue(root, input);
+  const config = parseConfig(configValue);
   if (config.imports.length) process.stderr.write('Imports from the config describe one checkout and are skipped for a range.\n');
   const { base, head, commits } = await firstParentRange(root, range.base, range.head);
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
-  const executor = analysisExecutor(input, config.plugins);
-  const exclude = [...config.exclude, ...input.many('exclude')];
-  const { plugins, ...profile } = config;
-  const history = executor === undefined ? new HistoryCache(profile) : undefined;
-  const inspectCommit = (id: string) => inspect({ directory, output, source: { revision: id }, exclude,
-    ignore: config.ignore, plugins }, executor, { history, deferSummary: true });
-  const skip = input.flag('skip-saved') ? (id: string) => isSaved(output, id) : undefined;
-  const { interrupted, ...results } = await analyzeCommits(commits, inspectCommit, skip);
-  if (results.analyzed.length || results.skipped.length) {
-    await new LocalReportStore(await realpath(output)).refreshSummary();
-  }
+  const inspection = { directory, output, exclude: input.many('exclude'), worker: input.text('worker') };
+  const { interrupted, ...results } = await analyzeCommits(commits, {
+    inspection, config, configValue, concurrency, skipSaved: input.flag('skip-saved'),
+  });
   const requested = input.many('report');
   const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
   print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
     ...results, store: output, reports });
   return interrupted ? 130 : results.failed.length || results.partial.length ? 2 : 0;
-}
-
-async function analyzeCommits(commits: readonly string[], inspectCommit: (id: string) => Promise<Report>,
-  skip?: (id: string) => Promise<boolean>) {
-  const analyzed: string[] = [], partial: string[] = [], skipped: string[] = [];
-  const failed: { commit: string; error: string }[] = [];
-  let interrupted = false;
-  const stop = () => { interrupted = true; process.stderr.write('Stopping after the current commit.\n'); };
-  process.once('SIGINT', stop);
-  const width = String(commits.length).length;
-  const progress = (index: number, id: string, state: string) =>
-    process.stderr.write(`[${String(index + 1).padStart(width)}/${commits.length}] ${id.slice(0, 7)} ${state}\n`);
-  try {
-    for (const [index, id] of commits.entries()) {
-      if (interrupted) break;
-      if (skip !== undefined && await skip(id)) {
-        skipped.push(id);
-        progress(index, id, 'skipped');
-        continue;
-      }
-      try {
-        const report = await inspectCommit(id);
-        analyzed.push(id);
-        if (report.status === 'partial') partial.push(id);
-        progress(index, id, report.status === 'partial' ? 'partial' : 'analyzed');
-      } catch (error) {
-        if (interrupted) break;
-        const message = error instanceof Error ? error.message : String(error);
-        failed.push({ commit: id, error: message });
-        progress(index, id, `failed: ${message}`);
-      }
-    }
-  } finally {
-    process.removeListener('SIGINT', stop);
-  }
-  return { analyzed, partial, skipped, failed, interrupted };
-}
-
-function analysisExecutor(input: Invocation, plugins: readonly Plugin[]) {
-  const worker = input.text('worker');
-  if (worker === undefined) return undefined;
-  if (plugins.length) throw new Error('Configured process plugins require local analysis. Use --no-config with --worker.');
-  return remoteExecutor(worker, workerToken(), languageRegistry([]).isSource);
-}
-
-async function isSaved(store: string, id: string): Promise<boolean> {
-  try {
-    return (await lstat(join(store, 'commits', id, 'report.json'))).isFile();
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return false;
-    throw error;
-  }
 }
 
 async function show(input: Invocation) {

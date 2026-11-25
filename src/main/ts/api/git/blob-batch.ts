@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { validSubjectId } from '../../core/model/report.js';
+import { gitExecutable } from './git-executable.js';
 
 const idleTimeout = 10_000;
 const maxBlobBytes = 64 * 1024 * 1024;
@@ -49,7 +50,7 @@ class BlobSession {
   private buffer: Buffer = Buffer.alloc(0);
 
   constructor(directory: string) {
-    this.child = spawn('git', ['--no-replace-objects', 'cat-file', '--batch'], { cwd: directory });
+    this.child = spawn(gitExecutable(), ['--no-replace-objects', 'cat-file', '--batch'], { cwd: directory });
     this.child.stderr.resume();
     this.child.stdin.on('error', () => {});
     this.child.on('error', error => this.child.stdout.destroy(error));

@@ -22,7 +22,7 @@ Both parsers measure the inputs for the shared debt model. They report parameter
 
 Duplication uses subtrees from each language's AST. Exact fingerprints retain names and literals. Similar fingerprints normalize them while retaining operators and structure. Go and Python fingerprints are compared within their own language. Go leaves the class count unmeasured.
 
-The packaged parsers read a temporary copy of the selected source files. The Go runner uses local standard-library tooling with module downloads disabled. The Python runner uses the standard library in isolated mode. [Configured process plugins](process-plugins.md) use Docker.
+The packaged parsers read a temporary copy of the selected source files. The Go runner uses local standard-library tooling with module downloads disabled. It compiles its parser once for each Go installation and keeps it in the system cache that `repometry cache path` prints. The Python runner uses the standard library in isolated mode. [Configured process plugins](process-plugins.md) use Docker.
 
 ## Importing coverage
 

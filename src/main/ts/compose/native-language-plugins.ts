@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { HostLanguageRunner, hostToolPath, hostToolVersion } from '../api/process/host-language-runner.js';
+import { hostToolPath, probeHostTool } from '../api/process/host-tool.js';
+import { HostLanguageRunner } from '../api/process/host-language-runner.js';
 import { bindProcessPlugin } from '../api/process/plugin.js';
 import { pluginApi } from '../core/engine/plugin.js';
 import type { Plugin } from '../core/engine/plugin.js';
@@ -38,13 +39,13 @@ function createPlugin({ id, language, binary, args, versionArgs, script, measure
   const manifest = { id, version: '1.1.0', api: pluginApi, kinds: ['language'] as const,
     settings: { duplication: duplicationSettings },
     providesLanguages: [declaration], produces: [{ contract: codeStructures.id, persistence: 'transient' as const }] };
-  const version = hostToolVersion(binary, versionArgs, path)?.match(/\b(?:go|Python\s+)(\d+(?:\.\d+)+(?:[a-z][\w.-]*)?)/i)?.[1];
-  if (version === undefined) {
-    return { ...manifest, operations: [], unavailableReason: `${binary} not found on PATH` };
+  const tool = probeHostTool(binary, versionArgs, path);
+  if ('unavailableReason' in tool) {
+    return { ...manifest, operations: [], unavailableReason: tool.unavailableReason };
   }
   const parser = fileURLToPath(new URL(`../resources/languages/${script}`, import.meta.resolve('repometry/plugin')));
-  return bindProcessPlugin({ ...manifest, tools: { [binary]: version }, operations: [{ id: 'parse', role: 'provider',
+  return bindProcessPlugin({ ...manifest, tools: { [binary]: tool.version }, operations: [{ id: 'parse', role: 'provider',
     scope: 'repository', fileIndependent: true, inputs: { files: sourceFiles }, output: codeStructures,
     argv: [binary, ...args], timeoutMs: 90_000, maxOutputBytes: 16 * 1024 * 1024, implementation: digest(readFileSync(parser)),
-  }] }, new HostLanguageRunner(path, parser));
+  }] }, new HostLanguageRunner(path, parser, tool));
 }

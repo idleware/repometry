@@ -25,13 +25,11 @@ export function metricProjection(report: Report) {
   }
 
   const unavailable = new Map<string, Set<string>>();
-  for (const { path, unmeasured } of metadata.inventory ?? []) {
-    for (const measure of unmeasured ?? []) {
-      const id = structureMetricIds[measure];
-      if (id === undefined) continue;
+  for (const file of metadata.inventory ?? []) {
+    for (const id of unavailableStructureMetrics(file)) {
       let files = unavailable.get(id);
       if (!files) unavailable.set(id, files = new Set());
-      files.add(path);
+      files.add(file.path);
     }
   }
 
@@ -66,6 +64,13 @@ export function metricProjection(report: Report) {
 
   const privateMetrics = metadata.privateMetrics?.map(canonicalMetricId).filter(id => measured.has(id));
   return { catalog: metrics, privateMetrics: privateMetrics?.length ? privateMetrics : undefined, values, isAvailable };
+}
+
+export function unavailableStructureMetrics({ analysed, unmeasured = [] }:
+  { readonly analysed: boolean; readonly unmeasured?: readonly StructureMeasure[] }): string[] {
+  const metrics = unmeasured.flatMap(measure => structureMetricIds[measure] ?? []);
+  if (!analysed && unmeasured.length) metrics.push(definitions.lines);
+  return metrics;
 }
 
 export function canonicalMetricDescriptor(metric: MetricDescriptor): MetricDescriptor {

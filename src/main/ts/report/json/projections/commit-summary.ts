@@ -7,7 +7,7 @@ import type { PublicHistoryEntry } from '../wire/public-history-model.js';
 import { inspectionProfileDigest } from './inspection-context.js';
 import { reportRevision } from '../validation/report.js';
 import type { Report } from '../validation/report.js';
-import { canonicalMetricDescriptor, metricProjection } from './metric-values.js';
+import { canonicalMetricDescriptor, metricProjection, unavailableStructureMetrics } from './metric-values.js';
 
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary, MetricDescriptor, RepositorySummary } from '../wire/summary-model.js';
@@ -117,14 +117,14 @@ export function historyEntry(report: Report): PublicHistoryEntry {
       lineCoverage = { covered: item.covered, total: item.total };
     }
   }
-  const unmeasured = new Set(report.pluginData?.inventory?.flatMap(file => file.unmeasured ?? []));
-  if (unmeasured.has('functions')) functions = null;
-  if (unmeasured.has('cyclomaticComplexity')) maxComplexity = null;
+  const unmeasured = new Set(report.pluginData?.inventory?.flatMap(unavailableStructureMetrics));
+  const measured = (id: string, value: number | null) => unmeasured.has(id) ? null : value;
   const window = report.appliedConfig.churnWindow;
   const endingAt = isRecord(window) && typeof window.endingAt === 'string' ? window.endingAt : '';
   const committedAt = Date.parse(report.committedAt ?? endingAt);
   const generatedAt = Date.parse(report.generatedAt);
   return { sha: report.subject.id, generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : '',
     ...(Number.isFinite(committedAt) ? { committedAt: new Date(committedAt).toISOString() } : {}), status: report.status,
-    files: report.scope.files, parsed: report.scope.parsed, lines, functions, maxComplexity, lineCoverage };
+    files: report.scope.files, parsed: report.scope.parsed, lines: measured(definitions.lines, lines),
+    functions: measured(definitions.functions, functions), maxComplexity: measured(definitions.complexity, maxComplexity), lineCoverage };
 }

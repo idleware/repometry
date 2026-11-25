@@ -8,7 +8,8 @@ import { test } from 'node:test';
 import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { validateSummary } from '../../main/ts/report/json/validation/summary-validation.js';
 import { resolveSourceLocator } from '../../main/ts/compose/sources.js';
-import { cachedBlob, clearSourceCache } from '../../main/ts/api/git/source-cache.js';
+import { clearCaches } from '../../main/ts/api/cache/root.js';
+import { cachedBlob } from '../../main/ts/api/git/source-cache.js';
 import { sourceResponse } from '../../main/ts/report/html/site/source-route.js';
 import { serveAssets } from '../../main/ts/report/html/site/server.js';
 
@@ -86,7 +87,7 @@ test('the blob cache reuses a Git object and clearing it empties only the source
   assert.deepEqual(await cachedBlob(root, oid, load), bytes);
   assert.deepEqual(await readFile(join(root, 'sources', oid.slice(0, 2), oid)), bytes);
   assert.equal(loads, 1);
-  await clearSourceCache(root);
+  await clearCaches(root, true);
   assert.deepEqual(await cachedBlob(root, oid, load), bytes);
   assert.equal(loads, 2);
 });

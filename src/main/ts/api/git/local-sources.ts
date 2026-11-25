@@ -1,11 +1,12 @@
 import { utf8 } from '../../core/model/snapshot.js';
 import { validSubjectId } from '../../core/model/report.js';
 import { isSourcePathname } from '../../core/ports/source-provider.js';
+import { cacheRoot } from '../cache/root.js';
 import { GitBlobBatch } from './blob-batch.js';
 import { gitText, gitTreeFiles } from './git.js';
-import { cachedBlob, sourceCacheRoot } from './source-cache.js';
+import { cachedBlob } from './source-cache.js';
 
-export function readLocalSources(repository: string, cache = sourceCacheRoot()) {
+export function readLocalSources(repository: string, cache = cacheRoot()) {
   const git = new GitBlobBatch(repository);
   const known = new Map<string, Promise<string | undefined>>();
 

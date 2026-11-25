@@ -2,6 +2,7 @@ import { realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { gitRoot, gitWorkingTreePaths, readGitCommit } from './git.js';
 import { containsPath, readWorkingTree } from './local.js';
+import type { GitSelection } from './git.js';
 
 export interface SourceSelection {
   readonly directory: string;
@@ -9,8 +10,8 @@ export interface SourceSelection {
   readonly source: { readonly workingTree: true } | { readonly revision: string };
 }
 
-export async function readInspectionSource(request: SourceSelection, excludes: (path: string) => boolean,
-  isSource: (path: string) => boolean, claims?: (path: string) => boolean) {
+export async function readInspectionSource(request: SourceSelection, selection: GitSelection) {
+  const { excludes, isSource, claims } = selection;
   const root = await realpath('workingTree' in request.source ? request.directory : await gitRoot(request.directory));
   const output = await physicalPath(resolve(request.output));
   if (containsPath(output, root) || output.split(sep).includes('.git')) {
@@ -18,7 +19,7 @@ export async function readInspectionSource(request: SourceSelection, excludes: (
   }
   const snapshot = 'workingTree' in request.source
     ? await readWorkingTree(root, output, excludes, isSource, claims, await gitWorkingTreePaths(root))
-    : await readGitCommit(root, request.source.revision, excludes, isSource, claims);
+    : await readGitCommit(root, request.source.revision, selection);
   const excludedOutput = snapshot.subject.kind === 'working-tree' && containsPath(root, output)
     ? relative(root, output).split(sep).join('/') : null;
   return { root, snapshot, excludedOutput, output };

@@ -1,3 +1,4 @@
+import { GitBlobHistory } from '../api/git/blob-history.js';
 import type { Outcome } from '../core/engine/execute.js';
 import type { Plugin } from '../core/engine/plugin.js';
 import type { CodeStructure } from '../core/model/code-structure.js';
@@ -35,6 +36,7 @@ export class HistoryFiles {
 
 /** One range keeps at most two adjacent snapshots' results during inspection. */
 export class HistoryCache {
+  readonly blobs = new GitBlobHistory();
   private previous?: { readonly profile: string; readonly files: HistoryFiles };
 
   constructor(private readonly configuration?: unknown) {}

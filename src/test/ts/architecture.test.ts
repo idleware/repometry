@@ -11,10 +11,11 @@ const exceptions = resolve('src/test/resources/architecture/legacy-edges.txt');
 const dependencies: Readonly<Record<string, readonly string[]>> = {
   core: [],
   plugins: ['core'],
-  'api/git': ['core', 'report/json'],
+  'api/cache': [],
+  'api/git': ['api/cache', 'core', 'report/json'],
   'api/gh': ['core'],
   'api/import': ['core'],
-  'api/process': ['core'],
+  'api/process': ['api/cache', 'core'],
   'api/worker': ['core', 'report/json'],
   'report/json/wire': [],
   'report/json': ['core', 'report/json/wire'],
@@ -22,7 +23,7 @@ const dependencies: Readonly<Record<string, readonly string[]>> = {
   'report/html/site': ['core', 'report/json', 'report/json/wire'],
   'report/markdown': ['core'],
   compose: ['core', 'plugins', 'api/git', 'api/gh', 'api/import', 'api/process', 'api/worker', 'report/json', 'report/json/wire'],
-  cli: ['compose', 'core', 'api/git', 'api/gh', 'api/import', 'api/worker', 'report/json', 'report/json/wire', 'report/html/site',
+  cli: ['compose', 'core', 'api/cache', 'api/git', 'api/gh', 'api/import', 'api/worker', 'report/json', 'report/json/wire', 'report/html/site',
     'report/markdown'],
 };
 

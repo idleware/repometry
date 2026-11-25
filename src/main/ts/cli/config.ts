@@ -9,7 +9,7 @@ import { invocationDirectory } from './store.js';
 const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
   'minCoverage', 'minLines', 'maxNewIssues', 'plugins']);
 
-function parseConfig(value: unknown) {
+export function parseConfig(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
   string(value.$schema, '$schema');
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
@@ -30,17 +30,21 @@ export function configFile(root: string, input: Invocation): string | undefined 
 }
 
 export async function readConfig(root: string, input: Invocation) {
+  return parseConfig(await readConfigValue(root, input));
+}
+
+export async function readConfigValue(root: string, input: Invocation): Promise<unknown> {
   const explicit = input.text('config');
   const file = configFile(root, input);
-  if (file === undefined) return parseConfig({});
+  if (file === undefined) return {};
   let json: string;
   try {
     json = await readFile(file, 'utf8');
   } catch (error) {
-    if (explicit === undefined && error instanceof Error && 'code' in error && error.code === 'ENOENT') return parseConfig({});
+    if (explicit === undefined && error instanceof Error && 'code' in error && error.code === 'ENOENT') return {};
     throw error;
   }
-  return parseConfig(JSON.parse(json) as unknown);
+  return JSON.parse(json) as unknown;
 }
 
 function list(value: unknown, key: string): readonly string[] {

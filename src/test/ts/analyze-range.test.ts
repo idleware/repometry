@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
+import { serveWorker } from '../../main/ts/api/worker/worker.js';
+import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
+import { languageRegistry } from '../../main/ts/compose/languages.js';
 import { parseRange } from '../../main/ts/cli/revisions.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
@@ -45,6 +50,7 @@ test('a range rejects options that describe one checkout, and an empty range suc
     [['--working-tree'], /Choose a range or --working-tree/],
     [['--import', 'lcov=coverage/lcov.info'], /--import describes one checkout/],
     [['--ci', 'github'], /--ci github needs a single revision/],
+    [['--concurrency', '0'], /--concurrency must be an integer/],
   ];
   for (const [options, message] of rejected) {
     const result = invoke(['analyze', 'HEAD..', '--store', store, ...options]);
@@ -60,11 +66,48 @@ test('a range rejects options that describe one checkout, and an empty range suc
   assert.match(empty.stderr, /No commits in HEAD\.\.HEAD/);
 });
 
+test('a range sends one analysis at a time to a remote worker', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'repometry-remote-range-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
+    GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com' };
+  function git(args: string[]): string {
+    const result = spawnSync('git', ['-C', root, '-c', 'commit.gpgsign=false', '-c', `core.hooksPath=${join(root, 'hooks')}`, ...args],
+      { encoding: 'utf8', env: gitEnv });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  }
+
+  git(['init', '-q']);
+  await writeFile(join(root, 'example.js'), 'export const answer = 42;\n');
+  git(['add', 'example.js']);
+  git(['commit', '-qm', 'base']);
+  for (let i = 0; i < 50; i++) git(['commit', '--allow-empty', '-qm', `change ${i}`]);
+  const commits = git(['rev-list', '--first-parent', '--reverse', 'HEAD~50..HEAD']).split('\n');
+
+  const token = 'repometry-test-worker';
+  const worker = await serveWorker('127.0.0.1', 0, token, async input => {
+    await delay(40);
+    return analyzeSnapshot(input);
+  }, languageRegistry([]).isSource);
+  t.after(worker.close);
+  const store = join(root, 'reports');
+  const { stdout } = await promisify(execFile)(process.execPath,
+    [cli, 'analyze', 'HEAD~50..HEAD', '--no-config', '--ci', 'none', '--store', store, '--worker', worker.url, '--concurrency', '2'],
+    { cwd: root, env: { ...process.env, REPOMETRY_WORKER_TOKEN: token } });
+  const result = JSON.parse(stdout) as { analyzed: string[]; partial: string[]; failed: unknown[] };
+  assert.deepEqual(result.analyzed, commits);
+  assert.deepEqual(result.partial, []);
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual((await readdir(join(store, 'commits'))).sort(), [...commits].sort());
+});
+
 test('help for analyze shows the range form and --skip-saved', () => {
   const help = invoke(['help', 'analyze']);
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /^Usage: repometry analyze \[REVISION \| BASE\.\.\[HEAD\]\]/);
   assert.match(help.stdout, /--skip-saved/);
+  assert.match(help.stdout, /--concurrency/);
 });
 
 test('typed paths resolve against the current directory and defaults against the repository root', async t => {

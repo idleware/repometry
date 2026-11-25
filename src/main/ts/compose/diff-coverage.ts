@@ -62,7 +62,7 @@ async function readInputs(request: DiffCoverageRequest, excludedPaths: readonly 
   ]);
   const base = await findMergeBase(root, requestedBase, head);
   const { isSource, extensions, globs } = languageRegistry(request.plugins ?? []);
-  const snapshot = await readGitCommit(root, head, excludes, isSource);
+  const snapshot = await readGitCommit(root, head, { excludes, isSource });
   const [lcov, changes] = await Promise.all([
     readInspectionCoverage(request, { root, snapshot }),
     readChanges(root, base, snapshot, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded), isSource),

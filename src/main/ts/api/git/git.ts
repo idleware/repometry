@@ -1,16 +1,23 @@
 import { realpath } from 'node:fs/promises';
-import { execFile, spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
-import { comparePaths, isExcludedDirectory, textLineCount, utf8 } from '../../core/model/snapshot.js';
+import { comparePaths, isExcludedDirectory, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
 import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
 import { isGeneratedSource } from '../../core/profile/exclusions.js';
+import { gitExecutable } from './git-executable.js';
+import { GitBlobHistory, gitBlobBatchBytes } from './blob-history.js';
+import type { BlobRequest } from './blob-history.js';
 
 const git = promisify(execFile);
-const maxBuffer = 64 * 1024 * 1024;
+const maxBuffer = gitBlobBatchBytes;
 const oidPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
-const env = { ...process.env, GIT_NO_LAZY_FETCH: '1' };
+const baseEnv = { ...process.env, GIT_NO_LAZY_FETCH: '1' };
+
+function gitEnvironment(): NodeJS.ProcessEnv {
+  return { ...baseEnv, PATH: process.env.PATH };
+}
 
 export async function gitRoot(directory: string): Promise<string> {
   try {
@@ -27,19 +34,19 @@ export async function physicalGitRoot(directory: string): Promise<string> {
 }
 
 export async function gitText(directory: string, args: readonly string[], timeout?: number): Promise<string> {
-  const { stdout } = await git('git', ['--no-replace-objects', ...args], { cwd: directory, env, maxBuffer, timeout });
+  const { stdout } = await git(gitExecutable(), ['--no-replace-objects', ...args], { cwd: directory, env: gitEnvironment(), maxBuffer, timeout });
   return stdout;
 }
 
 export async function gitUtf8(directory: string, args: readonly string[], timeout?: number): Promise<string> {
-  const result = await git('git', ['--no-replace-objects', ...args], { cwd: directory, env, encoding: 'buffer', maxBuffer, timeout });
+  const result = await git(gitExecutable(), ['--no-replace-objects', ...args], { cwd: directory, env: gitEnvironment(), encoding: 'buffer', maxBuffer, timeout });
   return utf8(result.stdout);
 }
 
 export async function gitWorkingTreePaths(directory: string): Promise<readonly string[] | undefined> {
   try {
-    const { stdout } = await git('git', ['--no-replace-objects', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'],
-      { cwd: directory, env: { ...env, LC_ALL: 'C' }, encoding: 'buffer', maxBuffer });
+    const { stdout } = await git(gitExecutable(), ['--no-replace-objects', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'],
+      { cwd: directory, env: { ...gitEnvironment(), LC_ALL: 'C' }, encoding: 'buffer', maxBuffer });
     return [...new Set(utf8(stdout).split('\0').filter(Boolean))];
   } catch (error) {
     if (error instanceof Error && ('code' in error && error.code === 'ENOENT'
@@ -79,7 +86,7 @@ export async function gitTreeFiles(directory: string, commit: string, prefix?: s
   if (includeSize) args.push('--long');
   args.push(commit);
   if (prefix !== undefined) args.push('--', prefix);
-  const tree = await git('git', args, { cwd: directory, env, encoding: 'buffer', maxBuffer });
+  const tree = await git(gitExecutable(), args, { cwd: directory, env: gitEnvironment(), encoding: 'buffer', maxBuffer });
   const entries: GitFile[] = [];
   for (const entry of utf8(tree.stdout).split('\0')) {
     if (!entry) continue;
@@ -133,7 +140,7 @@ export class GitBlobReader {
   }
 
   private start(): ChildProcessWithoutNullStreams {
-    const child = spawn('git', ['--no-replace-objects', 'cat-file', '--batch'], { cwd: this.directory, env });
+    const child = spawn(gitExecutable(), ['--no-replace-objects', 'cat-file', '--batch'], { cwd: this.directory, env: gitEnvironment() });
     const errors: Buffer[] = [];
     child.stdout.on('data', (chunk: Buffer) => this.receive(chunk));
     child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
@@ -195,82 +202,86 @@ function setHeld(child: ChildProcessWithoutNullStreams, held: boolean): void {
   }
 }
 
-export async function readGitCommit(directory: string, revision: string, excludes: (path: string) => boolean,
-  isSource: (path: string) => boolean, claims?: (path: string) => boolean): Promise<SourceSnapshot> {
+export interface GitSelection {
+  readonly excludes: (path: string) => boolean;
+  readonly isSource: (path: string) => boolean;
+  readonly claims?: (path: string) => boolean;
+  readonly history?: GitBlobHistory;
+}
+
+export async function readGitCommit(directory: string, revision: string,
+  { excludes, isSource, claims, history }: GitSelection): Promise<SourceSnapshot> {
   const id = await resolveGitCommit(directory, revision);
   const tracked = (await gitTreeFiles(directory, id, undefined, true)).filter(({ path }) =>
     !path.split('/').slice(0, -1).some(isExcludedDirectory) && !excludes(path));
-  const entries = tracked.filter(entry => isSource(entry.path));
-  const blobs = readBlobs(directory, [...new Set(entries.map(entry => entry.oid))]);
+  const entries = tracked.filter(({ path }) => isSource(path));
+  const claimed = tracked.filter(({ path }) => !isSource(path) && claims?.(path));
+  const oversized = new Set(claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes).map(({ path }) => path));
+  const requested = claimed.filter(({ path }) => !oversized.has(path));
+  const blobs = await (history ?? new GitBlobHistory()).read(
+    blobRequests(tracked.filter(({ path }) => !oversized.has(path)), entries, requested), ids => readBlobs(directory, ids));
   const generated = new Set<string>();
   const files = entries.flatMap(({ path, oid }) => {
-    const bytes = blobs.get(oid);
+    const bytes = blobs.get(oid)?.bytes;
     if (!bytes) throw new Error(`Git blob unavailable: ${oid}`);
-    if (!isGeneratedSource(bytes)) return [{ path, bytes }];
+    if (!isGeneratedSource(bytes)) return [{ path, bytes: snapshotBytes(bytes, history) }];
     generated.add(path);
     return [];
   });
-  const claimed = tracked.filter(({ path }) => !isSource(path) && claims?.(path));
-  const oversized = new Set(claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes).map(({ path }) => path));
-  const requested = new Set(claimed.filter(({ path }) => !oversized.has(path)).map(({ oid }) => oid));
-  const claimedBlobs = new Map<string, Buffer>();
-  const counts = inventoryLineCounts(directory, tracked.filter(({ path }) => !oversized.has(path)), blobs,
-    (oid, bytes) => { if (requested.has(oid) && isClaimedText(bytes)) claimedBlobs.set(oid, bytes); });
-  for (const { path, oid } of claimed) {
-    const bytes = claimedBlobs.get(oid);
-    if (bytes && !oversized.has(path)) files.push({ path, bytes });
+  for (const { path, oid } of requested) {
+    const bytes = blobs.get(oid)?.bytes;
+    if (bytes && isClaimedText(bytes)) files.push({ path, bytes: snapshotBytes(bytes, history) });
   }
   files.sort((left, right) => comparePaths(left.path, right.path));
-  const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid, size }) => ({ path, lines: counts.get(oid) ?? null, ...(size === undefined ? {} : { bytes: size }) }));
+  const inventory = tracked.filter(({ path }) => !generated.has(path)).map(({ path, oid, size }) => ({ path, lines: blobs.get(oid)?.lines ?? null, ...(size === undefined ? {} : { bytes: size }) }));
   const blobIds = new Map(tracked.map(({ path, oid }) => [path, oid]));
   return { subject: { kind: 'commit', id }, files, blobIds, inventory, generatedExcluded: [...generated].sort(comparePaths),
     ...(oversized.size ? { oversizedClaims: [...oversized].sort(comparePaths) } : {}) };
 }
 
-function inventoryLineCounts(directory: string, entries: readonly GitFile[], sources: ReadonlyMap<string, Buffer>,
-  capture: (oid: string, bytes: Buffer) => void): ReadonlyMap<string, number | null> {
-  const lines = new Map([...sources].map(([oid, value]) => [oid, textLineCount(value)]));
-  for (const [oid, bytes] of sources) capture(oid, bytes);
-  const entriesById = new Map(entries.map(entry => [entry.oid, entry]));
-  let batch: string[] = [];
-  let bytes = 0;
-  for (const [oid, { size }] of entriesById) {
-    if (lines.has(oid) || size === undefined || size + 128 > maxBuffer) continue;
-    const estimate = size + 128;
-    if (bytes + estimate > maxBuffer) flush();
-    batch.push(oid);
-    bytes += estimate;
-  }
-  flush();
-  return lines;
-
-  function flush(): void {
-    for (const [oid, value] of readBlobs(directory, batch)) {
-      lines.set(oid, textLineCount(value));
-      capture(oid, value);
-    }
-    batch = [];
-    bytes = 0;
-  }
+function snapshotBytes(bytes: Buffer, history: GitBlobHistory | undefined): Buffer {
+  // Inspectors receive mutable byte arrays. Keep retained Git data independent of those inputs.
+  return history === undefined ? bytes : Buffer.from(bytes);
 }
 
-function readBlobs(directory: string, ids: readonly string[]): ReadonlyMap<string, Buffer> {
+function blobRequests(tracked: readonly GitFile[], sources: readonly GitFile[], claimed: readonly GitFile[]): BlobRequest[] {
+  const required = new Set(sources.map(({ oid }) => oid));
+  const contents = new Set([...required, ...claimed.map(({ oid }) => oid)]);
+  const byId = new Map(tracked.map(({ oid, size }) => [oid, size]));
+  const requests: BlobRequest[] = [];
+  for (const [id, size] of byId) {
+    if (size !== undefined && size + 128 <= maxBuffer) {
+      requests.push({ id, estimatedBytes: size + 128, contents: contents.has(id) });
+    } else if (required.has(id)) {
+      requests.push({ id, estimatedBytes: maxBuffer, contents: true });
+    }
+  }
+  return requests;
+}
+
+async function readBlobs(directory: string, ids: readonly string[]): Promise<ReadonlyMap<string, Buffer>> {
+  const command = git(gitExecutable(), ['--no-replace-objects', 'cat-file', '--batch'], { cwd: directory, env: gitEnvironment(), encoding: 'buffer', maxBuffer });
+  command.child.stdin?.on('error', () => {});
+  command.child.stdin?.end(`${ids.join('\n')}\n`);
+  const { stdout } = await command.catch((error: unknown) => {
+    if (error instanceof Error && 'code' in error && typeof error.code === 'number'
+      && 'stderr' in error && Buffer.isBuffer(error.stderr)) {
+      throw new Error(`git cat-file failed: ${error.stderr.toString('utf8').trim()}`, { cause: error });
+    }
+    throw error;
+  });
   const blobs = new Map<string, Buffer>();
-  if (ids.length === 0) return blobs;
-  const result = spawnSync('git', ['--no-replace-objects', 'cat-file', '--batch'], { cwd: directory, env, input: `${ids.join('\n')}\n`, maxBuffer });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`git cat-file failed: ${result.stderr.toString('utf8').trim()}`);
 
   let cursor = 0;
   for (const oid of ids) {
-    const end = result.stdout.indexOf(10, cursor);
+    const end = stdout.indexOf(10, cursor);
     if (end < 0) throw new Error(`Missing Git blob header: ${oid}`);
-    const match = /^([a-f0-9]+) blob (\d+)$/.exec(result.stdout.toString('ascii', cursor, end));
+    const match = /^([a-f0-9]+) blob (\d+)$/.exec(stdout.toString('ascii', cursor, end));
     const size = Number(match?.[2]);
     const from = end + 1;
     const to = from + size;
-    if (match?.[1] !== oid || !Number.isSafeInteger(size) || result.stdout[to] !== 10) throw new Error(`Invalid Git blob: ${oid}`);
-    blobs.set(oid, result.stdout.subarray(from, to));
+    if (match?.[1] !== oid || !Number.isSafeInteger(size) || stdout[to] !== 10) throw new Error(`Invalid Git blob: ${oid}`);
+    blobs.set(oid, stdout.subarray(from, to));
     cursor = to + 1;
   }
   return blobs;

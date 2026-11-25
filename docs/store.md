@@ -11,7 +11,7 @@ Repometry saves inspections in a store. By default the store is the `.repometry/
 - `reviews/<number>.json` holds a pull request review saved by Repometry 0.8 and earlier. The viewer still lists these files. `repometry review` no longer saves anything.
 - `manifest.json` marks a storage branch. A local store has none.
 
-Other files in `.repometry/`, such as the `report/` folder that `repometry report` writes by default and `components.json`, are not part of the store. The store has no cache folder. `repometry view` keeps the source files it reads from Git in a system cache, and `repometry cache path` prints where.
+Other files in `.repometry/`, such as the `report/` folder that `repometry report` writes by default and `components.json`, are not part of the store. The store has no cache folder. `repometry view` keeps the source files it reads from Git in a system cache, and Go analysis keeps its compiled parser there. `repometry cache path` prints where, and `repometry cache clear` empties it.
 
 All files are UTF-8 JSON. Repometry writes each report file, object and `summary.json` under a temporary name and renames it into place, so a reader never sees a partly written file. It writes a report's objects before the report file that names them.
 

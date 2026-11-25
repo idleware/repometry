@@ -1,35 +1,21 @@
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { constants, mkdtempSync, rmSync } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 import { digest } from '../../core/model/snapshot.js';
 import type { ToolInvocation, ToolResult } from '../../core/ports/tool-runner.js';
 import { validateToolInvocation, writeToolSnapshot } from './tool-snapshot.js';
 import { toolFailure } from './failure.js';
-
-export function hostToolPath(): string {
-  return (process.env.PATH ?? '').split(delimiter).filter(isAbsolute).join(delimiter);
-}
-
-export function hostToolVersion(binary: string, args: readonly string[], path: string): string | undefined {
-  if (!path) return undefined;
-  const home = mkdtempSync(join(tmpdir(), 'repometry-tool-version-'));
-  try {
-    const result = spawnSync(binary, args, { cwd: home, env: toolEnvironment(path, home), encoding: 'utf8',
-      timeout: 5_000, maxBuffer: 4_096, killSignal: 'SIGKILL', windowsHide: true });
-    return result.status === 0 ? (result.stdout.trim() || result.stderr.trim() || undefined) : undefined;
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-}
+import { cacheRoot } from '../cache/root.js';
+import { cachedGoParser } from './go-parser-cache.js';
+import { toolEnvironment } from './host-tool.js';
+import type { VersionedHostTool } from './host-tool.js';
 
 export class HostLanguageRunner {
   readonly implementation = 'host-language-runner/v1';
 
-  private goCompiler?: Promise<GoCompiler>;
-
-  constructor(private readonly path: string, private readonly script: string, private readonly goVersion?: string) {}
+  constructor(private readonly path: string, private readonly script: string, private readonly tool: VersionedHostTool) {}
 
   async run(invocation: ToolInvocation): Promise<ToolResult> {
     validateToolInvocation(invocation);
@@ -41,7 +27,7 @@ export class HostLanguageRunner {
       const env = toolEnvironment(this.path, home);
       const [binary, ...args] = invocation.argv;
       if (binary !== 'go' || args.length !== 1 || args[0] !== 'run') {
-        return await runTool(invocation, binary!, [...args, this.script], cwd, env);
+        return await runTool(invocation, this.tool.binary, [...args, this.script], cwd, env);
       }
       const deadline = performance.now() + invocation.timeoutMs;
       const parser = await withinDeadline(this.goParser(invocation, deadline), deadline);
@@ -52,27 +38,21 @@ export class HostLanguageRunner {
   }
 
   private async goParser(invocation: ToolInvocation, deadline: number): Promise<string> {
-    this.goCompiler ??= findGoCompiler(this.path, this.goVersion).catch(error => {
-      this.goCompiler = undefined;
-      throw error;
-    });
-    const [compiler, source] = await Promise.all([this.goCompiler, readFile(this.script)]);
-    const key = JSON.stringify([compiler.binary, compiler.resolved, compiler.version, digest(source)]);
-    const existing = goParsers.get(key);
+    const compiler = this.tool;
+    const source = await readFile(this.script);
+    const key = digest(JSON.stringify([process.platform, process.arch, compiler, digest(source)]));
+    const root = cacheRoot();
+    const processKey = JSON.stringify([root, key]);
+    const existing = goParsers.get(processKey);
     if (existing) return existing;
-    const pending = compileGoParser(compiler.binary, this.path, source, invocation.maxOutputBytes, deadline).catch(error => {
-      goParsers.delete(key);
+    const pending = cachedGoParser(key, deadline,
+      () => compileGoParser(compiler.binary, this.path, source, invocation.maxOutputBytes, deadline), root).catch(error => {
+      goParsers.delete(processKey);
       throw error;
     });
-    goParsers.set(key, pending);
+    goParsers.set(processKey, pending);
     return pending;
   }
-}
-
-interface GoCompiler {
-  readonly binary: string;
-  readonly resolved: string;
-  readonly version: string;
 }
 
 const goParsers = new Map<string, Promise<string>>();
@@ -88,31 +68,6 @@ function goProcessHome(): string {
     } catch { /* Cleanup must not change the process exit status. */ }
   });
   return home;
-}
-
-async function findGoCompiler(path: string, version: string | undefined): Promise<GoCompiler> {
-  const name = process.platform === 'win32' ? 'go.exe' : 'go';
-  for (const directory of path.split(delimiter).filter(isAbsolute)) {
-    const binary = join(directory, name);
-    let resolved: string;
-    try {
-      resolved = await realpath(binary);
-      if (!(await stat(resolved)).isFile()) continue;
-      await access(resolved, constants.X_OK);
-    } catch {
-      continue;
-    }
-    return { binary, resolved, version: version ?? await probeGoVersion(binary, path) };
-  }
-  throw new Error('Could not find the host Go compiler');
-}
-
-async function probeGoVersion(binary: string, path: string): Promise<string> {
-  const home = goProcessHome();
-  const result = await runTool({ timeoutMs: 5_000, maxOutputBytes: 4_096 }, binary, ['version'], home, toolEnvironment(path, home));
-  const output = Buffer.from(result.stdout).toString().trim() || Buffer.from(result.stderr).toString().trim();
-  if (result.exitCode !== 0 || !output) throw new Error(toolFailure('Could not determine the host Go version', result.stderr));
-  return output.match(/\bgo(\d+(?:\.\d+)+(?:[a-z][\w.-]*)?)/i)?.[1] ?? output;
 }
 
 async function compileGoParser(binary: string, path: string, source: Uint8Array, maxOutputBytes: number, deadline: number): Promise<string> {
@@ -149,11 +104,6 @@ async function withinDeadline<T>(result: Promise<T>, deadline: number): Promise<
   } finally {
     clearTimeout(timer);
   }
-}
-
-function toolEnvironment(PATH: string, HOME: string): NodeJS.ProcessEnv {
-  return { PATH, HOME, GOCACHE: join(HOME, 'go-cache'), GOENV: 'off', GO111MODULE: 'off',
-    GOWORK: 'off', GOTOOLCHAIN: 'local', GOPROXY: 'off', GOSUMDB: 'off', CGO_ENABLED: '0' };
 }
 
 function runTool({ stdin, timeoutMs, maxOutputBytes }: Pick<ToolInvocation, 'stdin' | 'timeoutMs' | 'maxOutputBytes'>,
