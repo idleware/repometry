@@ -1,3 +1,8 @@
+## [0.8.1](https://github.com/idleware/repometry/compare/v0.8.0...v0.8.1) (2026-11-25)
+
+### Fixes & improvements
+* docs: add cicd usage examples ([af145ca](https://github.com/idleware/repometry/commit/af145ca8d8d97dbc7a1e94526735e731ba1e4f4b))
+
 ## [0.8.0](https://github.com/idleware/repometry/compare/v0.7.0...v0.8.0) (2026-11-24)
 
 ### Features
