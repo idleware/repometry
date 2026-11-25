@@ -5,6 +5,7 @@ import type { IssueEffect, PullReview, ReviewedIssue, ReviewReason } from '../..
 /** The first line of every review comment, which finds the comment to update. */
 export const reviewMarker = '<!-- repometry-review -->';
 const maxLength = 60_000;
+const assets = 'https://raw.githubusercontent.com/idleware/repometry/master/.github/assets';
 const groups: readonly { readonly effect: IssueEffect; readonly title: string; readonly folded: boolean }[] = [
   { effect: 'new', title: 'New', folded: false }, { effect: 'worsened', title: 'Worsened', folded: false },
   { effect: 'improved', title: 'Improved', folded: true }, { effect: 'touched', title: 'Touched', folded: true },
@@ -13,7 +14,7 @@ const verdicts: Readonly<Record<PullReview['verdict'], string>> = { passed: 'Pas
 
 /** The review as Markdown: the run summary and the pull request comment carry the same text. */
 export function pullReviewMarkdown(review: PullReview): string {
-  const head = [reviewMarker, `## Repometry${review.number === null ? ' review' : ` · PR #${review.number}`}`, '', headline(review), '',
+  const head = [reviewMarker, `## ${review.verdict === 'unmeasured' ? '' : `${flag(review.verdict)} `}repometry`, '', headline(review), '',
     ...facts(review).map(line => `- ${line}`), ''];
   const annotated = review.issues.filter(issue => issue.effect === 'new' || issue.effect === 'worsened').length;
   const ranges = review.coverage.uncovered.length;
@@ -57,6 +58,16 @@ function fitTable({ title, folded, heads, rows }: { title: string; folded: boole
   }
   const cut = rows.length - kept.length;
   return kept.length ? { lines: [...header, ...kept, ...closing], length, cut } : { lines: [], length: 0, cut };
+}
+
+/**
+ * The verdict flag that, with the name, forms the logo. Comments load it from master, so these paths must never change.
+ * It is cropped to its ink: at 17 px it stands on the heading's baseline at cap height.
+ */
+function flag(verdict: 'passed' | 'failed'): string {
+  const asset = (theme: string) => `${assets}/flag-${verdict}-${theme}.svg`;
+  return `<picture><source media="(prefers-color-scheme: dark)" srcset="${asset('dark')}">`
+    + `<img src="${asset('light')}" alt="" width="17" height="17"></picture>`;
 }
 
 function headline({ verdict, issues, base, mergeBase, head, changedFiles }: PullReview): string {

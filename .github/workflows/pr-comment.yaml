@@ -43,7 +43,7 @@ jobs:
           marker='<!-- repometry-review -->'
           if [ ! -f review/review.md ]; then # the run ended before its review: an older comment no longer applies
             stale=1
-            printf '%s\n## Repometry review\n\nNo review for `%s`: the run ended before the review, so an earlier result no longer applies.\n' \
+            printf '%s\n## repometry\n\nNo review for `%s`: the run ended before the review, so an earlier result no longer applies.\n' \
               "$marker" "${HEAD_SHA:0:7}" > review/review.md
           fi
           [ "$(head -n 1 review/review.md)" = "$marker" ] || { echo "Unexpected review text."; exit 1; }
