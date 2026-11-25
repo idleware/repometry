@@ -190,7 +190,7 @@ The workflow runs only on pushes to the default branch. A pull request from a fo
 
 An issue keeps its identity through renames and moves within its file. A duplicate shows once, on the copy the change touched. Whole-file issues, such as file complexity, are new when the change crosses the limit and worsened when the file grows past it.
 
-The check also measures coverage of the changed lines, and fails below 80% once at least 20 changed lines are measured. It doesn't show repository totals or grades. Set `maxNewIssues`, `minCoverage` and `minLines` in `repometry.config.json` to change the limits, or pass `--max-new-issues`, `--min-coverage` and `--min-lines`. The command exits with 0 when the check passes, 3 when it fails, 2 when a measurement it needs is missing on the head, and 1 when it can't run.
+The review compares findings only: it doesn't count churn, and it skips scanner imports such as SARIF, ESLint or OSV files, which describe one checkout and can't be compared. The check also measures coverage of the changed lines, and fails below 80% once at least 20 changed lines are measured. It doesn't show repository totals or grades. Set `maxNewIssues`, `minCoverage` and `minLines` in `repometry.config.json` to change the limits, or pass `--max-new-issues`, `--min-coverage` and `--min-lines`. The command exits with 0 when the check passes, 3 when it fails, 2 when a measurement it needs is missing on the head, and 1 when it can't run.
 
 The review is shown in three places: annotations on the pull request's diff, the run summary, and one comment on the pull request that is updated on every push. It's never stored, on the `repometry` branch or anywhere else.
 
