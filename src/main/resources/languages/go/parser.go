@@ -57,6 +57,7 @@ type observation struct {
 	Label   string `json:"label"`
 	Line    int    `json:"line"`
 	EndLine int    `json:"endLine"`
+	Anchor  string `json:"anchor,omitempty"`
 }
 
 type duplicationSettings struct {
@@ -266,6 +267,7 @@ type structureMetrics struct {
 	cognitive      []functionComplexity
 	observations   []observation
 	cognitiveTotal int
+	anchors        []string
 }
 
 type flow struct {
@@ -289,10 +291,19 @@ func measureStructure(file *ast.File, layout sourceLayout) structureMetrics {
 	return metrics
 }
 
+// observe records an observation inside the innermost function being measured, or at module level.
 func (m *structureMetrics) observe(rule string, value int, label string, node ast.Node) {
+	anchor := ""
+	if len(m.anchors) > 0 {
+		anchor = m.anchors[len(m.anchors)-1]
+	}
+	m.observeAt(rule, value, label, node, anchor)
+}
+
+func (m *structureMetrics) observeAt(rule string, value int, label string, node ast.Node, anchor string) {
 	start, end := m.layout.tokens.Offset(node.Pos()), m.layout.end(node.End())
 	m.observations = append(m.observations, observation{
-		Rule: rule, Value: value, Label: label, Line: m.layout.line(start), EndLine: m.layout.line(end - 1),
+		Rule: rule, Value: value, Label: label, Line: m.layout.line(start), EndLine: m.layout.line(end - 1), Anchor: anchor,
 	})
 }
 
@@ -407,10 +418,19 @@ func (m *structureMetrics) measureFunction(node ast.Node, body *ast.BlockStmt, s
 	m.cyclomatic = append(m.cyclomatic, position)
 	m.cognitive = append(m.cognitive, position)
 
+	anchor := name
+	if anchor == "" {
+		anchor = "(anonymous)"
+		if len(m.anchors) > 0 {
+			anchor = m.anchors[len(m.anchors)-1] + ".(anonymous)"
+		}
+	}
 	own := flow{cyclomatic: 1}
 	forChildren(node, func(child ast.Node) {
 		if child == body {
+			m.anchors = append(m.anchors, anchor)
 			m.visit(child, &own, 0, token.ILLEGAL, false)
+			m.anchors = m.anchors[:len(m.anchors)-1]
 		} else {
 			m.visit(child, outer, depth, token.ILLEGAL, false)
 		}
@@ -431,11 +451,11 @@ func (m *structureMetrics) measureFunction(node ast.Node, body *ast.BlockStmt, s
 			params += len(field.Names)
 		}
 	}
-	m.observe("function-parameters", params, label+" · Parameters", node)
-	m.observe("return-statements", own.returns, label+" · Return statements", node)
-	m.observe("function-complexity", own.cognitive, label+" · Cognitive complexity", node)
+	m.observeAt("function-parameters", params, label+" · Parameters", node, anchor)
+	m.observeAt("return-statements", own.returns, label+" · Return statements", node, anchor)
+	m.observeAt("function-complexity", own.cognitive, label+" · Cognitive complexity", node, anchor)
 	if own.deepest != nil {
-		m.observe("nested-control-flow", own.maxDepth, label+" · Control-flow depth", own.deepest)
+		m.observeAt("nested-control-flow", own.maxDepth, label+" · Control-flow depth", own.deepest, anchor)
 	}
 }
 

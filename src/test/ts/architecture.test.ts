@@ -20,8 +20,10 @@ const dependencies: Readonly<Record<string, readonly string[]>> = {
   'report/json': ['core', 'report/json/wire'],
   'report/html/app': ['report/json/wire'],
   'report/html/site': ['core', 'report/json', 'report/json/wire'],
+  'report/markdown': ['core'],
   compose: ['core', 'plugins', 'api/git', 'api/gh', 'api/import', 'api/process', 'api/worker', 'report/json', 'report/json/wire'],
-  cli: ['compose', 'core', 'api/git', 'api/gh', 'api/import', 'api/worker', 'report/json', 'report/json/wire', 'report/html/site'],
+  cli: ['compose', 'core', 'api/git', 'api/gh', 'api/import', 'api/worker', 'report/json', 'report/json/wire', 'report/html/site',
+    'report/markdown'],
 };
 
 type Edge = { readonly from: string; readonly to: string; readonly kind: 'runtime' | 'type' };

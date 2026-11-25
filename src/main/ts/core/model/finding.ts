@@ -23,6 +23,12 @@ export interface Finding {
   readonly endLine?: number;
   readonly effortMinutes?: number;
   readonly related?: readonly FindingLocation[];
+  /** The measured value the rule judged, such as a function's cognitive complexity or a duplicate's copy count. */
+  readonly value?: number;
+  /** The value the rule allows. */
+  readonly limit?: number;
+  /** What the issue is about across commits: a function's qualified name, `(file)`, or a duplicate's fingerprint. */
+  readonly anchor?: string;
 }
 
 export function isSensitiveFinding(category: Finding['category']): boolean {
@@ -39,14 +45,35 @@ function isLocation(value: unknown): value is FindingLocation {
 }
 
 export function isFinding(value: unknown): value is Finding {
-  return isRecord(value) && typeof value.tool === 'string' && value.tool.length > 0
-    && typeof value.rule === 'string' && value.rule.length > 0 && typeof value.message === 'string' && value.message.length > 0
-    && findingCategories.some(category => category === value.category) && findingLevels.some(level => level === value.level)
-    && (value.path === undefined || (typeof value.path === 'string' && value.path.length > 0))
-    && (value.line === undefined || (value.path !== undefined && count(value.line, 1)))
-    && (value.endLine === undefined || (typeof value.line === 'number' && count(value.endLine, value.line)))
-    && (value.effortMinutes === undefined || count(value.effortMinutes, 0))
-    && (value.related === undefined || (Array.isArray(value.related) && value.related.every(isLocation)));
+  return isRecord(value) && namesIssue(value) && placesIssue(value) && measuresIssue(value);
+}
+
+function namesIssue(value: Readonly<Record<string, unknown>>): boolean {
+  return text(value.tool) && text(value.rule) && text(value.message)
+    && findingCategories.some(category => category === value.category) && findingLevels.some(level => level === value.level);
+}
+
+function placesIssue(value: Readonly<Record<string, unknown>>): boolean {
+  return optional(value.path, text) && optional(value.line, line => value.path !== undefined && count(line, 1))
+    && optional(value.endLine, endLine => typeof value.line === 'number' && count(endLine, value.line))
+    && optional(value.related, related => Array.isArray(related) && related.every(isLocation));
+}
+
+function measuresIssue(value: Readonly<Record<string, unknown>>): boolean {
+  return optional(value.effortMinutes, minutes => count(minutes, 0)) && optional(value.value, measure)
+    && optional(value.limit, measure) && optional(value.anchor, text);
+}
+
+function optional(value: unknown, test: (value: unknown) => boolean): boolean {
+  return value === undefined || test(value);
+}
+
+function text(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function measure(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 export interface FindingResult {

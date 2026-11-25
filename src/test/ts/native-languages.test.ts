@@ -5,7 +5,10 @@ import { nativeLanguagePlugins } from '../../main/ts/compose/native-language-plu
 import { effectivePlugins } from '../../main/ts/compose/plugin-list.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
-import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { sourceFiles, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { codeStructures } from '../../main/ts/core/model/code-structure.js';
+import { execute } from '../../main/ts/core/engine/execute.js';
+import { plan } from '../../main/ts/core/engine/plan.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';
@@ -104,3 +107,27 @@ test('native language providers contribute real clone findings and full maintain
   assert.ok(maintainability?.grade);
   assert.equal(maintainability.gradeCoverage, undefined);
 });
+
+const anchorSamples = [
+  { id: 'go-ast', path: 'slot.go',
+    source: 'package sample\ntype Slot struct{}\nfunc (s *Slot) CompareAndSwap(a, b bool) bool {\n  if a && b { return true }\n  return func() bool { return a }()\n}\n',
+    anchors: ['(*Slot).CompareAndSwap.(anonymous)', '(*Slot).CompareAndSwap'], logic: '(*Slot).CompareAndSwap' },
+  { id: 'python-ast', path: 'serializer.py',
+    source: 'class Serializer:\n    def loads(self, a, b):\n        if a and b:\n            return 1\n        return (lambda: 0)()\n',
+    anchors: ['Serializer.loads.(anonymous)', 'Serializer.loads'], logic: 'Serializer.loads' },
+] as const;
+
+for (const sample of anchorSamples) {
+  const plugin = nativeLanguagePlugins().find(plugin => plugin.id === sample.id);
+  test(`the packaged ${sample.id} parser anchors observations to qualified names`, { skip: plugin?.unavailableReason }, async () => {
+    const tasks = plan({ plugins: [plugin!], select: [`${sample.id}/parse`], inputs: new Map([['files', sourceFiles.id]]) });
+    const results = await execute(tasks, new Map([['files', { contract: sourceFiles.id,
+      value: [{ path: sample.path, bytes: Buffer.from(sample.source) }] }]]));
+    const parsed = results.get(`${sample.id}/parse`);
+    assert.ok(parsed?.state === 'completed' && codeStructures.accepts(parsed.product.value), JSON.stringify(parsed));
+    const observed = parsed.product.value[0]?.observations ?? [];
+    assert.deepEqual(observed.filter(row => row.rule === 'function-complexity').map(row => row.anchor), sample.anchors);
+    assert.equal(observed.find(row => row.rule === 'boolean-logic')?.anchor, sample.logic);
+    assert.equal(observed.find(row => row.rule === 'file-complexity')?.anchor, undefined);
+  });
+}

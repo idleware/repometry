@@ -69,7 +69,7 @@ test('packaged entry point saves and reads an inspection and atomically replaces
   const report = JSON.parse(result.stdout) as Report;
   assert.equal(report.schema, reportSchema);
   const complexity = report.measurements.filter(item => item.definition === definitions.complexity);
-  assert.deepEqual(complexity.map(item => [item.name, item.value]).sort(), [['nested', 2], ['pick', 2]]);
+  assert.deepEqual(complexity.map(item => [item.name, item.value]).sort(), [['pick', 2], ['pick.nested', 2]]);
   const coverage = report.measurements.find(item => item.definition === definitions.coverage && item.target === 'repository');
   assert.deepEqual(coverage, { definition: definitions.coverage, target: 'repository', covered: 2, total: 2, value: 1 });
   const coverageInput = report.appliedConfig.coverage as { inputDigest: string; inputDigests: string[] };

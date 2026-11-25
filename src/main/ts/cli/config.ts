@@ -7,7 +7,7 @@ import { readProcessPlugins } from '../compose/process-plugins.js';
 import { invocationDirectory } from './store.js';
 
 const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
-  'minCoverage', 'minLines', 'maxCoverageDrop', 'maxNewIssues', 'plugins']);
+  'minCoverage', 'minLines', 'maxNewIssues', 'plugins']);
 
 function parseConfig(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
@@ -16,16 +16,23 @@ function parseConfig(value: unknown) {
   return { ...profile, plugins: readProcessPlugins(value.plugins), imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
     sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
     minCoverage: number(value.minCoverage, 'minCoverage'), minLines: number(value.minLines, 'minLines'),
-    maxCoverageDrop: number(value.maxCoverageDrop, 'maxCoverageDrop'), maxNewIssues: number(value.maxNewIssues, 'maxNewIssues') };
+    maxNewIssues: number(value.maxNewIssues, 'maxNewIssues') };
+}
+
+/** The configuration file in effect, or undefined under --no-config. */
+export function configFile(root: string, input: Invocation): string | undefined {
+  const explicit = input.text('config');
+  if (input.flag('no-config')) {
+    if (explicit !== undefined) throw new Error('Choose --config or --no-config');
+    return undefined;
+  }
+  return explicit === undefined ? resolve(root, 'repometry.config.json') : resolve(invocationDirectory(input), explicit);
 }
 
 export async function readConfig(root: string, input: Invocation) {
   const explicit = input.text('config');
-  if (input.flag('no-config')) {
-    if (explicit !== undefined) throw new Error('Choose --config or --no-config');
-    return parseConfig({});
-  }
-  const file = explicit === undefined ? resolve(root, 'repometry.config.json') : resolve(invocationDirectory(input), explicit);
+  const file = configFile(root, input);
+  if (file === undefined) return parseConfig({});
   let json: string;
   try {
     json = await readFile(file, 'utf8');

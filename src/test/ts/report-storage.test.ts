@@ -43,7 +43,8 @@ function detailed(char: string, lines: number): Report {
       { definition: definitions.lines, target: 'file', path: 'src/nested/component.ts.map', value: 1 },
     ],
     findings: [
-      { tool: 'lint', rule: 'structure', category: 'lint', level: 'low', path, line: 1, message: 'Keep detail', related: [{ path, line: 2, endLine: 5 }] },
+      { tool: 'lint', rule: 'structure', category: 'lint', level: 'low', path, line: 1, message: 'Keep detail', related: [{ path, line: 2, endLine: 5 }],
+        value: 17, limit: 15, anchor: 'render' },
       { tool: 'lint', rule: 'setup', category: 'lint', level: 'unknown', message: 'Repository-wide' },
     ],
     ruleSkips: [{ path: 'README.md', plugin: 'lint', rules: ['structure'], reason: 'unmeasured' }],

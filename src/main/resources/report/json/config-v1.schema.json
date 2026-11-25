@@ -25,7 +25,6 @@
     "branch": { "type": "string", "minLength": 1 },
     "minCoverage": { "type": "number", "minimum": 0, "maximum": 100 },
     "minLines": { "type": "integer", "minimum": 0 },
-    "maxCoverageDrop": { "type": "number", "minimum": 0, "maximum": 100 },
     "maxNewIssues": { "type": "integer", "minimum": 0 }
   },
   "additionalProperties": false,

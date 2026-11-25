@@ -1,6 +1,8 @@
-import { appendFile, realpath } from 'node:fs/promises';
+import { appendFile, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { DiffCoverageReport } from '../../core/usecases/diff-coverage.js';
+import { isRecord } from '../../core/engine/plugin.js';
+import { annotationLimit } from '../../core/model/pull-review.js';
 import type { PullReview } from '../../core/model/pull-review.js';
 import type { Report } from '../../core/model/report.js';
 
@@ -28,64 +30,51 @@ export async function writeGitHubDiffCoverage(report: DiffCoverageReport): Promi
   ].join('\n'));
 }
 
-export async function writeGitHubReview(report: PullReview, repository?: string): Promise<void> {
+/** The number of the pull request whose event started this GitHub Actions run, if any. */
+export async function gitHubPullRequest(): Promise<number | undefined> {
+  const path = process.env.GITHUB_EVENT_PATH;
+  if (!path) return undefined;
+  const event: unknown = JSON.parse(await readFile(path, 'utf8'));
+  const pull = isRecord(event) ? event.pull_request : undefined;
+  const number = isRecord(pull) ? pull.number : undefined;
+  return typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? number : undefined;
+}
+
+export async function writeGitHubReview(review: PullReview, markdown: string, repository: string): Promise<void> {
   const { output, summary } = githubFiles();
-  const { diff, coverage, findings } = report;
-  await appendFile(output, [
-    `status=${diff.status}`, `percent=${diff.percent ?? ''}`, `decision=${diff.gate?.status ?? ''}`,
-    `review-base=${report.base}`, `review-head=${report.head}`, `diff-covered=${diff.covered}`, `diff-total=${diff.total}`,
-    `coverage-percent=${coverage.head?.value ?? ''}`, `coverage-delta=${coverage.delta ?? ''}`,
-    `coverage-decision=${coverage.gate?.status ?? ''}`,
-    `new-issues=${findings.qualityCount ?? ''}`, `issues-decision=${findings.gate?.status ?? ''}`, '',
-  ].join('\n'));
-  const label = report.number === null ? 'Repometry review' : `Repometry review · PR #${report.number}`;
-  const totals = [
-    '| Check | Result | Gate |',
-    '| --- | --- | --- |',
-    `| Total coverage | ${percent(coverage.base?.value)} → ${percent(coverage.head?.value)} | ${coverage.gate ? `${coverage.gate.status}, max drop ${coverage.gate.maxDrop} pp` : '—'} |`,
-    `| Changed-line coverage | ${percent(diff.percent)} (${diff.covered}/${diff.total}), ${diff.status} | ${diff.gate ? `${diff.gate.status}, min ${diff.gate.minimumPercent}% on ${diff.gate.minimumLines}+ lines` : '—'} |`,
-    `| New quality issues | ${findings.qualityCount ?? 'Unavailable'} | ${findings.gate ? `${findings.gate.status}, max ${findings.gate.maximum}` : '—'} |`,
-  ];
-  const files = diff.files.slice(0, 50).map(file => {
-    const result = file.covered === null || file.total === null ? '—' : `${file.covered}/${file.total}`;
-    const missed = file.covered === null || file.total === null ? '—' : String(file.total - file.covered);
-    return `| ${pathCode(file.path)} | ${file.addedLines} | ${result} | ${missed} |`;
-  });
-  const changes = files.length === 0 ? [] : ['', '### Changed files', '',
-    '| File | Added lines | Covered / measured | Missed |',
-    '| --- | ---: | ---: | ---: |', ...files,
-    ...(diff.files.length > files.length ? ['', `Showing ${files.length} of ${diff.files.length} files.`] : [])];
-  await appendFile(summary, [`## ${label}`, '', `\`${report.base}\` → \`${report.head}\``, '',
-    ...totals, ...(diff.gaps.length ? ['', `Coverage gaps in ${diff.gaps.length} records.`] : []), ...changes, '', '',
-  ].join('\n'));
-  if (repository !== undefined && diff.uncovered.length > 0) await annotateUncovered(diff.uncovered, repository);
+  const count = (effect: string) => review.issues.filter(issue => issue.effect === effect).length;
+  await appendFile(output, [`verdict=${review.verdict}`, ...['new', 'worsened', 'improved', 'touched'].map(effect => `${effect}=${count(effect)}`),
+    `changed-coverage=${review.coverage.percent ?? ''}`, ''].join('\n'));
+  await appendFile(summary, markdown);
+  const annotate = await annotator(repository);
+  review.issues.filter(issue => issue.effect === 'new' || issue.effect === 'worsened').slice(0, annotationLimit)
+    .forEach(({ effect, finding }) => annotate('error', `Repometry: ${effect} issue`, finding, finding.message));
+  review.coverage.uncovered.slice(0, annotationLimit).forEach(({ path, first, last }) => annotate('warning', 'Repometry: not covered',
+    { path, line: first, endLine: last }, `Changed lines ${first}${last > first ? `–${last}` : ''} are not covered`));
 }
 
-function percent(value: number | null | undefined): string {
-  return value == null ? '—' : `${value.toFixed(2)}%`;
-}
-
-function pathCode(value: string): string {
-  const clean = value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-    .replaceAll('|', '&#124;').replaceAll('\r', ' ').replaceAll('\n', ' ');
-  return `<code>${clean}</code>`;
-}
-
-async function annotateUncovered(uncovered: PullReview['diff']['uncovered'], repository: string): Promise<void> {
+/** Writes workflow annotations for paths inside the checkout, relative to the workspace GitHub shows them in. */
+async function annotator(repository: string) {
   const [workspace, root] = await Promise.all([realpath(process.env.GITHUB_WORKSPACE ?? process.cwd()), realpath(repository)]);
   const prefix = relative(workspace, root);
-  if (isAbsolute(prefix) || prefix.split(sep).includes('..')) return;
-  let count = 0;
-  for (const { path, lines } of uncovered) {
+  const inside = !isAbsolute(prefix) && !prefix.split(sep).includes('..');
+  return (kind: 'error' | 'warning', title: string, { path, line, endLine }: { path?: string; line?: number; endLine?: number },
+    message: string): void => {
+    if (!inside || path === undefined) return;
     const checkoutPath = relative(workspace, resolve(root, path));
-    if (isAbsolute(checkoutPath) || checkoutPath.split(sep).includes('..')) continue;
-    const file = checkoutPath.split(sep).join('/').replaceAll('%', '%25').replaceAll('\r', '%0D')
-      .replaceAll('\n', '%0A').replaceAll(':', '%3A').replaceAll(',', '%2C');
-    for (const line of lines) {
-      process.stderr.write(`::warning file=${file},line=${line},title=Repometry diff coverage::Changed line is not covered\n`);
-      if (++count === 10) return;
-    }
-  }
+    if (isAbsolute(checkoutPath) || checkoutPath.split(sep).includes('..')) return;
+    const properties = [`file=${property(checkoutPath.split(sep).join('/'))}`,
+      ...line === undefined ? [] : [`line=${line}`, `endLine=${endLine ?? line}`], `title=${property(title)}`];
+    process.stderr.write(`::${kind} ${properties.join(',')}::${data(message)}\n`);
+  };
+}
+
+function data(value: string): string {
+  return value.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+}
+
+function property(value: string): string {
+  return data(value).replaceAll(':', '%3A').replaceAll(',', '%2C');
 }
 
 function githubFiles(): { output: string; summary: string } {

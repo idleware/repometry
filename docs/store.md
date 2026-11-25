@@ -8,7 +8,7 @@ Repometry saves inspections in a store. By default the store is the `.repometry/
 - `working-trees/<id>/report.json` holds an inspection made with `analyze --working-tree`. The ID is a SHA-256 digest of the analysed files' paths and contents.
 - `objects/<2 hex>/<content id>-<path hint>.json` holds the parts that report files refer to.
 - `summary.json` lists a summary row for each saved commit.
-- `reviews/<number>.json` holds a pull request review saved by `repometry review --pull NUMBER`.
+- `reviews/<number>.json` holds a pull request review saved by Repometry 0.8 and earlier. The viewer still lists these files. `repometry review` no longer saves anything.
 - `manifest.json` marks a storage branch. A local store has none.
 
 Other files in `.repometry/`, such as the `report/` folder that `repometry report` writes by default and `components.json`, are not part of the store. The store has no cache folder. `repometry view` keeps the source files it reads from Git in a system cache, and `repometry cache path` prints where.

@@ -11,6 +11,7 @@ import { physicalLines, sourceFile, utf8 } from '../../core/model/snapshot.js';
 import { cloneCandidates } from './clone-candidates.js';
 import { classifyLines } from './code-lines.js';
 import { functionFacts } from './function-facts.js';
+import { qualifiedNames } from './qualified-names.js';
 import { structuralObservations } from './structural-observations.js';
 import { jsTsExtensions } from './extensions.js';
 
@@ -48,8 +49,9 @@ export const babelProvider: Plugin = {
       const ast = parse(source, { ...parserDefaults, sourceType, plugins });
       const lines = physicalLines(source);
       const { code, comments } = classifyLines(source, ast, lines);
-      return { path: file.path, lines, commentLines: comments, ...functionFacts(ast),
-        ...structuralObservations(ast), clones: cloneCandidates(file.path, ast, code) };
+      const names = qualifiedNames(ast);
+      return { path: file.path, lines, commentLines: comments, ...functionFacts(ast, names),
+        ...structuralObservations(ast, names), clones: cloneCandidates(file.path, ast, code) };
     },
   }],
 };

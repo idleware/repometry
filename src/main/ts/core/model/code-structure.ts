@@ -31,6 +31,8 @@ export interface StructuralObservation {
   readonly label: string;
   readonly line?: number;
   readonly endLine?: number;
+  /** The qualified name of the function the observation is about or sits in. File and module observations omit it. */
+  readonly anchor?: string;
 }
 
 export interface CodeStructure {
@@ -65,8 +67,16 @@ function isFunctionComplexity(value: unknown): value is FunctionComplexity {
 }
 
 function isObservation(value: unknown): value is StructuralObservation {
-  return isRecord(value) && typeof value.rule === 'string' && checkIds.has(value.rule)
-    && typeof value.label === 'string' && isCount(value.value) && isPosition(value.line) && isPosition(value.endLine);
+  return isRecord(value) && typeof value.rule === 'string' && checkIds.has(value.rule) && typeof value.label === 'string'
+    && observedAt(value);
+}
+
+function observedAt(value: Readonly<Record<string, unknown>>): boolean {
+  return isCount(value.value) && isPosition(value.line) && isPosition(value.endLine) && optionalName(value.anchor);
+}
+
+function optionalName(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.length > 0);
 }
 
 export const codeStructure: DataContract<CodeStructure> = {

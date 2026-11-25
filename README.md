@@ -43,7 +43,8 @@ Run these commands in your repository. Without an install, start each with `npx`
 | `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. |
 | `repometry view` | Open the report locally on a free port. Use `--port 3030` to choose a port. |
 | `repometry report html` | Export a static report to `.repometry/report/html`. Use `-o DIR` for another folder. |
-| `repometry store check --repair --from git:repometry` | Check saved inspections. `--repair` restores missing data from a copy. |
+| `repometry review origin/main --import lcov=coverage/lcov.info` | Report the issues a change adds or worsens on the lines it changes, and their coverage. |
+| `repometry store check --repair --from git:origin/repometry` | Check saved inspections. `--repair` restores missing data from a copy. |
 | `repometry plugins` | List supported formats. |
 | `repometry help analyze` | Get help for a command. |
 

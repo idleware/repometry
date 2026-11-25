@@ -1,11 +1,12 @@
-import { VISITOR_KEYS, isBlockStatement, isFunction, isIdentifier, isStringLiteral } from '@babel/types';
+import { VISITOR_KEYS, isBlockStatement, isFunction } from '@babel/types';
 import type { Function as BabelFunction, Node } from '@babel/types';
 import type { FunctionComplexity } from '../../core/model/code-structure.js';
+import type { FunctionNaming } from './qualified-names.js';
 
 const decisionNodes = new Set(['IfStatement', 'ConditionalExpression', 'ForStatement', 'ForInStatement', 'ForOfStatement',
   'WhileStatement', 'DoWhileStatement', 'CatchClause', 'LogicalExpression']);
 
-export function functionFacts(ast: Node) {
+export function functionFacts(ast: Node, names: ReadonlyMap<Node, FunctionNaming>) {
   let functions = 0;
   const bodyRanges: [number, number][] = [];
   walk(ast, node => {
@@ -26,7 +27,7 @@ export function functionFacts(ast: Node) {
       for (const parameter of node.params) visit(parameter, undefined);
       const start = node.loc?.start;
       cyclomaticFunctions.push({ line: start?.line,
-        column: start === undefined ? undefined : start.column + 1, name: functionName(node), value: own.value });
+        column: start === undefined ? undefined : start.column + 1, name: names.get(node)?.name, value: own.value });
       return;
     }
     if (frame && (decisionNodes.has(node.type) || (node.type === 'SwitchCase' && node.test !== null))) frame.value++;
@@ -66,13 +67,4 @@ export function* children(node: Node): Iterable<Node> {
 function walk(node: Node, visit: (node: Node) => void): void {
   visit(node);
   for (const child of children(node)) walk(child, visit);
-}
-
-export function functionName(node: BabelFunction): string | undefined {
-  if ('id' in node && node.id && isIdentifier(node.id)) return node.id.name;
-  if ('key' in node) {
-    if (isIdentifier(node.key)) return node.key.name;
-    if (isStringLiteral(node.key)) return node.key.value;
-    if (node.key.type === 'PrivateName') return `#${node.key.id.name}`;
-  }
 }

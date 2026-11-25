@@ -12,6 +12,7 @@ import { plan } from '../../main/ts/core/engine/plan.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { Plugin } from '../../main/ts/core/engine/plugin.js';
 import { codeStructure, codeStructures } from '../../main/ts/core/model/code-structure.js';
+import { babelProvider } from '../../main/ts/plugins/language-js/babel-provider.js';
 import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
 import { sourceFile, sourceFiles, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
@@ -208,4 +209,28 @@ test('a partial language provider omits unsupported measures and keeps LCOV data
   assert.equal(file?.values?.[detailCognitive], null);
   assert.equal(details.metrics.directories.find(item => item.path === '')?.quality?.cognitiveComplexity, undefined);
   assert.ok(report.ruleSkips?.some(skip => skip.path === path && skip.plugin === 'maintainability' && skip.reason === 'unmeasured'));
+});
+
+test('JS observations carry qualified anchors', () => {
+  const source = ['class Store { save() { if (a && b && c && d && e) return 1; } }',
+    'const commands = { review: { run() { return 1; } } };', 'const run = () => 2;',
+    'function outer() { return () => 3; }', ''].join('\n');
+  const operation = babelProvider.operations[0]!;
+  const facts = operation.execute({ read: () => ({ path: 'anchors.ts', bytes: Buffer.from(source) }) } as never) as CodeStructure;
+  const observed = facts.observations ?? [];
+  assert.deepEqual(observed.filter(row => row.rule === 'function-complexity').map(row => row.anchor),
+    ['Store.save', 'commands.review.run', 'run', 'outer.(anonymous)', 'outer']);
+  assert.equal(observed.find(row => row.rule === 'boolean-logic')?.anchor, 'Store.save');
+  assert.equal(observed.find(row => row.rule === 'file-complexity')?.anchor, undefined);
+  assert.equal(observed.find(row => row.rule === 'function-complexity')?.label, 'Store.save · Cognitive complexity');
+  const names = ['Store.save', 'commands.review.run', 'run', undefined, 'outer'];
+  assert.deepEqual(facts.cognitiveFunctions?.map(row => row.name), names);
+  assert.deepEqual(facts.cyclomaticFunctions?.map(row => row.name), names);
+});
+
+test('the structure contract accepts anchors and rejects empty ones', () => {
+  const facts = (anchor: string) => ({ path: 'a.ts', lines: 1,
+    observations: [{ rule: 'function-complexity', value: 1, label: 'run · Cognitive complexity', anchor }] });
+  assert.equal(codeStructure.accepts(facts('run')), true);
+  assert.equal(codeStructure.accepts(facts('')), false);
 });

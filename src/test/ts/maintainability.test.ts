@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
+import { isFinding } from '../../main/ts/core/model/finding.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
 import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
@@ -60,11 +61,11 @@ test('nested functions have separate return counts and cognitive scores, and par
   });
   assert.equal(report.status, 'partial');
   assert.deepEqual(report.findings?.map(({ rule, message }) => ({ rule, message })), [
-    { rule: 'return-statements', message: 'nested · Return statements 7 (limit 6)' },
+    { rule: 'return-statements', message: 'parent.nested · Return statements 7 (limit 6)' },
     { rule: 'function-parameters', message: 'parent · Parameters 6 (limit 5)' },
   ]);
   const functions = report.measurements.filter(row => row.target === 'function' && row.definition === definitions.cognitiveComplexity);
-  assert.deepEqual(functions.map(({ name, value }) => [name, value]), [['nested', 6], ['parent', 4]]);
+  assert.deepEqual(functions.map(({ name, value }) => [name, value]), [['parent.nested', 6], ['parent', 4]]);
   assert.equal(qualitySummary(report).maintainability?.grade, null);
 });
 
@@ -107,4 +108,45 @@ test('a file whose structural rules were unavailable has no maintainability summ
     path: 'complete.js', plugin: 'maintainability', rules: ['function-complexity'], reason: 'unmeasured' as const,
   }] };
   assert.equal(qualitySummary(skipped).maintainability, null);
+});
+
+function branchy(name: string, count: number): string {
+  const steps = Array.from({ length: count }, (_, index) => `    if (v === ${index}) total++;`);
+  return [`  ${name}(v) {`, '    let total = 0;', ...steps, '    return total;', '  }'].join('\n');
+}
+
+test('structural findings carry value, limit and anchor', async () => {
+  const source = ['class Store {', branchy('save', 17), branchy('load', 17), branchy('drop', 17), '}', ''].join('\n');
+  const report = await scan({ 'store.js': source });
+  const shaped = report.findings?.filter(row => row.category === 'structure')
+    .map(({ rule, value, limit, anchor }) => ({ rule, value, limit, anchor }));
+  assert.deepEqual(shaped, [
+    { rule: 'function-complexity', value: 17, limit: 15, anchor: 'Store.save' },
+    { rule: 'function-complexity', value: 17, limit: 15, anchor: 'Store.load' },
+    { rule: 'function-complexity', value: 17, limit: 15, anchor: 'Store.drop' },
+    { rule: 'file-complexity', value: 51, limit: 50, anchor: '(file)' },
+  ]);
+});
+
+test('duplicates carry their fingerprint and copy count', async () => {
+  function clone(name: string, variable: string, step = 0): string {
+    const steps = Array.from({ length: 12 }, (_, index) => `  ${variable} = transform(${variable}, ${index + step});`);
+    return [`function ${name}(${variable}) {`, ...steps, `  return ${variable};`, '}', ''].join('\n');
+  }
+  const copies = { 'a.js': clone('alpha', 'valueA'), 'b.js': clone('beta', 'valueB'), 'c.js': clone('gamma', 'valueC') };
+  const [group] = (await scan(copies)).findings ?? [];
+  assert.equal(group?.value, 3);
+  assert.equal(typeof group?.anchor, 'string');
+  assert.ok(group?.anchor);
+  const [edited] = (await scan({ ...copies, 'c.js': clone('gamma', 'valueC', 50) })).findings ?? [];
+  assert.equal(edited?.anchor, group.anchor);
+});
+
+test('isFinding rejects a negative value and an empty anchor', () => {
+  const finding = { tool: 'repometry', rule: 'function-complexity', category: 'structure', level: 'medium',
+    message: 'run · Cognitive complexity 17 (limit 15)', path: 'a.js', line: 1, endLine: 3 };
+  assert.equal(isFinding({ ...finding, value: 17, limit: 15, anchor: 'run' }), true);
+  assert.equal(isFinding({ ...finding, value: -1 }), false);
+  assert.equal(isFinding({ ...finding, limit: Number.NaN }), false);
+  assert.equal(isFinding({ ...finding, anchor: '' }), false);
 });

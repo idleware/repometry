@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { lstat, readFile, realpath } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
+import { join, relative, resolve, sep } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { gitReportObjects } from '../api/git/git-reader.js';
 import { resolveGitBranch } from '../api/git/commit-metadata.js';
 import { clearSourceCache, sourceCacheRoot } from '../api/git/source-cache.js';
-import { writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
+import { gitHubPullRequest, writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
 import { remoteExecutor } from '../api/worker/remote-executor.js';
 import { serveWorker } from '../api/worker/worker.js';
 import { workerToken } from '../api/worker/worker-protocol.js';
@@ -14,9 +14,8 @@ import { defaultLanguages, languageRegistry } from '../compose/languages.js';
 import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
 import { measureDiffCoverage } from '../compose/diff-coverage.js';
 import { prepareMetabranch } from '../compose/prepare-metabranch.js';
-import { reviewExitCode, reviewPull } from '../compose/review.js';
+import { review as reviewChange, reviewExitCode, reviewReason } from '../compose/review.js';
 import { effectivePlugins } from '../compose/plugin-list.js';
-import { isRecord } from '../core/engine/plugin.js';
 import type { Plugin } from '../core/engine/plugin.js';
 import { validSubjectId } from '../core/model/report.js';
 import type { Report } from '../core/model/report.js';
@@ -25,13 +24,13 @@ import { compareInspections } from '../core/usecases/compare.js';
 import { exportProjects } from '../report/html/site/projects.js';
 import { fileMetrics } from '../report/json/projections/file-metrics.js';
 import { LocalReportStore } from '../report/json/store/local-store.js';
-import { savePullReview } from '../report/json/store/pull-review-store.js';
+import { pullReviewMarkdown } from '../report/markdown/pull-review.js';
 import { LocalObjectStore } from '../report/json/store/object-store.js';
 import { checkStore } from '../report/json/store/store-check.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
 import type { Command, Invocation } from './arguments.js';
-import { readConfig } from './config.js';
+import { configFile, readConfig } from './config.js';
 import { importerIds, readInputs } from './imports.js';
 import { outputReports, reporterIds, viewTarget } from './reporting.js';
 import { parseRange } from './revisions.js';
@@ -80,14 +79,13 @@ const commands: Readonly<Record<string, Command>> = {
       'min-coverage': option('PERCENT', 'Minimum acceptable changed-line coverage.') }, run: diffCoverage,
   },
   review: {
-    description: 'Review coverage and issues introduced by a change.', parameters: 'BASE [HEAD]', min: 1, max: 2,
+    description: 'Report the issues a change adds or makes worse on the lines it changes.', parameters: 'BASE [HEAD]', min: 1, max: 2,
     options: { ...configOptions, import: importOption, exclude: excludeOption, ci: ciOption,
-      'baseline-store': baselineOption, pull: option('NUMBER', 'Store a review for this pull request.'),
-      'min-coverage': option('PERCENT', 'Minimum acceptable changed-line coverage.'),
-      'min-lines': option('COUNT', 'Minimum measured lines for the changed-line coverage gate.'),
-      'max-coverage-drop': option('POINTS', 'Maximum total coverage drop.'),
-      'max-new-issues': option('COUNT', 'Maximum count of new quality findings.'),
-      annotations: flag('Write GitHub line annotations.') }, run: review,
+      pull: option('NUMBER', 'Name the pull request in the result.'),
+      'min-coverage': option('PERCENT', 'Minimum changed-line coverage. Default 80.'),
+      'min-lines': option('COUNT', 'Measured changed lines from which the coverage minimum applies. Default 20.'),
+      'max-new-issues': option('COUNT', 'Allowed new and worsened issues. Default 0.'),
+      markdown: option('PATH', 'Also write the result as Markdown, for a pull request comment.') }, run: review,
   },
   report: {
     description: 'Render HTML or JSON from saved reports.', parameters: '[FORMAT[=PATH]]...', max: Infinity,
@@ -331,36 +329,32 @@ async function diffCoverage(input: Invocation): Promise<number> {
 }
 
 async function review(input: Invocation): Promise<number> {
-  const { directory, root, store } = await context(input);
+  const { directory, root } = await context(input);
   const github = useGitHub(input);
-  if (input.flag('annotations') && !github) throw new Error('--annotations requires --ci github');
   const config = await readConfig(root, input);
   const imports = input.many('import');
   const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
-  const baselinePath = input.text('baseline-store');
-  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath, directory);
-  const exclude = [...config.exclude, ...input.many('exclude')];
-  const current: ReportReader = imports.length && findings.length ? {
-    list: () => store.reader.list(),
-    read: async subject => {
-      const report = await store.reader.read(subject);
-      const source = report.appliedConfig.source;
-      const generated = isRecord(source) && Array.isArray(source.generatedExcluded)
-        ? source.generatedExcluded.filter((path): path is string => typeof path === 'string') : [];
-      return attachFindings(report, findings, root, root, sourceExclusionMatcher(exclude, generated));
-    },
-  } : store.reader;
-  const number = count(input.text('pull'), '--pull', 1);
-  const report = await reviewPull({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover, exclude, number, plugins: config.plugins,
+  if (findings.length && imports.length) throw new Error('review compares both sides of a change; scanner imports apply to full inspections only');
+  if (findings.length) process.stderr.write('Scanner imports from the config are skipped: review compares both sides of a change.\n');
+  const settingsPath = configFile(root, input);
+  const { plugins, ...settings } = config;
+  const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover,
+    exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins, settings,
+    settingsPath: settingsPath === undefined ? undefined : relative(root, settingsPath).split(sep).join('/'),
+    number: count(input.text('pull'), '--pull', 1) ?? (github ? await gitHubPullRequest() : undefined),
     minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage'),
     minimumLines: count(input.text('min-lines') ?? config.minLines, '--min-lines'),
-    maxCoverageDrop: percent(input.text('max-coverage-drop') ?? config.maxCoverageDrop, '--max-coverage-drop'),
-    maxNewIssues: count(input.text('max-new-issues') ?? config.maxNewIssues, '--max-new-issues') }, current, baseline.reader);
-  if (number !== undefined) await savePullReview(writableStore(store), report);
-  if (github) await writeGitHubReview(report, input.flag('annotations') ? await gitRoot(root) : undefined);
+    maxNewIssues: count(input.text('max-new-issues') ?? config.maxNewIssues, '--max-new-issues') });
+  const markdown = pullReviewMarkdown(report);
+  if (github) await writeGitHubReview(report, markdown, await gitRoot(root));
+  const markdownPath = input.text('markdown');
+  if (markdownPath !== undefined) await writeFile(resolve(directory, markdownPath), markdown);
   print(report);
-  return reviewExitCode(report);
+  const code = reviewExitCode(report);
+  if (code !== 0) process.stderr.write(`${reviewReason(report)}\n`);
+  return code;
 }
+
 
 function commitId(root: string, revision: string): Promise<string> {
   return validSubjectId('commit', revision) ? Promise.resolve(revision) : resolveGitCommit(root, revision);

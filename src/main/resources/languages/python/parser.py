@@ -68,6 +68,7 @@ class Structure:
         self.cognitive = 0
         self.classes = 0
         self.names = []
+        self.anchors = []
 
     def analyze(self, tree):
         module = Scope()
@@ -164,8 +165,10 @@ class Structure:
             self.names.append(name)
             location["name"] = ".".join(self.names)
         label = location.get("name", "(anonymous)")
+        anchor = location.get("name") or ".".join(self.anchors[-1:] + ["(anonymous)"])
         scope = Scope()
         body = [node.body] if isinstance(node, ast.Lambda) else node.body
+        self.anchors.append(anchor)
         self.visit_all(body, scope, 0)
         if name is not None:
             self.names.pop()
@@ -174,18 +177,23 @@ class Structure:
         args = node.args
         parameters = (len(args.posonlyargs) + len(args.args) + len(args.kwonlyargs)
                       + int(args.vararg is not None) + int(args.kwarg is not None))
+        # The function's own observations carry its anchor, which is still on top of the stack.
         self.observe("function-parameters", parameters, f"{label} · Parameters", node)
         self.observe("return-statements", scope.returns, f"{label} · Return statements", node)
         self.observe("function-complexity", scope.cognitive, f"{label} · Cognitive complexity", node)
         self.finish_scope(scope, label)
+        self.anchors.pop()
 
     def visit_class(self, node, enclosing, depth):
         self.classes += 1
         self.visit_header(node, enclosing, depth)
         self.names.append(node.name)
+        anchor = ".".join(self.names)
         scope = Scope()
+        self.anchors.append(anchor)
         self.visit_all(node.body, scope, 0)
-        self.finish_scope(scope, ".".join(self.names))
+        self.finish_scope(scope, anchor)
+        self.anchors.pop()
         self.names.pop()
 
     def visit_all(self, nodes, scope, depth):
@@ -198,9 +206,12 @@ class Structure:
             self.observe("nested-control-flow", scope.depth, f"{label} · Control-flow depth", scope.deepest)
 
     def observe(self, rule, value, label, node=None):
+        """Records an observation; inside a function or class it carries that scope's anchor."""
         observation = {"rule": rule, "value": value, "label": label}
         if node is not None:
             observation.update(line=node.lineno, endLine=node.end_lineno)
+            if self.anchors:
+                observation["anchor"] = self.anchors[-1]
         self.observations.append(observation)
 
 

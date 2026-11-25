@@ -68,7 +68,7 @@ function detectClones(sources: readonly CloneSource[]): FindingResult {
     const effortMinutes = fresh.slice(1).reduce((total, occurrence) => total + occurrence.codeLines, 0) * duplicationSettings.minutesPerRepeatedLine;
     findings.push({ tool: 'repometry', rule, category: 'duplication', level: 'medium',
       message: `${identical ? 'Identical' : 'Similar'} code in ${fresh.length} locations`, ...location(first),
-      related: fresh.slice(1).map(location), effortMinutes });
+      related: fresh.slice(1).map(location), effortMinutes, value: fresh.length, anchor: first.similar });
   }
 
   return {

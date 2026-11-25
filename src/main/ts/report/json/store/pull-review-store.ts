@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
@@ -10,23 +9,8 @@ import schema from '../../../../resources/report/json/pull-review-v1.schema.json
 import type { PullReview } from '../wire/pull-review-model.js';
 
 const ajv = new Ajv2020({ schemas: [metricCatalog, currentInspection, comparison, diffCoverage] });
+/** Reviews saved before 0.9 stay readable for the viewer; review no longer saves them. */
 const validate = ajv.compile<PullReview>(schema);
-
-export async function savePullReview(output: string, review: PullReview): Promise<void> {
-  if (!validate(review)) throw new Error(`Invalid pull request review: ${ajv.errorsText(validate.errors)}`);
-  if (review.number === null) throw new Error('Saving a pull request review requires its number');
-  const directory = join(output, 'reviews');
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  if (!(await lstat(directory)).isDirectory()) throw new Error('Expected a directory for PR reviews');
-
-  const temporary = join(directory, `.review-${randomUUID()}.tmp`);
-  try {
-    await writeFile(temporary, `${JSON.stringify(review, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-    await rename(temporary, join(directory, `${review.number}.json`));
-  } finally {
-    await rm(temporary, { force: true });
-  }
-}
 
 export async function listPullReviews(output: string): Promise<readonly PullReview[]> {
   const directory = join(output, 'reviews');

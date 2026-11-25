@@ -2,13 +2,13 @@ import { gitText, gitUtf8 } from './git.js';
 import { physicalLines, utf8 } from '../../core/model/snapshot.js';
 import type { SourceSnapshot } from '../../core/model/snapshot.js';
 
-import type { GitChanges, LineRange } from '../../core/model/changes.js';
+import type { GitChanges, LineHunk, LineRange } from '../../core/model/changes.js';
 export type { GitChanges, LineRange } from '../../core/model/changes.js';
 
-const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
-const regularFile = /^100(?:644|755)$/;
+export const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
+export const regularFile = /^100(?:644|755)$/;
 export const diffMethod = { algorithm: 'myers', indentHeuristic: false, renameThresholdPercent: 50, renameLimit: 1000 } as const;
-const stableDiff = ['--no-color', '--no-ext-diff', '--no-textconv', `--diff-algorithm=${diffMethod.algorithm}`, '--no-indent-heuristic'] as const;
+export const stableDiff = ['--no-color', '--no-ext-diff', '--no-textconv', `--diff-algorithm=${diffMethod.algorithm}`, '--no-indent-heuristic'] as const;
 
 export async function findMergeBase(repository: string, base: string, head: string): Promise<string> {
   if (!oid.test(base) || !oid.test(head)) throw new Error('Merge base requires full commit IDs');
@@ -17,7 +17,7 @@ export async function findMergeBase(repository: string, base: string, head: stri
     found = await gitText(repository, ['merge-base', '--all', base, head]);
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 1) {
-      throw new Error('No merge base found. Make the histories for both commits available locally.');
+      throw new Error('No merge base found. Make the histories of both commits available locally, for example with fetch-depth: 0 on actions/checkout.');
     }
     throw error;
   }
@@ -95,12 +95,25 @@ export function rawChanges(text: string): readonly RawChange[] {
 }
 
 export function addedRanges(patch: string): readonly LineRange[] {
+  return lineRanges(patchHunks(patch).map(hunk => hunk.head));
+}
+
+export function removedRanges(patch: string): readonly LineRange[] {
+  return lineRanges(patchHunks(patch).map(hunk => hunk.base));
+}
+
+export function patchHunks(patch: string): readonly LineHunk[] {
+  return patch.split('\n').flatMap(line => {
+    const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: |$)/.exec(line);
+    return match ? [{ base: { first: Number(match[1]), count: Number(match[2] ?? 1) },
+      head: { first: Number(match[3]), count: Number(match[4] ?? 1) } }] : [];
+  });
+}
+
+/** The changed lines of one side of the hunks, which Git reports in order and without overlap. */
+function lineRanges(sides: readonly { readonly first: number; readonly count: number }[]): readonly LineRange[] {
   const ranges: LineRange[] = [];
-  for (const line of patch.split('\n')) {
-    const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@(?: |$)/.exec(line);
-    if (!match) continue;
-    const first = Number(match[1]);
-    const count = Number(match[2] ?? 1);
+  for (const { first, count } of sides) {
     if (count === 0) continue;
     const last = first + count - 1;
     if (first < 1 || !Number.isSafeInteger(last) || first <= (ranges.at(-1)?.last ?? 0)) throw new Error('Invalid Git diff hunk range');
