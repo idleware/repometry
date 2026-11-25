@@ -51,7 +51,7 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
   try {
     const history = new HistoryCache(request.settings);
     const inspectCommit = (id: string, coverage: boolean) => inspect({ directory, output, source: { revision: id }, exclude, ignore, plugins,
-      ...coverage ? { lcov, goCover } : {} }, undefined, { history, deferSummary: true });
+      ...coverage ? { lcov, goCover } : {} }, noChurn, { history, deferSummary: true });
     const base = await inspectCommit(mergeBase, false);
     const headReport = await inspectCommit(head, true);
     const changes = await readLineChanges(directory, mergeBase, head);
@@ -65,6 +65,9 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
     await rm(output, { recursive: true, force: true });
   }
 }
+
+/** A review compares findings, not file activity: it skips the walk over Git history that churn needs. */
+const noChurn = { recordChurn: undefined };
 
 /** The text of one side's changed files, which scope and matching read line by line. */
 async function sourceLines(directory: string, commit: string, changes: LineChanges, side: 'path' | 'previous'): Promise<SourceLines> {
