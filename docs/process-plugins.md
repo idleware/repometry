@@ -28,7 +28,7 @@ npx repometry analyze
 npx repometry report html
 ```
 
-A single-language plugin can put its `extensions` and `globs` in `claims` as defaults. A plugin with multiple languages specifies the selectors under each language. If it also specifies top-level selectors they must match the combined selectors. Assign a unique ID to each plugin and language. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
+A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin and language. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
 
 A language's optional `measures` array accepts `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, and `structuralRules`. Include only capabilities the parser supplies. A parser that counts functions and decisions declares `["functions", "cyclomaticComplexity"]` and returns `path`, `lines`, `functions`, and `cyclomaticFunctions`. Duplication requires `codeLines` and clone candidates. Structural rules consume `observations`. See [Language provider metrics](metrics.md) for unknown values and repository rollups.
 

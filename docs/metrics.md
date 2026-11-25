@@ -20,7 +20,7 @@ The importer filters LCOV records by the provider's code-line classification whe
 
 ## Declaring metrics and products
 
-A plugin manifest declares its `kinds`, optional file `claims`, and every product its operations return. Use the contracts exported by `repometry/plugin` for source files, structure facts, measurements, and findings. The `report` persistence class saves measurements, rules, and custom products. Custom products declare a JSON Schema so the engine can validate the output and store the contract with it. Transient products feed other operations during analysis.
+A plugin manifest declares its `kinds`, optional file `claims`, and every product its operations return. Use the contracts exported by `repometry/plugin` for source files, structure facts, measurements, and findings. The `report` persistence class saves measurements, findings, and custom products. The report also keeps the rules each plugin declares. Custom products declare a JSON Schema so the engine can validate the output and store the contract with it. Transient products feed other operations during analysis.
 
 Pass trusted in-process plugins as `plugins` in the `inspect` request. The default executor receives text files matching their claims after the source adapter applies exclusions. A Git working tree includes tracked files and untracked files permitted by Git's ignore rules. With a separately configured executor, register its plugins directly. When supplying your own snapshot, pass the plugins as the second argument to `analyzeSnapshot`.
 
@@ -28,7 +28,7 @@ Language plugins define the source file set through their claims. Each file uses
 
 Use `providesLanguages` to declare a language's ID, display label, optional six-digit hexadecimal color, and file extensions or globs. These declarations select source files. Reports store the language catalog once and record the selected provider operation for each source path.
 
-Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths. Worker input validation uses the source selector configured on the worker. The built-in selector uses the JS and TS suffixes.
+Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths. Worker input validation uses the source selector configured on the worker. The CLI's `worker` command and `--worker` option select JS, TS, Go and Python files.
 
 The Git inventory also records regular tracked files after exclusions. Binary or unavailable files have an unknown line count.
 
@@ -44,7 +44,7 @@ Cache entries are keyed by the operation, versions, bindings, configuration dige
 
 `DockerToolRunner` from `repometry/plugin` runs an argument vector in a caller-selected local Docker image. It mounts the supplied file snapshot read-only at `/snapshot`, sets `HOME` to a writable temporary filesystem at `/tmp`, disables networking, and leaves host environment variables out of the tool invocation. The caller supplies a deadline and a combined output limit and can set memory and process limits. The result contains the exit code, stdout, and stderr for the plugin to interpret.
 
-`processPlugin(manifest, runner)` adapts commands to the same plugin API as in-process inspections. Declare each command's inputs, output contract, arguments, limits, and tool versions in the manifest. The runner sends one JSON request on stdin using `repometry.plugin-process/v1`. It includes the operation ID, effective `settings`, and named inputs with contract IDs. Source file inputs are references with `path` and `sha256`, and the original bytes are available at those paths relative to the tool's working directory. Other input products are passed as JSON values.
+`processPlugin(manifest, runner)` adapts commands to the same plugin API as in-process inspections. Declare each command's inputs, output contract, arguments, deadline, output limit, and tool versions in the manifest. The runner sends one JSON request on stdin using `repometry.plugin-process/v1`. It includes the operation ID, effective `settings`, and named inputs with contract IDs. Source file inputs are references with `path` and `sha256`, and the original bytes are available at those paths relative to the tool's working directory. Other input products are passed as JSON values.
 
 Use `scope: 'repository'` and the `sourceFiles` input contract for a tool that needs a whole module. The operation runs once over the plugin's matching files, and the port lists those file references in its `files` field. Its result can contain data for multiple files. Register process plugins through the npm API or [configure them in the CLI](process-plugins.md).
 

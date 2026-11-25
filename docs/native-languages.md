@@ -4,9 +4,11 @@ Repometry includes Go and Python parsers that use the local `go` and `python3` e
 
 A missing tool leaves its files in the report as unanalysed. Repometry completes the inspection with the available tools. The report records the language's availability and tool version in the applied profile, so a later change in availability or version is visible in Trends.
 
+A [configured language plugin](process-plugins.md) takes precedence over these parsers for the files it claims. A configured language with the ID `go` or `python` replaces the packaged parser for that language.
+
 ## Measurements
 
-Both parsers count physical code and comment lines and measure cyclomatic and cognitive complexity for each function and method. Nested functions get separate scores. Go includes function literals. Python includes async functions, lambdas and classes. Anonymous functions are displayed as `(anonymous)`. Named methods and nested functions keep their [qualified names](metrics.md).
+Both parsers count physical code and comment lines and measure cyclomatic and cognitive complexity for each function and method. Nested functions get separate scores. Go includes function literals. Python includes async functions and lambdas. Class bodies count toward the file score only. Anonymous functions are displayed as `(anonymous)`. Named methods and nested functions keep their [qualified names](metrics.md).
 
 - Go counts one plus each `if`, loop, non-default switch or select clause, `&&`, and `||`. Locations use 1-based physical lines and byte columns.
 - Python counts one plus decisions in conditions, loops, exception handlers, conditional expressions, boolean operands after the first, comprehensions, and refutable pattern cases and guards. Locations use 1-based lines and Unicode code-point columns.

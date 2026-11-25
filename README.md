@@ -15,37 +15,37 @@
 
 Git can serve as a project’s single source of truth for code, tests, docs, and CI configuration. Repometry lets you keep coverage and maintainability metrics alongside your code, commit by commit.
 
+## Demo 
+[https://idleware.github.io/repometry/](https://idleware.github.io/repometry/)
+
 ## Requirements
 
-Node.js 24 or newer.
+Node.js >=24
+
+## Install
+
+```sh
+# Run without installing.
+npx repometry help
+
+# Or install the repometry command.
+npm install --global repometry
+```
 
 ## Usage
 
-Run these commands in your repository.
+Run these commands in your repository. Without an install, start each with `npx`.
 
-```sh
-# Analyze HEAD and save its inspection under .repometry/.
-npx repometry analyze
-
-# Build history for the last 50 commits, oldest first, skipping saved inspections.
-npx repometry analyze HEAD~50..HEAD --skip-saved
-
-# Import coverage and scanner results. Repeat --import for each file.
-npx repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif
-
-# Open the report locally on a free port. Use --port 3030 to choose a port.
-npx repometry view
-
-# Export a static report to .repometry/report/html. Use -o DIR for another folder.
-npx repometry report html
-
-# Check saved inspections. --repair restores missing data from a copy.
-npx repometry store check --repair --from git:repometry
-
-# List supported formats and get help for a command.
-npx repometry plugins
-npx repometry help analyze
-```
+| Command | What it does |
+| --- | --- |
+| `repometry analyze` | Analyze HEAD and save its inspection under `.repometry/`. |
+| `repometry analyze HEAD~50..HEAD --skip-saved` | Build history for the last 50 commits, oldest first, skipping saved inspections. |
+| `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. |
+| `repometry view` | Open the report locally on a free port. Use `--port 3030` to choose a port. |
+| `repometry report html` | Export a static report to `.repometry/report/html`. Use `-o DIR` for another folder. |
+| `repometry store check --repair --from git:repometry` | Check saved inspections. `--repair` restores missing data from a copy. |
+| `repometry plugins` | List supported formats. |
+| `repometry help analyze` | Get help for a command. |
 
 A report shows everything the store holds, so publish it only where you would publish that data.
 
