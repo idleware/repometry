@@ -27,6 +27,11 @@ function review(issues: readonly ReviewedIssue[], extra: Partial<PullReview> = {
     notes: [{ message: 'This change edits Repometry settings, which can hide issues from this check.' }], ...extra };
 }
 
+const flag = (verdict: string) => '<picture><source media="(prefers-color-scheme: dark)" '
+  + `srcset="https://raw.githubusercontent.com/idleware/repometry/master/.github/assets/flag-${verdict}-dark.svg">`
+  + `<img src="https://raw.githubusercontent.com/idleware/repometry/master/.github/assets/flag-${verdict}-light.svg" alt="" width="17" height="17">`
+  + '</picture>';
+
 const sample = review([
   issue('new', finding('src/cli/main.ts', 'analyzeRange · Cognitive complexity 19 (limit 15)', 120, 188)),
   issue('worsened', finding('src/store/tree.ts', 'File cognitive complexity 61 (limit 50)'), { before: 54 }),
@@ -37,7 +42,7 @@ const sample = review([
 test('a review renders as one Markdown text for the summary and the comment', () => {
   assert.equal(pullReviewMarkdown(sample), [
     '<!-- repometry-review -->',
-    '## Repometry · PR #42',
+    `## ${flag('failed')} repometry`,
     '',
     '**Failed** · 1 new · 1 worsened · 1 improved · 1 touched on the lines changed since `origin/main` (`aaaaaaa` → `bbbbbbb`)',
     '',
@@ -168,4 +173,11 @@ test('a cut keeps the order of importance, and a long issue is shortened rather 
   assert.ok(text.length <= 60_000);
   assert.match(text, /^\| <code>src\/key\.ts:1<\/code> \| Private key x+… \|$/m);
   assert.match(text, /src\/t2\.ts/);
+});
+
+test('the heading is the verdict flag and the name, without the pull request number', () => {
+  const heading = (value: PullReview) => pullReviewMarkdown(value).split('\n')[1];
+  assert.equal(heading(review([], { verdict: 'passed' })), `## ${flag('passed')} repometry`);
+  assert.equal(heading(review([], { verdict: 'unmeasured', number: null })), '## repometry');
+  assert.equal(pullReviewMarkdown(review([])).split('\n')[0], '<!-- repometry-review -->');
 });
