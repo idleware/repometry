@@ -14,7 +14,7 @@ import type { ReviewOptions } from '../core/usecases/review.js';
 import type { SourceLines } from '../core/usecases/review-effect.js';
 import { measureChangedLines } from './diff-coverage.js';
 import { HistoryCache } from './history-cache.js';
-import { inspect } from './inspect.js';
+import { inspectWithOptions } from './inspect.js';
 
 export { projectReview, reviewExitCode, reviewReason } from '../core/usecases/review.js';
 
@@ -50,8 +50,8 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
   const output = await mkdtemp(join(tmpdir(), 'repometry-review-'));
   try {
     const history = new HistoryCache(request.settings);
-    const inspectCommit = (id: string, coverage: boolean) => inspect({ directory, output, source: { revision: id }, exclude, ignore, plugins,
-      ...coverage ? { lcov, goCover } : {} }, noChurn, { history, deferSummary: true });
+    const inspectCommit = (id: string, coverage: boolean) => inspectWithOptions({ directory, output, source: { revision: id }, exclude, ignore, plugins,
+      ...coverage ? { lcov, goCover } : {} }, { history, deferSummary: true, recordChurn: false });
     const base = await inspectCommit(mergeBase, false);
     const headReport = await inspectCommit(head, true);
     const changes = await readLineChanges(directory, mergeBase, head);
@@ -65,9 +65,6 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
     await rm(output, { recursive: true, force: true });
   }
 }
-
-/** A review compares findings, not file activity: it skips the walk over Git history that churn needs. */
-const noChurn = { recordChurn: undefined };
 
 /** The text of one side's changed files, which scope and matching read line by line. */
 async function sourceLines(directory: string, commit: string, changes: LineChanges, side: 'path' | 'previous'): Promise<SourceLines> {

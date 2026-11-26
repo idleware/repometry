@@ -38,12 +38,10 @@ export function flag(description: string, short?: string): Option {
 const globals = {
   help: flag('Show command help.', 'h'),
   version: flag('Show the installed version.', 'V'),
-  repo: option('DIR', 'Run in the given repository.', { short: 'C' }),
-  store: option('PATH|git:REF', 'Select a report store.'),
 };
 
 export async function dispatch(commands: Readonly<Record<string, Command>>, input: readonly string[], version: string): Promise<number> {
-  const [name, ...rest] = placeGlobalOptions(input);
+  const [name, ...rest] = placeLeadingOptions(input);
   if (name === '--version' || name === '-V') {
     process.stdout.write(version + '\n');
     return 0;
@@ -89,7 +87,7 @@ export async function dispatch(commands: Readonly<Record<string, Command>>, inpu
   return result ?? 0;
 }
 
-function placeGlobalOptions(input: readonly string[]): readonly string[] {
+function placeLeadingOptions(input: readonly string[]): readonly string[] {
   const leading: string[] = [];
   let index = 0;
   while (index < input.length) {

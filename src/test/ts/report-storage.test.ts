@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { GitReportReader } from '../../main/ts/api/git/git-reader.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { ObjectError, objectPath } from '../../main/ts/report/json/store/report-tree.js';
-import { metaManifest } from '../../main/ts/report/json/validation/metabranch.js';
 import { checkStore } from '../../main/ts/report/json/store/store-check.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
@@ -115,6 +114,11 @@ test('store check finds missing and corrupt objects and repairs them from a copy
   await store.save({ ...original, subject: { kind: 'commit', id: 'b'.repeat(40) } });
   await new LocalReportStore(copy).save(original);
   assert.deepEqual((await checkStore(output)).problems, []);
+  const cli = resolve('target/main/ts/cli/main.js');
+  const check = (...args: string[]) => spawnSync(process.execPath, [cli, 'store', 'check', ...args],
+    { cwd: directory, encoding: 'utf8' });
+  assert.equal(check('--store', output).status, 0);
+  assert.equal(check('--store', 'git:').status, 1);
 
   const stored = JSON.parse(await readFile(join(output, 'commits', original.subject.id, 'report.json'), 'utf8'));
   const tree = join(output, objectPath(stored.tree));
@@ -122,6 +126,11 @@ test('store check finds missing and corrupt objects and repairs them from a copy
   await writeFile(join(output, objectPath(stored.profile)), 'not JSON');
   await assert.rejects(store.read(original.subject), (error: unknown) => error instanceof ObjectError);
   const damaged = await checkStore(output);
+  const checked = check('--store', output);
+  assert.equal(checked.status, 3, checked.stderr);
+  const orderObjects = ({ objects, ...problem }: typeof damaged.problems[number]) =>
+    ({ ...problem, objects: objects && [...objects].sort() });
+  assert.deepEqual(JSON.parse(checked.stdout).problems.map(orderObjects), damaged.problems.map(orderObjects));
   assert.deepEqual(damaged.problems.map(item => item.problem).sort(), ['missing-objects', 'missing-objects']);
   assert.ok(damaged.problems.every(item => item.objects?.includes(stored.tree) && item.objects.includes(stored.profile)));
   const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
@@ -137,6 +146,40 @@ test('store check finds missing and corrupt objects and repairs them from a copy
   await rm(tree);
   await store.save(original);
   assert.deepEqual((await checkStore(output)).problems, []);
+});
+
+test('store check fails for a missing store and accepts an existing empty directory', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-missing-store-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const cli = resolve('target/main/ts/cli/main.js');
+  const check = (...args: string[]) => spawnSync(process.execPath, [cli, 'store', 'check', ...args],
+    { cwd: directory, encoding: 'utf8' });
+  const missing = join(directory, 'missing');
+  const cases = [
+    { options: ['--store', missing], store: missing },
+    { options: ['--store', missing, '--repair'], store: missing },
+    { options: ['-C', missing], store: join(missing, '.repometry') },
+  ];
+  for (const { options, store } of cases) {
+    const result = check(...options);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr, `repometry: No report store at ${store}. Run repometry analyze first.\n`);
+    assert.equal(result.stdout, '');
+  }
+  await assert.rejects(lstat(missing), { code: 'ENOENT' });
+
+  const file = join(directory, 'not-a-directory');
+  await writeFile(file, 'test');
+  const invalid = check('--store', file);
+  assert.equal(invalid.status, 1, invalid.stderr);
+  assert.ok(invalid.stderr.includes(file), invalid.stderr);
+
+  await mkdir(missing);
+  const empty = check('--store', missing, '--repair');
+  assert.equal(empty.status, 0, empty.stderr);
+  const result = JSON.parse(empty.stdout);
+  assert.equal(result.summary, 'current');
+  assert.deepEqual(result.problems, []);
 });
 
 test('single-file reports stay valid next to reports with objects, and repair removes old unreferenced objects', async t => {
@@ -175,9 +218,11 @@ test('a storage branch reads straight from Git, with or without its summary.json
   const store = new LocalReportStore(directory);
   const older = detailed('a', 20);
   const newer = { ...detailed('b', 21), committedAt: '2026-02-01T00:00:00.000Z' };
-  await store.save(older);
-  await store.save(newer);
-  await writeFile(join(directory, 'manifest.json'), `${JSON.stringify(metaManifest)}\n`);
+  await Promise.all([older, newer].map(report => store.save(report, { deferSummary: true })));
+  await store.refreshSummary();
+  const manifest = join(directory, 'manifest.json');
+  const expected = '{\n  "schema": "urn:repometry:schema:metabranch:1"\n}\n';
+  assert.equal(await readFile(manifest, 'utf8'), expected);
   const git = (...args: string[]) => {
     const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -193,6 +238,18 @@ test('a storage branch reads straight from Git, with or without its summary.json
   assert.deepEqual((await reader.listSummaries()).map(({ sha, revision }) => [sha, revision]), rows);
   await assert.rejects(reader.read({ kind: 'commit', id: 'c'.repeat(40) }), { code: 'ENOENT' });
   await assert.rejects(new GitReportReader(directory, 'no-such-branch').listSummaries(), /no-such-branch is not a commit or tree/);
+
+  await writeFile(manifest, JSON.stringify(JSON.parse(expected)));
+  await store.save(older);
+  assert.equal(await readFile(manifest, 'utf8'), JSON.stringify(JSON.parse(expected)));
+  await rm(manifest);
+  assert.deepEqual((await checkStore(directory)).problems, []);
+  assert.deepEqual(await store.read(older.subject), older);
+  git('rm', '--cached', '-q', 'manifest.json');
+  await assert.rejects(new GitReportReader(directory, git('write-tree')).listSummaries(), /No Repometry manifest/);
+  await store.save(newer);
+  assert.equal(await readFile(manifest, 'utf8'), expected);
+  git('add', 'manifest.json');
 
   // A branch without summary.json lists history from each report's first line.
   git('rm', '--cached', '-q', 'summary.json');

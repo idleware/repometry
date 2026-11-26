@@ -28,7 +28,7 @@ Language plugins define the source file set through their claims. Each file uses
 
 Use `providesLanguages` to declare a language's ID, display label, optional six-digit hexadecimal color, and file extensions or globs. These declarations select source files. Reports store the language catalog once and record the selected provider operation for each source path.
 
-Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths. Worker input validation uses the source selector configured on the worker. The CLI's `worker` command and `--worker` option select JS, TS, Go and Python files.
+Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths.
 
 The Git inventory also records regular tracked files after exclusions. Binary or unavailable files have an unknown line count.
 
@@ -36,7 +36,7 @@ Each report defines its own metric catalog. The repository summary lifts these c
 
 ## Reusing operation results
 
-Use `persistence: 'cache'` for deterministic products whose operations depend only on their input data, effective configuration, and declared toolchain. `inspect` accepts `operationCache` with a `store` and a `configurationDigest`. The digest should identify any effective settings that the input products do not carry. `LocalOperationCache` from `repometry/report` writes atomically to a caller-selected directory such as `.repometry/cache/operations`.
+Use `persistence: 'cache'` for deterministic products whose operations depend only on their input data, effective configuration, and declared toolchain. `inspect` accepts `operationCache` with a `store` and a `configurationDigest`. The digest should identify any effective settings that the input products do not carry. `LocalOperationCache` from `repometry/plugin` writes atomically to a caller-selected directory such as `.repometry/cache/operations`.
 
 Cache entries are keyed by the operation, versions, bindings, configuration digest, and complete input values, including source bytes and paths. Plain records, arrays, primitives, and byte arrays are supported. A miss, invalid entry, or unsupported input runs the operation normally. Cache products feed downstream operations during inspection and are stored separately from reports.
 

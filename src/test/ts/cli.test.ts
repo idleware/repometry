@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, posix, resolve } from 'node:path';
+import { basename, join, posix, resolve } from 'node:path';
 import { test } from 'node:test';
 import { parse } from '@babel/parser';
 import { traverseFast } from '@babel/types';
@@ -115,28 +115,33 @@ test('individual parse failures and unmapped LCOV files are visible in a saved p
   assert.equal(report.measurements.find(item => item.definition === definitions.coverage)?.value, null);
 });
 
-test('profile and CLI exclusions apply to source files and LCOV and are recorded in the report', async (t) => {
+test('typed exclusions replace configured exclusions and apply to source files and LCOV', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'repometry-profile-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   for (const path of ['.yarn/releases', '.yarn-tools', 'packages/app/vendor']) {
     await mkdir(join(dir, path), { recursive: true });
   }
   const included = '.yarn-tools/helper.js';
+  const configuredOnly = 'profile-only.js';
   const excluded = ['.yarn/releases/yarn.cjs', 'packages/app/vendor/runtime.js', 'extra bundle.js'];
   await writeFile(join(dir, included), 'export function helper() { return 1; }\n');
   for (const path of excluded) await writeFile(join(dir, path), 'export function invalid( {\n');
-  await writeFile(join(dir, 'profile.json'), JSON.stringify({ exclude: ['./.yarn/releases/', '**/vendor'] }));
+  await writeFile(join(dir, configuredOnly), 'export const kept = true;\n');
+  await writeFile(join(dir, 'profile.json'), JSON.stringify({ exclude: ['./.yarn/releases/', '**/vendor', 'extra bundle.js', configuredOnly] }));
   await writeFile(join(dir, 'coverage.info'), [
     `SF:${included}\nDA:1,1\nend_of_record\n`,
     ...excluded.map(path => `SF:${path}\nDA:999,0\nend_of_record\n`),
   ].join(''));
 
+  const configured = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json']);
+  assert.equal(configured.status, 0, configured.stderr);
+  assert.deepEqual(JSON.parse(configured.stdout).scope, { files: 1, parsed: 1 });
   const result = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json',
-    '--exclude', '.yarn/releases', '--exclude', 'extra bundle.js', '--import', 'lcov=coverage.info']);
+    '--exclude', '.yarn/releases', '--exclude', '**/vendor', '--exclude', 'extra bundle.js', '--import', 'lcov=coverage.info']);
   assert.equal(result.status, 0, result.stderr);
   const { subject } = JSON.parse(result.stdout) as Pick<Report, 'subject'>;
   const report = JSON.parse(invoke(dir, ['show', subject.id]).stdout) as Report;
-  assert.deepEqual(report.scope, { files: 1, parsed: 1 });
+  assert.deepEqual(report.scope, { files: 2, parsed: 2 });
   assert.deepEqual(report.diagnostics, []);
   assert.deepEqual(report.appliedConfig.source, {
     extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.go', '.py'],
@@ -147,19 +152,19 @@ test('profile and CLI exclusions apply to source files and LCOV and are recorded
     generatedSourcePolicy,
     generatedExcluded: [],
   });
-  assert.deepEqual([...new Set(report.measurements.flatMap(row => row.path === undefined ? [] : [row.path]))], [included]);
+  assert.deepEqual([...new Set(report.measurements.flatMap(row => row.path === undefined ? [] : [row.path]))], [included, configuredOnly]);
   assert.deepEqual(report.measurements.find(row => row.definition === definitions.coverage && row.target === 'repository'),
     { definition: definitions.coverage, target: 'repository', covered: 1, total: 1, value: 1 });
 
   const allExcluded = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json',
-    '--exclude', 'extra bundle.js', '--exclude', included, '--import', 'lcov=coverage.info']);
+    '--exclude', 'extra bundle.js', '--exclude', included, '--exclude', configuredOnly, '--import', 'lcov=coverage.info']);
   assert.equal(allExcluded.status, 0, allExcluded.stderr);
   const securityOnly = JSON.parse(allExcluded.stdout) as Pick<Report, 'scope' | 'status'>;
   assert.deepEqual(securityOnly.scope, { files: 0, parsed: 0 });
   assert.equal(securityOnly.status, 'complete');
 
   const empty = invoke(dir, ['analyze', '--working-tree', '--config', 'profile.json',
-    '--exclude', 'extra bundle.js', '--exclude', included, '--exclude', 'profile.json', '--exclude', 'coverage.info']);
+    '--exclude', 'extra bundle.js', '--exclude', included, '--exclude', configuredOnly, '--exclude', 'profile.json', '--exclude', 'coverage.info']);
   assert.equal(empty.status, 0, empty.stderr);
   assert.equal(JSON.parse(empty.stdout).status, 'not-applicable');
 
@@ -214,6 +219,7 @@ test('export writes the whole store without working trees and refuses to overwri
   await store.save(report);
   await store.save({ ...report, subject: { kind: 'working-tree', id: 'b'.repeat(64) } });
 
+  await writeFile(join(dir, '.repometry', 'components.json'), JSON.stringify([{ name: 'Old component', pathGlobs: ['private-*'] }]));
   const result = invoke(dir, ['report', 'html=viewer']);
   assert.equal(result.status, 0, result.stderr);
   const viewer = join(dir, 'viewer');
@@ -225,6 +231,7 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.deepEqual((await readdir(viewer)).sort(),
     [...assets, 'coverage.svg', 'details', 'maintainability.svg', 'pulls.json', 'summary.json'].sort());
   const html = await readFile(join(viewer, 'index.html'), 'utf8');
+  assert.ok(html.includes(`name="repometry-project" content="${basename(dir)}"`));
   assert.match(html, /name="repometry-view" content="private"/);
   await expectShippedModules(viewer, html, scripts);
   const summaryText = await readFile(join(viewer, 'summary.json'), 'utf8');
@@ -235,22 +242,24 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.ok(validSummary(summary), JSON.stringify(validSummary.errors));
   assert.deepEqual(summary.commits.map(row => row.sha), [sha]);
   assert.ok(summary.commits[0]?.detail, 'the commit links its details');
+  assert.equal(summary.commits[0].counts?.componentCount, 0, 'the former components file is ignored');
   assert.equal(summary.commits[0].generatedAt, report.generatedAt);
   assert.equal(summary.commits[0].maxComplexity, 3);
   assert.deepEqual(summary.commits[0].lineCoverage, { covered: 2, total: 4 });
   assert.equal(invoke(dir, ['report', 'html=viewer']).status, 0);
 
-  await writeFile(join(dir, 'components.json'), JSON.stringify([
-    { name: 'Matching component', pathGlobs: ['private-*'] }, { name: 'Empty component', pathGlobs: ['other/*'] },
-  ]));
-  const detailed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none',
-    '--components', 'components.json', '--title', 'Demo <"name">']);
+  await writeFile(join(dir, 'repometry.config.json'), JSON.stringify({ components: [
+    { name: ' Matching component ', pathGlobs: ['private-*', 'private-*'], description: 'Source files' },
+    { name: 'Empty component', pathGlobs: ['other/*'] },
+  ], branch: 'report-branch' }));
+  const detailed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--title', 'Demo <"name">']);
   assert.equal(detailed.status, 0, detailed.stderr);
   const page = await readFile(join(dir, 'private-viewer', 'index.html'), 'utf8');
   assert.match(page, /name="repometry-view" content="private"/);
   assert.match(page, /name="repometry-project" content="Demo &lt;&quot;name&quot;&gt;"/);
   const initialSummary = JSON.parse(await readFile(join(dir, 'private-viewer', 'summary.json'), 'utf8'));
   assert.equal(initialSummary.commits.length, 1);
+  assert.deepEqual(initialSummary.source, { branch: 'report-branch' });
   assert.deepEqual(initialSummary.commits[0].counts, { findingCount: 0, diagnosticCount: 1, componentCount: 2, hasCoverage: true });
   const firstPath = initialSummary.commits[0].detail as string;
   assert.match(firstPath, new RegExp(`^details/${sha}-[a-f0-9]{64}\\.json$`));
@@ -270,17 +279,19 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.deepEqual(display('deps/foo.qqx'), { id: 'qqx', label: 'QQX', analysed: true });
   assert.ok(files.every(file => file.analysed === undefined));
   assert.deepEqual(await store.read(report.subject), report);
-  assert.deepEqual(detail.inspection.components?.map(entry => entry.paths), [['private-filename.ts'], []]);
+  assert.deepEqual(detail.inspection.components?.map(entry => [entry.component.name, entry.paths]),
+    [['Matching component', ['private-filename.ts']], ['Empty component', []]]);
   assert.equal(detail.inspection.diagnostics[0]?.message, 'private-diagnostic');
   await store.save({ ...report, generatedAt: '2026-11-21T00:00:00.000Z', diagnostics: [] });
-  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--components', 'components.json']);
+  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--branch', 'explicit-branch']);
   assert.equal(refreshed.status, 0, refreshed.stderr);
   const nextSummary = JSON.parse(await readFile(join(dir, 'private-viewer', 'summary.json'), 'utf8'));
   assert.notEqual(nextSummary.commits[0].detail, firstPath);
   assert.equal(nextSummary.commits[0].counts.diagnosticCount, 0);
+  assert.deepEqual(nextSummary.source, { branch: 'explicit-branch' });
   assert.equal(await readFile(join(dir, 'private-viewer', firstPath), 'utf8'), rawFirstDetail);
   assert.equal(invoke(dir, ['report', 'html=private-viewer']).status, 0);
-  const projectIndex = invoke(dir, ['projects', '--output', '.']);
+  const projectIndex = invoke(tmpdir(), ['projects', dir]);
   assert.equal(projectIndex.status, 0, projectIndex.stderr);
   const projects = await readFile(join(dir, 'projects.json'), 'utf8');
   assert.deepEqual(JSON.parse(projects).projects.map((entry: { name: string }) => entry.name), ['private-viewer', 'viewer']);
@@ -325,10 +336,9 @@ test('the command registry handles scoped help, suggestions, version and plugin 
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /^Usage: repometry report/);
   assert.match(help.stdout, /--sources/);
-  assert.doesNotMatch(help.stdout, /--worker/);
-  const unknown = invoke(directory, ['report', '--ouptut', 'example']);
+  const unknown = invoke(directory, ['report', '--soruces', 'example']);
   assert.equal(unknown.status, 1);
-  assert.match(unknown.stderr, /Did you mean --output/);
+  assert.match(unknown.stderr, /Did you mean --sources/);
   assert.match(invoke(directory, ['--version']).stdout.trim(), /^\d+\.\d+\.\d+/);
   const listing = JSON.parse(invoke(directory, ['-C', directory, 'plugins']).stdout);
   assert.ok(listing.importers.includes('sarif-secrets'));
@@ -338,10 +348,29 @@ test('the command registry handles scoped help, suggestions, version and plugin 
 test('report validates separate destinations and the default output is under the store workspace', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'repometry-report-default-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const invalid = invoke(dir, ['report', 'html', 'json', '-o', 'out']);
+  const invalid = invoke(dir, ['report', 'html=out', 'json=out']);
   assert.equal(invalid.status, 1);
-  assert.match(invalid.stderr, /exactly one report/);
+  assert.match(invalid.stderr, /separate output/);
   const result = invoke(dir, ['report']);
   assert.equal(result.status, 0, result.stderr);
   assert.ok((await readFile(join(dir, '.repometry', 'report', 'html', 'index.html'), 'utf8')).includes('repometry-view'));
+});
+
+test('repository and store options are scoped to the commands that use them', () => {
+  const directory = process.cwd();
+  for (const [commands, option, value] of [
+    [['view', 'projects', 'cache'], '--repo', directory],
+    [['review', 'plugins', 'projects', 'cache'], '--store', '.repometry'],
+  ] as const) {
+    for (const command of commands) {
+      const help = invoke(directory, ['help', command]);
+      assert.equal(help.status, 0, help.stderr);
+      assert.ok(!help.stdout.includes(option), help.stdout);
+      const unknown = invoke(directory, [option, value, command]);
+      assert.equal(unknown.status, 1);
+      assert.match(unknown.stderr, new RegExp(option + ' is not an option of ' + command));
+    }
+  }
+  assert.match(invoke(directory, ['help', 'analyze']).stdout, /-C, --repo DIR/);
+  assert.match(invoke(directory, ['help', 'view']).stdout, /--store PATH/);
 });

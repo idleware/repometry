@@ -57,21 +57,17 @@ test('an unavailable cache reports its path without building a process-local par
   { message: /Go parser cache .*go-parsers-v1/ });
 });
 
-test('cache clear removes Go parsers and source blobs, with an option to keep parsers', async t => {
+test('cache clear removes Go parsers and source blobs', async t => {
   const cache = await mkdtemp(join(tmpdir(), 'repometry-clear-cache-'));
   t.after(() => rm(cache, { recursive: true, force: true }));
   const parsers = join(cache, 'go-parsers-v1');
   const sources = join(cache, 'sources');
   await Promise.all([mkdir(parsers), mkdir(sources)]);
-  const clear = async (...options: string[]) => {
-    const { stdout } = await run(process.execPath, [resolve('target/main/ts/cli/main.js'), 'cache', 'clear', ...options],
+  const clear = async () => {
+    const { stdout } = await run(process.execPath, [resolve('target/main/ts/cli/main.js'), 'cache', 'clear'],
       { env: { ...process.env, REPOMETRY_CACHE_DIR: cache } });
     return JSON.parse(stdout).cleared as string[];
   };
-  assert.deepEqual(await clear('--sources'), ['sources']);
-  await access(parsers);
-  await assert.rejects(access(sources), { code: 'ENOENT' });
-  await mkdir(sources);
   assert.deepEqual(await clear(), ['sources', 'go-parsers-v1']);
   await assert.rejects(access(sources), { code: 'ENOENT' });
   await assert.rejects(access(parsers), { code: 'ENOENT' });

@@ -1,6 +1,5 @@
 import { appendFile, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import type { DiffCoverageReport } from '../../core/usecases/diff-coverage.js';
 import { isRecord } from '../../core/engine/plugin.js';
 import { annotationLimit } from '../../core/model/pull-review.js';
 import type { PullReview } from '../../core/model/pull-review.js';
@@ -14,19 +13,6 @@ export async function writeGitHubResult(report: Report): Promise<void> {
     `**${report.status}** · \`${report.subject.id}\``, '',
     `Parsed ${report.scope.parsed} of ${report.scope.files} files.`,
     `Measurements: ${report.measurements.length}. Diagnostics: ${report.diagnostics.length}.`, '', '',
-  ].join('\n'));
-}
-
-export async function writeGitHubDiffCoverage(report: DiffCoverageReport): Promise<void> {
-  const { output, summary } = githubFiles();
-  const decision = report.decision?.status ?? '';
-  await appendFile(output, `status=${report.status}\npercent=${report.percent ?? ''}\ndecision=${decision}\n`);
-  const observed = report.percent === null ? '—' : `${report.percent.toFixed(2)}%`;
-  const policy = report.decision === null ? [] : [`Minimum ${report.decision.minimumPercent}% · **${report.decision.status}**`];
-  await appendFile(summary, ['## Repometry diff coverage', '',
-    `**${report.status}** · \`${report.base}\` → \`${report.head}\``, '',
-    `Observed coverage ${observed} (${report.covered}/${report.total} reported lines). Gaps: ${report.gaps.length}.`,
-    ...policy, '', '',
   ].join('\n'));
 }
 

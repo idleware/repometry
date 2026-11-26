@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { inspect } from '../../main/ts/compose/inspect.js';
-import { prepareMetabranch } from '../../main/ts/compose/prepare-metabranch.js';
 import { findingImportMethods, importFindings } from '../../main/ts/api/import/finding-import.js';
 import type { FindingInput } from '../../main/ts/api/import/finding-import.js';
 
@@ -50,8 +49,6 @@ test('scanner imports persist normalized private findings and redact secret mess
   const outOfScope = await importFindings(osv, root, () => false, new Set(['index.js']));
   assert.equal(outOfScope.metadata.unmapped, 2);
   assert.deepEqual(outOfScope.findings, []);
-  await assert.rejects(prepareMetabranch({ repository: root, worktree: root, branch: 'repometry',
-    report: { ...report, subject: { kind: 'commit', id: 'a'.repeat(40) } } }), /Security scanner imports belong in the local report store/);
 
   async function input(variant: Omit<FindingInput, 'file'>, json: unknown): Promise<FindingInput> {
     const file = join(root, `${variant.format}.json`);

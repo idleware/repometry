@@ -1,6 +1,11 @@
 export { pluginApi } from './core/engine/plugin.js';
+export { plan } from './core/engine/plan.js';
+export type { InputBinding, PlanRequest, PlannedOperation } from './core/engine/plan.js';
+export { execute } from './core/engine/execute.js';
+export type { Outcome } from './core/engine/execute.js';
 export type { DataContract, InspectionInputs, Operation, Plugin, PluginConfigSchema, Product, RuleDescriptor } from './core/engine/plugin.js';
 export type { FileClaims, MetricDescriptor, MetricScope, PluginKind, ProductDeclaration } from './core/engine/plugin.js';
+export { LocalOperationCache } from './report/json/store/operation-cache.js';
 export type { OperationCache, OperationCacheOptions } from './core/engine/operation-cache.js';
 export { codeStructure, codeStructures } from './core/model/code-structure.js';
 export type { CodeStructure, FunctionComplexity, StructureMeasure, StructuralCheck, StructuralObservation } from './core/model/code-structure.js';
@@ -11,11 +16,10 @@ export type { InventoryFile, SourceFile, SourceSnapshot } from './core/model/sou
 export { measurements } from './core/model/measurement.js';
 export type { Measurement } from './core/model/measurement.js';
 export { findingResult } from './core/model/finding.js';
-export type { Finding, FindingResult } from './core/model/finding.js';
+export type { Finding, FindingLocation, FindingResult } from './core/model/finding.js';
 export type { SourceContext, SourcePlugin, SourceProvider } from './core/ports/source-provider.js';
 export type { ToolInvocation, ToolResult, ToolRunner } from './core/ports/tool-runner.js';
 export { DockerToolRunner } from './api/process/docker-tool-runner.js';
 export type { DockerToolLimits } from './api/process/docker-tool-runner.js';
 export { processPlugin, processPluginProtocol } from './api/process/plugin.js';
 export type { ProcessOperation, ProcessPluginManifest } from './api/process/plugin.js';
-export type { SourceLocator } from './core/model/source-locator.js';

@@ -23,6 +23,25 @@
     "reports": { "$ref": "#/$defs/strings" },
     "sources": { "type": "string", "minLength": 1 },
     "branch": { "type": "string", "minLength": 1 },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "pathGlobs"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100, "pattern": "\\S" },
+          "pathGlobs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(?![A-Za-z]:)(?:(?!\\.{1,2}(?:/|$))[^/\\\\\\u0000]+/)*(?!\\.{1,2}$)[^/\\\\\\u0000]+$"
+            }
+          },
+          "description": { "type": "string" }
+        }
+      }
+    },
     "minCoverage": { "type": "number", "minimum": 0, "maximum": 100 },
     "minLines": { "type": "integer", "minimum": 0 },
     "maxNewIssues": { "type": "integer", "minimum": 0 },

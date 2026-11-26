@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
 import { processPlugin } from '../../main/ts/api/process/plugin.js';
-import { analyzeSnapshot, inspect } from '../../main/ts/compose/inspect.js';
+import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { inspect } from '../../main/ts/compose/inspect.js';
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
@@ -17,7 +18,6 @@ import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
 import { sourceFile, sourceFiles, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
 import type { ToolRunner } from '../../main/ts/core/ports/tool-runner.js';
-import { compareInspections } from '../../main/ts/core/usecases/compare.js';
 import { fileQuality, maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
 import { structure } from '../../main/ts/plugins/structure/structure.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
@@ -158,10 +158,14 @@ async function inspectFixtureLanguage(t: TestContext, docker?: ToolRunner) {
     catalog: [{ id: 'toy', label: 'Renamed Toy Language', color: '#ffffff' }] });
   const index = projected.files.find(file => file.path === paths[0])?.language;
   assert.equal(projected.languages?.[index!]?.label, 'Toy Language');
-  assert.equal(compareInspections(report, report).metrics.physicalLines.delta, 0);
-  const failed = { ...report, diagnostics: [...report.diagnostics,
-    { operation: 'batch-fixture/read', path: paths[0], state: 'partial' as const, message: 'Parse issue' }] };
-  assert.equal(compareInspections(report, failed).metrics.physicalLines.current.status, 'partial');
+  assert.equal(commitSummary(readReport(JSON.parse(JSON.stringify(report)))).lines, 21);
+  const diagnostic = { operation: 'batch-fixture/read', path: paths[0], state: 'partial' as const, message: 'Parse issue' };
+  const partial = readReport(JSON.parse(JSON.stringify({ ...report, status: 'partial', diagnostics: [...report.diagnostics, diagnostic] })));
+  const details = inspectionDetails(partial);
+  assert.equal(details.metrics.status, 'partial');
+  assert.deepEqual(details.diagnostics.at(-1), diagnostic);
+  assert.equal(details.metrics.files.find(file => file.path === paths[0])?.diagnosticCount,
+    metrics.files.find(file => file.path === paths[0])!.diagnosticCount + 1);
 }
 
 test('a partial language provider omits unsupported measures and keeps LCOV data', async () => {

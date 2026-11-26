@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Subject } from '../../../core/model/source.js';
 import { repositorySummary } from '../projections/commit-summary.js';
@@ -41,6 +41,12 @@ export interface StoreRepair {
  * summary.json. A report that stays broken needs `repometry analyze` again.
  */
 export async function checkStore(directory: string, repair?: StoreRepair): Promise<StoreCheck> {
+  const target = await stat(directory).catch((error: unknown) => {
+    if (hasCode(error, 'ENOENT') || hasCode(error, 'ENOTDIR')) return undefined;
+    throw error;
+  });
+  if (target === undefined) throw new Error(`No report store at ${directory}. Run repometry analyze first.`);
+  if (!target.isDirectory()) throw new Error(`Expected a report store directory: ${directory}`);
   const store = new LocalReportStore(directory);
   const reachable = new Set<string>();
   const problems: StoreProblem[] = [];

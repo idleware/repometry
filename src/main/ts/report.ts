@@ -1,7 +1,8 @@
 export { readReport, reportSchema } from './report/json/validation/report.js';
 export type { Diagnostic, Report, ReportReader, ReportStore } from './report/json/validation/report.js';
 export type { ReportWriter } from './core/ports/report.js';
-export { LocalOperationCache } from './report/json/store/operation-cache.js';
+export { LocalReportStore } from './report/json/store/local-store.js';
+export { GitReportReader } from './api/git/git-reader.js';
 export { validateSummary } from './report/json/validation/summary-validation.js';
 export type { PublicHistoryEntry } from './report/json/wire/public-history-model.js';
 export { summarySchema } from './report/json/wire/summary-model.js';
@@ -9,3 +10,14 @@ export type { CommitSummary, RepositorySummary } from './report/json/wire/summar
 export type { SourceLocator } from './report/json/wire/summary-model.js';
 export { fileMetricsSchema } from './report/json/wire/file-metrics-model.js';
 export type { FileMetricsReport } from './report/json/wire/file-metrics-model.js';
+export { fileMetrics } from './report/json/projections/file-metrics.js';
+export { coverageGrade, qualitySummary } from './core/model/quality-summary.js';
+export type { Grade, QualitySummary } from './core/model/quality-summary.js';
+export { diffCoverageSchema } from './core/usecases/diff-coverage.js';
+export type { DiffCoverageReport } from './core/usecases/diff-coverage.js';
+export { pullReviewSchema } from './core/model/pull-review.js';
+export type { IssueEffect, PullReview, ReviewedIssue, ReviewReason } from './core/model/pull-review.js';
+export { pullReviewsSchema } from './report/json/wire/pull-review-model.js';
+export type { PullReviews } from './report/json/wire/pull-review-model.js';
+export type { IgnoredFinding } from './core/model/finding-ignore.js';
+export type { Subject } from './core/model/snapshot.js';

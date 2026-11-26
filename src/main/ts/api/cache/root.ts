@@ -12,8 +12,8 @@ export function cacheRoot(env: NodeJS.ProcessEnv = process.env, system = process
 
 export const goParserCacheDirectory = 'go-parsers-v1';
 
-export async function clearCaches(root: string, sourcesOnly: boolean): Promise<readonly string[]> {
-  const directories = sourcesOnly ? ['sources'] : ['sources', goParserCacheDirectory];
+export async function clearCaches(root: string): Promise<readonly string[]> {
+  const directories = ['sources', goParserCacheDirectory];
   await Promise.all(directories.map(directory => rm(join(root, directory), { recursive: true, force: true })));
   return directories;
 }

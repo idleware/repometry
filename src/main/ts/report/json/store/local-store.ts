@@ -9,6 +9,7 @@ import type { CommitSummary } from '../wire/summary-model.js';
 import { compactJsonSchema } from '../wire/compact-json.js';
 import { compareReports, readReport, readStoredReport, validSubjectId } from '../validation/report.js';
 import type { Report, ReportStore } from '../validation/report.js';
+import { metaManifest } from '../validation/metabranch.js';
 import { validateSummaryRow } from '../validation/summary-validation.js';
 import { checkDirectory, ensureDirectory, hasCode } from './directory.js';
 import { LocalObjectStore } from './object-store.js';
@@ -43,6 +44,7 @@ export class LocalReportStore implements ReportStore {
     }
     const row = report.subject.kind === 'commit' ? commitSummary(report) : undefined;
     if (row && !validateSummaryRow(row)) throw new Error(`Invalid report summary: ${report.subject.id}`);
+    await replaceFile(this.directory, 'manifest.json', `${JSON.stringify(metaManifest, null, 2)}\n`, true);
     // Objects go first, so a published commit file never names a missing object.
     await this.objects.write(objects);
     // Keep the small index row on the first line of the same atomic file as the report.

@@ -1,23 +1,16 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { gitReportObjects } from '../api/git/git-reader.js';
-import { resolveGitBranch } from '../api/git/commit-metadata.js';
 import { cacheRoot, clearCaches } from '../api/cache/root.js';
-import { gitHubPullRequest, writeGitHubDiffCoverage, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
-import { serveWorker } from '../api/worker/worker.js';
-import { workerToken } from '../api/worker/worker-protocol.js';
-import { defaultLanguages, languageRegistry } from '../compose/languages.js';
-import { analyzeSnapshot, attachFindings, inspect } from '../compose/inspect.js';
-import { measureDiffCoverage } from '../compose/diff-coverage.js';
-import { prepareMetabranch } from '../compose/prepare-metabranch.js';
+import { gitHubPullRequest, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
+import { defaultLanguages } from '../compose/languages.js';
+import { attachFindings, inspect } from '../compose/inspect.js';
 import { review as reviewChange, reviewExitCode, reviewReason } from '../compose/review.js';
 import { effectivePlugins } from '../compose/plugin-list.js';
 import { validSubjectId } from '../core/model/report.js';
 import type { Report } from '../core/model/report.js';
-import { sourceExclusionMatcher } from '../core/profile/exclusions.js';
-import { compareInspections } from '../core/usecases/compare.js';
 import { exportProjects } from '../report/html/site/projects.js';
 import { fileMetrics } from '../report/json/projections/file-metrics.js';
 import { pullReviewMarkdown } from '../report/markdown/pull-review.js';
@@ -26,106 +19,74 @@ import { checkStore } from '../report/json/store/store-check.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
 import type { Command, Invocation } from './arguments.js';
-import { configFile, parseConfig, readConfig, readConfigValue } from './config.js';
+import { configFile, listOption, parseConfig, readConfig, readConfigValue } from './config.js';
 import { analyzeCommits, isSaved } from './range-jobs.js';
-import { analysisExecutor } from './range-inspection.js';
 import { importerIds, readInputs } from './imports.js';
 import { outputReports, reporterIds, viewTarget } from './reporting.js';
 import { parseRange } from './revisions.js';
 import type { RevisionRange } from './revisions.js';
-import { findRepository, selectStore, writableStore } from './store.js';
+import { findRepository, invocationDirectory, selectStore, writableStore } from './store.js';
 
 const configOptions = { config: option('FILE', 'Read a different JSON configuration.'), 'no-config': flag('Skip configuration.') };
 const importOption = option('FORMAT=PATH', 'Import a report produced by another tool. Repeatable.', { multiple: true });
 const excludeOption = option('PATTERN', 'Exclude a path or glob. Repeatable.', { multiple: true });
 const ciOption = option('PROVIDER', 'Send CI output to github or none.');
-const outputOption = option('PATH', 'Set the report output path.', { short: 'o' });
-const baselineOption = option('PATH|git:REF', 'Select the baseline report store.');
-const branchOption = option('NAME', 'Name the branch represented by the report.');
-const renderOptions = {
-  output: outputOption,
-  sources: option('auto|none|ID[:SPEC]', 'Select where the report reads source files.'),
-  title: option('NAME', 'Set the report title.'), components: option('FILE', 'Read component definitions.'),
-  'no-footer': flag('Omit the footer.'), branch: branchOption,
+const repoOption = option('DIR', 'Run in the given repository.', { short: 'C' });
+const storeOption = option('PATH|git:REF', 'Select a report store.');
+const storageOptions = { repo: repoOption, store: storeOption };
+const displayOptions = {
+  ...configOptions, branch: option('NAME', 'Name the branch shown in the report.'), title: option('NAME', 'Set the report title.'),
 };
 
 const commands: Readonly<Record<string, Command>> = {
   analyze: {
     description: 'Analyze and save one revision or a range of commits.', parameters: '[REVISION | BASE..[HEAD]]', max: 1,
-    options: { ...configOptions, ...renderOptions, 'working-tree': flag('Analyze the working directory.'),
+    options: { ...configOptions, ...storageOptions, 'working-tree': flag('Analyze the working directory.'),
       'skip-saved': flag('Keep commits that already have a saved inspection.'),
       concurrency: option('N', 'Maximum local analysis workers for a range. Defaults to the available cores.'),
-      import: importOption, report: option('FORMAT[=PATH]', 'Generate a report after inspection. Repeatable.', { multiple: true }),
+      import: importOption,
       exclude: excludeOption, 'import-root': option('DIR', 'Resolve scanner locations relative to this directory.'),
-      worker: option('URL', 'Run analysis on a Repometry worker.'), ci: ciOption },
+      ci: ciOption },
     run: runAnalysis,
   },
   show: {
     description: 'Print a saved report.', parameters: 'REVISION|DIGEST', min: 1, max: 1,
-    options: { files: flag('Print file metrics.') }, run: show,
+    options: { ...storageOptions, files: flag('Print file metrics.') }, run: show,
   },
-  history: { description: 'List saved inspections.', async run(input) {
+  history: { description: 'List saved inspections.', options: storageOptions, async run(input) {
     const { store } = await context(input);
     print({ schema: 'urn:repometry:schema:inspection-history:1', inspections: (await store.reader.list()).map(inspectionSummary) });
   } },
-  compare: {
-    description: 'Compare two saved reports.', parameters: 'BASE [HEAD]', min: 1, max: 2,
-    options: { 'baseline-store': baselineOption }, run: compare,
-  },
-  'diff-coverage': {
-    description: 'Measure coverage of added lines.', parameters: 'BASE [HEAD]', min: 1, max: 2,
-    options: { ...configOptions, import: importOption, exclude: excludeOption, ci: ciOption,
-      'min-coverage': option('PERCENT', 'Minimum acceptable changed-line coverage.') }, run: diffCoverage,
-  },
   review: {
     description: 'Report the issues a change adds or makes worse on the lines it changes.', parameters: 'BASE [HEAD]', min: 1, max: 2,
-    options: { ...configOptions, import: importOption, exclude: excludeOption, ci: ciOption,
+    options: { ...configOptions, repo: repoOption, import: importOption, exclude: excludeOption, ci: ciOption,
       pull: option('NUMBER', 'Name the pull request in the result.'),
-      'min-coverage': option('PERCENT', 'Minimum changed-line coverage. Default 80.'),
-      'min-lines': option('COUNT', 'Measured changed lines from which the coverage minimum applies. Default 20.'),
-      'max-new-issues': option('COUNT', 'Allowed new and worsened issues. Default 0.'),
       markdown: option('PATH', 'Also write the result as Markdown, for a pull request comment.') }, run: review,
   },
   report: {
     description: 'Render HTML or JSON from saved reports.', parameters: '[FORMAT[=PATH]]...', max: Infinity,
-    options: { ...configOptions, ...renderOptions }, async run(input) {
+    options: { ...displayOptions, ...storageOptions, sources: option('auto|none|ID[:SPEC]', 'Select where the report reads source files.') },
+    async run(input) {
       const { root, store } = await context(input);
       const config = await readConfig(root, input);
-      const requests = input.args.length ? input.args : config.reports.length ? config.reports : ['html'];
-      print({ schema: 'urn:repometry:schema:render-result:1', reports: await outputReports(root, store, requests, input, config) });
+      print({ schema: 'urn:repometry:schema:render-result:1', reports: await outputReports(root, store, input, config) });
     },
   },
   view: {
     description: 'Open a repository, store or exported site locally.', parameters: '[TARGET]', max: 1,
-    options: { ...configOptions, branch: branchOption, port: option('PORT', 'Listen on this localhost port.'), title: renderOptions.title,
-      components: renderOptions.components, 'no-footer': renderOptions['no-footer'] },
+    options: { ...displayOptions, store: storeOption, port: option('PORT', 'Listen on this localhost port.') },
     async run(input) { announce(await viewTarget(input, port(input.text('port') ?? '0'))); },
   },
   projects: {
-    description: 'Generate a projects index.', options: { output: outputOption, 'no-footer': renderOptions['no-footer'] },
+    description: 'Generate a projects index.', parameters: '[DIR]', max: 1,
     async run(input) {
-      const destination = resolve(input.text('repo') ?? '.', input.text('output') ?? '.');
-      print({ schema: 'urn:repometry:schema:projects-result:1', destination,
-        projects: await exportProjects(destination, { footer: !input.flag('no-footer') }) });
+      const destination = resolve(input.args[0] ?? '.');
+      print({ schema: 'urn:repometry:schema:projects-result:1', destination, projects: await exportProjects(destination) });
     },
   },
-  prepare: {
-    description: 'Prepare a report for a Git storage branch.', parameters: 'REVISION', min: 1, max: 1,
-    options: { worktree: option('DIR', 'Select the storage worktree.'), branch: option('NAME', 'Select the storage branch.') },
+  plugins: { description: 'List effective plugins and supported formats.', options: { ...configOptions, repo: repoOption },
     async run(input) {
-      const { directory, root, store } = await context(input);
-      const path = input.text('worktree');
-      if (!path) throw new Error('prepare requires --worktree');
-      const worktree = resolve(directory, path);
-      const id = await commitId(root, input.args[0]!);
-      const report = await store.reader.read({ kind: 'commit', id });
-      const files = await prepareMetabranch({ repository: root, worktree, branch: input.text('branch') ?? 'repometry', report });
-      print({ schema: 'urn:repometry:schema:prepare-result:1', subject: report.subject, worktree, files });
-    },
-  },
-  plugins: { description: 'List effective plugins and supported formats.', options: configOptions,
-    async run(input) {
-      const { root } = await context(input);
+      const { root } = await repositoryContext(input);
       const config = await readConfig(root, input);
       print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: effectivePlugins(config.plugins),
         importers: importerIds, reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
@@ -133,20 +94,18 @@ const commands: Readonly<Record<string, Command>> = {
   },
   cache: {
     description: 'Find or clear the system cache.', parameters: 'path|clear', min: 1, max: 1,
-    options: { sources: flag('Clear only source blobs.') },
     async run(input) {
       const action = input.args[0];
       if (action !== 'path' && action !== 'clear') throw new Error('Use cache path or cache clear');
-      if (action === 'path' && input.flag('sources')) throw new Error('--sources requires cache clear');
       const path = cacheRoot();
-      const cleared = action === 'clear' ? await clearCaches(path, input.flag('sources')) : undefined;
+      const cleared = action === 'clear' ? await clearCaches(path) : undefined;
       print({ schema: 'urn:repometry:schema:cache-result:1', path, cleared });
     },
   },
   store: {
     description: 'Check saved inspections and repair what can be restored.', parameters: 'check', min: 1, max: 1,
     options: {
-      repair: flag('Restore missing data from a copy.'),
+      ...storageOptions, repair: flag('Restore missing data from a copy.'),
       from: option('PATH|git:REF', 'The copy: another store or a storage branch.'),
     },
     async run(input) {
@@ -159,21 +118,19 @@ const commands: Readonly<Record<string, Command>> = {
         : from.startsWith('git:') ? await gitReportObjects(root, from.slice(4)) : new LocalObjectStore(resolve(directory, from)).source();
       const result = await checkStore(path, input.flag('repair') ? { from: source } : undefined);
       print({ ...result, store: path });
-      return result.problems.length ? 1 : 0;
+      return result.problems.length ? 3 : 0;
     },
   },
-  worker: { description: 'Run the remote analysis worker.',
-    options: { port: option('PORT', 'Listen on this port.'), listen: option('ADDRESS', 'Listen on 127.0.0.1 or 0.0.0.0.') },
-    async run(input) {
-      const host = input.text('listen') ?? '127.0.0.1';
-      if (host !== '127.0.0.1' && host !== '0.0.0.0') throw new Error('--listen must be 127.0.0.1 or 0.0.0.0');
-      announce(await serveWorker(host, port(input.text('port') ?? '7331'), workerToken(), analyzeSnapshot, languageRegistry([]).isSource));
-    } },
 };
 
-async function context(input: Invocation) {
-  const directory = resolve(input.text('repo') ?? '.');
+async function repositoryContext(input: Invocation) {
+  const directory = invocationDirectory(input);
   const root = await findRepository(directory) ?? directory;
+  return { directory, root };
+}
+
+async function context(input: Invocation) {
+  const { directory, root } = await repositoryContext(input);
   return { directory, root, store: selectStore(root, input.text('store'), directory) };
 }
 
@@ -191,25 +148,20 @@ async function analyze(input: Invocation): Promise<number> {
   if (input.flag('working-tree') && input.flag('skip-saved')) throw new Error('--skip-saved applies to commits, not --working-tree');
   const github = useGitHub(input);
   const config = await readConfig(root, input);
-  const branch = input.text('branch') ?? config.branch;
-  const revision = input.args[0] ?? (!input.flag('working-tree') && branch !== undefined ? await resolveGitBranch(root, branch) : 'HEAD');
+  const revision = input.args[0] ?? 'HEAD';
   const imports = input.many('import');
   const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
-  const executor = analysisExecutor(input.text('worker'), config.plugins);
   const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
     : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-      lcov, goCover, exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins: config.plugins,
-      findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined },
-    executor);
+      lcov, goCover, exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins: config.plugins,
+      findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined });
   if (github) await writeGitHubResult(report);
-  const requested = input.many('report');
-  const reports = await outputReports(root, store, requested.length ? requested : config.reports, input, config);
   print({ schema: 'urn:repometry:schema:analysis-result:1', ...inspectionSummary(report), ...(skipped ? { skipped: true } : {}),
-    store: output, reports });
+    store: output });
   return report.status === 'partial' ? 2 : 0;
 }
 
@@ -226,14 +178,12 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (config.imports.length) process.stderr.write('Imports from the config describe one checkout and are skipped for a range.\n');
   const { base, head, commits } = await firstParentRange(root, range.base, range.head);
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
-  const inspection = { directory, output, exclude: input.many('exclude'), worker: input.text('worker') };
+  const inspection = { directory, output, exclude: listOption(input, 'exclude', config.exclude) };
   const { interrupted, ...results } = await analyzeCommits(commits, {
     inspection, config, configValue, concurrency, skipSaved: input.flag('skip-saved'),
   });
-  const requested = input.many('report');
-  const reports = interrupted ? [] : await outputReports(root, store, requested.length ? requested : config.reports, input, config);
   print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
-    ...results, store: output, reports });
+    ...results, store: output });
   return interrupted ? 130 : results.failed.length || results.partial.length ? 2 : 0;
 }
 
@@ -252,31 +202,8 @@ async function show(input: Invocation) {
   print(input.flag('files') ? fileMetrics(report, defaultLanguages) : report);
 }
 
-async function compare(input: Invocation) {
-  const { directory, root, store } = await context(input);
-  const baselinePath = input.text('baseline-store');
-  const baseline = baselinePath === undefined ? store : selectStore(root, baselinePath, directory);
-  const [base, head] = await Promise.all([commitId(root, input.args[0]!), commitId(root, input.args[1] ?? 'HEAD')]);
-  const current = store.reader.read({ kind: 'commit', id: head });
-  const before = base === head && baseline === store ? current : baseline.reader.read({ kind: 'commit', id: base });
-  print(compareInspections(await before, await current));
-}
-
-async function diffCoverage(input: Invocation): Promise<number> {
-  const { directory, root } = await context(input);
-  const config = await readConfig(root, input);
-  const imports = input.many('import');
-  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
-  if ((!lcov && !goCover) || (imports.length && findings.length)) throw new Error('diff-coverage requires --import lcov=PATH or go-cover=PATH');
-  const report = await measureDiffCoverage({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover, plugins: config.plugins,
-    exclude: [...config.exclude, ...input.many('exclude')], minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage') });
-  if (useGitHub(input)) await writeGitHubDiffCoverage(report);
-  print(report);
-  return report.status === 'partial' ? 2 : report.decision?.status === 'failed' ? 3 : 0;
-}
-
 async function review(input: Invocation): Promise<number> {
-  const { directory, root } = await context(input);
+  const { directory, root } = await repositoryContext(input);
   const github = useGitHub(input);
   const config = await readConfig(root, input);
   const imports = input.many('import');
@@ -286,12 +213,10 @@ async function review(input: Invocation): Promise<number> {
   const settingsPath = configFile(root, input);
   const { plugins, ...settings } = config;
   const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover,
-    exclude: [...config.exclude, ...input.many('exclude')], ignore: config.ignore, plugins, settings,
+    exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, settings,
     settingsPath: settingsPath === undefined ? undefined : relative(root, settingsPath).split(sep).join('/'),
     number: count(input.text('pull'), '--pull', 1) ?? (github ? await gitHubPullRequest() : undefined),
-    minimumPercent: percent(input.text('min-coverage') ?? config.minCoverage, '--min-coverage'),
-    minimumLines: count(input.text('min-lines') ?? config.minLines, '--min-lines'),
-    maxNewIssues: count(input.text('max-new-issues') ?? config.maxNewIssues, '--max-new-issues') });
+    minimumPercent: config.minCoverage, minimumLines: config.minLines, maxNewIssues: config.maxNewIssues });
   const markdown = pullReviewMarkdown(report);
   if (github) await writeGitHubReview(report, markdown, await gitRoot(root));
   const markdownPath = input.text('markdown');
@@ -302,7 +227,6 @@ async function review(input: Invocation): Promise<number> {
   return code;
 }
 
-
 function commitId(root: string, revision: string): Promise<string> {
   return validSubjectId('commit', revision) ? Promise.resolve(revision) : resolveGitCommit(root, revision);
 }
@@ -311,13 +235,6 @@ function useGitHub(input: Invocation): boolean {
   const provider = input.text('ci') ?? 'none';
   if (provider !== 'none' && provider !== 'github') throw new Error('--ci must be github or none');
   return provider === 'github';
-}
-
-function percent(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined;
-  const number = Number(value);
-  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) || number < 0 || number > 100) throw new Error(`${name} must be a percentage from 0 to 100`);
-  return number;
 }
 
 function count(value: string | undefined, name: string, minimum = 0): number | undefined {

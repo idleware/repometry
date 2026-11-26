@@ -74,8 +74,8 @@ jobs:
         with:
           node-version: 26
       - run: npm ci --omit=dev --ignore-scripts
-      # The store is the repometry branch, or on the first run a new one with only its manifest. A new branch never
-      # replaces an existing one that failed to fetch: its push is rejected.
+      # The store is the repometry branch, or on the first run an empty one. An empty store never replaces an existing
+      # branch that failed to fetch: its push is rejected.
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,8 +83,6 @@ jobs:
           git init -q "$store"
           if git -C "$store" fetch -q --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" repometry; then
             git -C "$store" checkout -q FETCH_HEAD
-          else
-            printf '{\n  "schema": "urn:repometry:schema:metabranch:1"\n}\n' > "$store/manifest.json"
           fi
       # The 20 commits before this one get an inspection without coverage if they have none, then this commit gets one
       # with it, and the report is built from the whole store. The catch-up is a range, which never includes the root
@@ -95,7 +93,7 @@ jobs:
             repometry analyze "$(git rev-list --first-parent -n 22 HEAD | tail -n 1)..HEAD~1" --store "$RUNNER_TEMP/store" --skip-saved
           fi
           repometry analyze --store "$RUNNER_TEMP/store" --import lcov=target/coverage/lcov.info
-          repometry report "html=$RUNNER_TEMP/site" --store "$RUNNER_TEMP/store" --title "${GITHUB_REPOSITORY#*/}" --sources github
+          repometry report "html=$RUNNER_TEMP/site" --store "$RUNNER_TEMP/store" --sources github
       - env:
           GH_TOKEN: ${{ github.token }}
         working-directory: ${{ runner.temp }}/store

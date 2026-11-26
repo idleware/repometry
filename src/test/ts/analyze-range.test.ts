@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFile, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
-import { serveWorker } from '../../main/ts/api/worker/worker.js';
-import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
-import { languageRegistry } from '../../main/ts/compose/languages.js';
 import { parseRange } from '../../main/ts/cli/revisions.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
@@ -62,44 +57,9 @@ test('a range rejects options that describe one checkout, and an empty range suc
   const output = JSON.parse(empty.stdout) as Record<string, unknown>;
   assert.equal(output.schema, 'urn:repometry:schema:analyze-range:1');
   assert.match(String(output.range), /^[0-9a-f]{40}\.\.[0-9a-f]{40}$/);
-  for (const key of ['analyzed', 'partial', 'skipped', 'failed', 'reports']) assert.deepEqual(output[key], [], key);
+  for (const key of ['analyzed', 'partial', 'skipped', 'failed']) assert.deepEqual(output[key], [], key);
+  assert.ok(!Object.hasOwn(output, 'reports'));
   assert.match(empty.stderr, /No commits in HEAD\.\.HEAD/);
-});
-
-test('a range sends one analysis at a time to a remote worker', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'repometry-remote-range-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
-    GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com' };
-  function git(args: string[]): string {
-    const result = spawnSync('git', ['-C', root, '-c', 'commit.gpgsign=false', '-c', `core.hooksPath=${join(root, 'hooks')}`, ...args],
-      { encoding: 'utf8', env: gitEnv });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim();
-  }
-
-  git(['init', '-q']);
-  await writeFile(join(root, 'example.js'), 'export const answer = 42;\n');
-  git(['add', 'example.js']);
-  git(['commit', '-qm', 'base']);
-  for (let i = 0; i < 50; i++) git(['commit', '--allow-empty', '-qm', `change ${i}`]);
-  const commits = git(['rev-list', '--first-parent', '--reverse', 'HEAD~50..HEAD']).split('\n');
-
-  const token = 'repometry-test-worker';
-  const worker = await serveWorker('127.0.0.1', 0, token, async input => {
-    await delay(40);
-    return analyzeSnapshot(input);
-  }, languageRegistry([]).isSource);
-  t.after(worker.close);
-  const store = join(root, 'reports');
-  const { stdout } = await promisify(execFile)(process.execPath,
-    [cli, 'analyze', 'HEAD~50..HEAD', '--no-config', '--ci', 'none', '--store', store, '--worker', worker.url, '--concurrency', '2'],
-    { cwd: root, env: { ...process.env, REPOMETRY_WORKER_TOKEN: token } });
-  const result = JSON.parse(stdout) as { analyzed: string[]; partial: string[]; failed: unknown[] };
-  assert.deepEqual(result.analyzed, commits);
-  assert.deepEqual(result.partial, []);
-  assert.deepEqual(result.failed, []);
-  assert.deepEqual((await readdir(join(store, 'commits'))).sort(), [...commits].sort());
 });
 
 test('help for analyze shows the range form and --skip-saved', () => {
@@ -118,10 +78,21 @@ test('typed paths resolve against the current directory and defaults against the
   await mkdir(sub, { recursive: true });
   await writeFile(join(sub, 'index.js'), 'export const one = () => 1;\n');
   const run = (args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: sub, encoding: 'utf8' });
-  const typed = run(['analyze', '--working-tree', '--store', 'typed-store', '--report', 'json=out/summary.json']);
+  const typed = run(['analyze', '--working-tree', '--store', 'typed-store']);
   assert.equal(typed.status, 0, typed.stderr);
+  assert.ok(!Object.hasOwn(JSON.parse(typed.stdout), 'reports'));
+  const config = join(root, 'repometry.config.json');
+  await writeFile(config, JSON.stringify({ reports: ['json=out/configured-summary.json'] }));
+  const rendered = run(['report', 'json=out/summary.json', '--store', 'typed-store']);
+  assert.equal(rendered.status, 0, rendered.stderr);
   assert.ok((await readdir(join(sub, 'typed-store'))).length > 0, 'a typed --store lands in the current directory');
   assert.ok((await readdir(join(sub, 'out'))).includes('summary.json'), 'a typed report path lands in the current directory');
+  const configuredPath = join(root, 'out', 'configured-summary.json');
+  await assert.rejects(readFile(configuredPath), { code: 'ENOENT' });
+  const configured = run(['report', '--store', 'typed-store']);
+  assert.equal(configured.status, 0, configured.stderr);
+  assert.deepEqual(JSON.parse(await readFile(configuredPath, 'utf8')).commits, []);
+  await assert.rejects(readFile(join(sub, 'out', 'configured-summary.json')), { code: 'ENOENT' });
   const defaults = run(['analyze', '--working-tree']);
   assert.equal(defaults.status, 0, defaults.stderr);
   assert.ok((await readdir(join(root, '.repometry'))).length > 0, 'the default store stays at the repository root');
@@ -129,7 +100,7 @@ test('typed paths resolve against the current directory and defaults against the
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, new RegExp(`No saved inspections in ${join(await realpath(sub), 'no-store').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   const directory = await realpath(root);
-  const rebased = run(['view', '-C', directory, '--store', 'no-store']);
+  const rebased = run(['view', directory, '--store', join(directory, 'no-store')]);
   assert.equal(rebased.status, 1);
   assert.equal(rebased.stderr, `repometry: No saved inspections in ${join(directory, 'no-store')}. Run repometry analyze first.\n`);
 });
@@ -188,4 +159,27 @@ test('a report shows everything the store holds, and there is no mode to choose'
   const mode = invoke(['report', `html=${join(directory, 'x')}`, '--store', store, '--mode', 'public']);
   assert.equal(mode.status, 1);
   assert.match(mode.stderr, /--mode is not an option of report/);
+});
+
+test('analyze defaults to HEAD and leaves configured rendering to report', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'repometry-analysis-config-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const config = join(directory, 'config.json');
+  const output = join(directory, 'summary.json');
+  const store = join(directory, 'store');
+  await writeFile(config, JSON.stringify({ branch: 'report-only-label', reports: ['json=' + output] }));
+  const options = ['--config', config, '--store', store];
+  const result = invoke(['analyze', ...options]);
+  assert.equal(result.status, 0, result.stderr);
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
+  assert.equal(head.status, 0, head.stderr);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.subject.id, head.stdout.trim());
+  assert.ok(!Object.hasOwn(summary, 'reports'));
+  await assert.rejects(readFile(output), { code: 'ENOENT' });
+  const rendered = invoke(['report', ...options]);
+  assert.equal(rendered.status, 0, rendered.stderr);
+  const report = JSON.parse(await readFile(output, 'utf8'));
+  assert.equal(report.source.branch, 'report-only-label');
+  assert.equal(report.commits[0].sha, summary.subject.id);
 });

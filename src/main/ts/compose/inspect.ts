@@ -13,15 +13,12 @@ import type { Diagnostic, Report } from '../core/model/report.js';
 import type { FindingInput } from '../core/model/scanner-import.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { executeInspection } from '../core/usecases/inspect.js';
-import type { AnalysisExecutor, InspectionPorts } from '../core/usecases/inspect.js';
+import type { InspectionPorts } from '../core/usecases/inspect.js';
 import { LocalReportStore } from '../report/json/store/local-store.js';
 import { analyzeSnapshot, inspectionFileMatcher } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
 import type { HistoryCache } from './history-cache.js';
 import { languageRegistry } from './languages.js';
-
-export { analyzeSnapshot } from './analyze-snapshot.js';
-export type { AnalysisExecutor, AnalysisInput, InspectionPorts } from '../core/usecases/inspect.js';
 
 export interface InspectRequest {
   readonly directory: string;
@@ -33,17 +30,19 @@ export interface InspectRequest {
   readonly findingInputs?: readonly FindingInput[];
   readonly findingRoot?: string;
   readonly ignore?: readonly FindingIgnoreRule[];
-  /** Trusted in-process plugins for the default executor. */
+  /** Trusted in-process plugins. */
   readonly plugins?: readonly Plugin[];
   readonly operationCache?: OperationCacheOptions;
 }
 
-export async function inspect(request: InspectRequest, overrides?: AnalysisExecutor | Partial<InspectionPorts>,
-  { history, deferSummary = false }: { history?: HistoryCache; deferSummary?: boolean } = {}): Promise<Report> {
+export function inspect(request: InspectRequest): Promise<Report> {
+  return inspectWithOptions(request);
+}
+
+export async function inspectWithOptions(request: InspectRequest,
+  { history, deferSummary = false, recordChurn = true }:
+    { history?: HistoryCache; deferSummary?: boolean; recordChurn?: boolean } = {}): Promise<Report> {
   const { lcov, goCover, findingInputs = [], plugins = [], operationCache } = request;
-  if ((plugins.length || operationCache) && (typeof overrides === 'function' || overrides?.analyze)) {
-    throw new Error('Configure plugins and the operation cache on the custom executor');
-  }
   const languages = languageRegistry(plugins);
   const claims = inspectionFileMatcher(plugins, languages);
   const { isSource } = languages;
@@ -53,8 +52,7 @@ export async function inspect(request: InspectRequest, overrides?: AnalysisExecu
     ...(lcov === undefined && goCover === undefined ? {} : { readCoverage: source => readInspectionCoverage({ lcov, goCover }, source) }),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),
-    recordChurn: (report, root, paths) => attachChurn(report, root, paths.filter(isSource)),
-    ...(typeof overrides === 'function' ? { analyze: overrides } : overrides),
+    recordChurn: recordChurn ? (report, root, paths) => attachChurn(report, root, paths.filter(isSource)) : undefined,
   };
   return executeInspection(request, ports);
 }

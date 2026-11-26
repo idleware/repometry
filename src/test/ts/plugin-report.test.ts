@@ -59,7 +59,6 @@ test('inspect routes files claimed by a registered plugin and saves its results'
   ]);
   assert.ok(report.pluginData?.inventory?.some(file => file.path === 'notes.txt' && file.analysed));
   assert.deepEqual((await new LocalReportStore(output).read(report.subject)).pluginData, report.pluginData);
-  await assert.rejects(inspect(request, analyzeSnapshot), /custom executor/);
 });
 
 test('declared metrics, rules and custom JSON products round-trip through the report store', async t => {

@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/inspect.js';
+import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
 import { isFinding } from '../../main/ts/core/model/finding.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';

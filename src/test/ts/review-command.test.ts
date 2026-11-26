@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import diffCoverageSchema from '../../main/resources/report/json/diff-coverage-v1.schema.json' with { type: 'json' };
+import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
+import reportSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
+import pullReviewSchema from '../../main/resources/report/json/pull-review-v2.schema.json' with { type: 'json' };
 
 const cli = resolve('target/main/ts/cli/main.js');
 const identity = { GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
@@ -55,11 +60,21 @@ function branchy(name: string, count: number, body = 'total++'): string {
 }
 
 test('raising a function\'s complexity from 17 to 19 fails with one worsened issue', async t => {
-  const root = await project(t, { 'src/run.js': branchy('run', 17) });
+  const root = await project(t, { 'src/run.js': branchy('run', 17),
+    'repometry.config.json': JSON.stringify({ exclude: ['src/run.js'] }) });
   await change(root, { 'src/run.js': branchy('run', 19) });
-  const result = review(root);
+  const configured = review(root);
+  assert.equal(configured.status, 0, configured.stderr);
+  assert.deepEqual(configured.review?.issues, []);
+  const result = review(root, ['main', '--exclude', 'docs/**']);
   assert.equal(result.status, 3, result.stderr);
+  const validate = new Ajv2020({ schemas: [diffCoverageSchema, metricCatalog, reportSchema] }).compile(pullReviewSchema);
+  assert.ok(validate(result.review), JSON.stringify(validate.errors));
   assert.deepEqual(result.review?.issues.map(issue => [issue.effect, issue.before, issue.finding.anchor]), [['worsened', 17, 'run']]);
+  await writeFile(join(root, 'gate-settings.json'), JSON.stringify({ maxNewIssues: 1 }));
+  const allowed = review(root, ['main', '--config', 'gate-settings.json']);
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.deepEqual(allowed.review?.issues, result.review?.issues);
 });
 
 test('editing a line inside an already complex function is touched only', async t => {

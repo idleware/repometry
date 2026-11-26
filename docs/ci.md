@@ -78,7 +78,7 @@ The file has three jobs. `review` runs on a pull request. `history` and then `pa
 
 The full history is for churn: how many first-parent commits touched each file in the 90 days up to the inspected commit. Nothing else in an inspection needs earlier commits.
 
-`analyze` exits with 0 when the inspection is complete, 2 when it is partial, for example when a file can't be parsed, and 1 when it can't run. A missing or failing `go` or `python3` doesn't make it partial: that language's files count as not analysed, and the report's Profile and `repometry plugins` say why. The job saves a partial inspection, marked as partial, and its log says what is missing. Any other failure fails the run, and nothing is saved.
+`analyze` exits with 0 when the inspection is complete, 2 when it is partial, for example when a file can't be parsed, and 1 when it can't run; [Exit codes](cli.md#exit-codes) lists every command's codes. A missing or failing `go` or `python3` doesn't make it partial: that language's files count as not analysed, and the report's Profile and `repometry plugins` say why. The job saves a partial inspection, marked as partial, and its log says what is missing. Any other failure fails the run, and nothing is saved.
 
 ### The queue and the catch-up
 
@@ -122,7 +122,7 @@ Branch rules that cover `repometry` must let the workflow push. The `github-page
 
 An issue keeps its identity through renames and moves within its file. A duplicate shows once, on the copy the change touched. Whole-file issues, such as file complexity, are new when the change crosses the limit and worsened when the file grows past it.
 
-The review compares findings only: it doesn't count churn, and it skips scanner imports such as SARIF, ESLint or OSV files, which describe one checkout and can't be compared. The check also measures coverage of the changed lines, and fails below 80% once at least 20 changed lines are measured. It doesn't show repository totals or grades. Set `maxNewIssues`, `minCoverage` and `minLines` in `repometry.config.json` to change the limits. The command exits with 0 when the check passes, 3 when it fails, 2 when a measurement it needs is missing on the head, and 1 when it can't run. The review job's result is the check.
+The review compares findings only: it doesn't count churn, and it skips scanner imports such as SARIF, ESLint or OSV files, which describe one checkout and can't be compared. The check also measures coverage of the changed lines, and fails below 80% once at least 20 changed lines are measured. It doesn't show repository totals or grades. Set `maxNewIssues`, `minCoverage` and `minLines` in `repometry.config.json` to change the limits. The command exits with 0 when the check passes, 3 when it fails, 2 when a measurement it needs is missing on the head, and 1 when it can't run ([Exit codes](cli.md#exit-codes)). The review job's result is the check.
 
 The review is shown in three places: annotations on the pull request's diff, the run summary, and one comment on the pull request that is updated on every push. A pull request from a fork gets no comment. It's never stored, on the `repometry` branch or anywhere else.
 

@@ -8,6 +8,7 @@ import type { TestContext } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import configSchema from '../../main/resources/report/json/config-v1.schema.json' with { type: 'json' };
 import processPluginsSchema from '../../main/resources/config/process-plugins-v1.schema.json' with { type: 'json' };
+import { parseConfig } from '../../main/ts/cli/config.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { readProcessPlugins } from '../../main/ts/compose/process-plugins.js';
 import { DockerToolRunner, codeStructures, pluginApi, processPlugin, sourceFiles } from '../../main/ts/plugin.js';
@@ -35,6 +36,21 @@ test('the standalone config schema validates the same plugin declarations as the
   assert.equal(validate({ plugins: [{ ...fixture, command: [] }] }), false);
   assert.equal(validate.errors?.[0]?.instancePath, '/plugins/0/command');
   assert.deepEqual(schemas.getSchema(processPluginsSchema.$id)?.schema, processPluginsSchema);
+});
+
+test('component glob validation agrees between config and its schema', () => {
+  const validate = new Ajv2020().compile(configSchema);
+  const config = (pathGlobs: string[]) => ({ components: [{ name: ' Tools ', pathGlobs, description: 'Build tools' }] });
+  const valid = config(['src/tools/**', 'src/tools/**', '.github/workflows/*.yml']);
+  assert.ok(validate(valid), JSON.stringify(validate.errors));
+  assert.deepEqual(parseConfig(valid).components,
+    [{ name: 'Tools', pathGlobs: ['src/tools/**', '.github/workflows/*.yml'], description: 'Build tools' }]);
+  for (const value of [[], ['/etc'], ['C:/src'], ['src\\file'], ['src//file'], ['src/../file'], ['./src'], ['src/']]) {
+    assert.equal(validate(config(value)), false, JSON.stringify(value));
+    assert.throws(() => parseConfig(config(value)), /root-relative pathGlobs/);
+  }
+  assert.throws(() => parseConfig({ components: [...valid.components, { name: 'Tools', pathGlobs: ['other/**'] }] }),
+    /Duplicate component name/);
 });
 
 test('configured repository parsers opt into file independence explicitly', () => {

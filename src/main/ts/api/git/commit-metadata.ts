@@ -1,4 +1,4 @@
-import { gitText, resolveGitCommit } from './git.js';
+import { gitText } from './git.js';
 import type { CommitMetadata, ReadCommitMetadata } from '../../report/json/projections/commit-summary.js';
 
 export function commitMetadataReader(repository: string): ReadCommitMetadata {
@@ -42,13 +42,4 @@ async function tagsByCommit(repository: string): Promise<Map<string, string[]>> 
     result.set(sha, names);
   }
   return result;
-}
-
-export async function resolveGitBranch(repository: string, name: string): Promise<string> {
-  await gitText(repository, ['check-ref-format', `refs/heads/${name}`]);
-  try {
-    return await resolveGitCommit(repository, `refs/heads/${name}`);
-  } catch {
-    return resolveGitCommit(repository, `refs/remotes/origin/${name}`);
-  }
 }

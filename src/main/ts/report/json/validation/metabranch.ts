@@ -1,8 +1,13 @@
-import { isRecord } from '../../../core/engine/plugin.js';
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import type { ValidateFunction } from 'ajv';
+import schema from '../../../../resources/report/json/metabranch-v1.schema.json' with { type: 'json' };
 
-export const metaManifest = { schema: 'urn:repometry:schema:metabranch:1' } as const;
+export const metaManifest = { schema: schema.$id } as const;
+
+let validate: ValidateFunction | undefined;
 
 export function checkMetaManifest(text: string): void {
   const value: unknown = JSON.parse(text);
-  if (!isRecord(value) || value.schema !== metaManifest.schema) throw new Error('Unsupported metabranch manifest');
+  const check = validate ??= new Ajv2020().compile(schema);
+  if (!check(value)) throw new Error('Unsupported metabranch manifest');
 }

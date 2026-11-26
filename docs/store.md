@@ -9,9 +9,9 @@ Repometry saves inspections in a store. By default the store is the `.repometry/
 - `objects/<2 hex>/<content id>-<path hint>.json` holds the parts that report files refer to.
 - `summary.json` lists a summary row for each saved commit.
 - `reviews/<number>.json` holds a pull request review saved by Repometry 0.8 and earlier. The viewer still lists these files. `repometry review` no longer saves anything.
-- `manifest.json` marks a storage branch. A local store has none.
+- `manifest.json` marks a store. Repometry writes it when it first saves into a store that has none. A store saved by Repometry 0.10 or earlier may have none and stays readable, but reading a storage branch with `--store git:REF` requires it.
 
-Other files in `.repometry/`, such as the `report/` folder that `repometry report` writes by default and `components.json`, are not part of the store. The store has no cache folder. `repometry view` keeps the source files it reads from Git in a system cache, and Go analysis keeps its compiled parser there. `repometry cache path` prints where, and `repometry cache clear` empties it.
+Other files in `.repometry/`, such as the `report/` folder that `repometry report` writes by default, are not part of the store. Repometry reads no `components.json` there; [components](cli.md#components) belong in `repometry.config.json`. The store has no cache folder. `repometry view` keeps the source files it reads from Git in a system cache, and Go analysis keeps its compiled parser there. `repometry cache path` prints where, and `repometry cache clear` empties it. `REPOMETRY_CACHE_DIR` moves it to another folder.
 
 All files are UTF-8 JSON. Repometry writes each report file, object and `summary.json` under a temporary name and renames it into place, so a reader never sees a partly written file. It writes a report's objects before the report file that names them.
 
@@ -67,7 +67,7 @@ Repometry rewrites `summary.json` whenever `analyze` saves commits. Reading a lo
 
 ## Storage branch
 
-A storage branch holds a store at its root, along with `manifest.json`:
+A storage branch holds a store at its root, along with `manifest.json`, which `analyze` writes on its first save into a store:
 
 ```json
 {
@@ -84,6 +84,18 @@ npx repometry report html --store git:origin/repometry
 ```
 
 A storage branch is read-only for Repometry. `analyze` and `store check` need a local store. [Publish metrics from CI](ci.md) shows how a workflow adds inspections to the branch.
+
+## Reading inspections
+
+These commands print JSON and read the store that `--store` selects, a storage branch included.
+
+| Command | What it prints |
+| --- | --- |
+| `repometry history` | A summary of each saved inspection. |
+| `repometry show HEAD` | The saved report of a commit. `show` takes a revision or a working tree's digest. |
+| `repometry show HEAD --files` | The metrics of each file in that report. |
+
+`show` reads saved inspections only. Run `repometry analyze` on a commit first.
 
 ## Reports saved before 0.8.0
 
@@ -102,7 +114,7 @@ npx repometry store check
 
 `store check` reads every saved report. It checks that each object the report needs exists and matches its content ID, that the report rebuilds and is valid, that it belongs to the commit or working tree its folder names, and that it matches the `revision` in its summary row. A report saved before 0.8.0 gets the same checks without objects. The command also compares `summary.json` with the saved commits.
 
-The result has schema `urn:repometry:schema:store-check:1`. It counts the `reports`, the `objects` they reach and the `unreferenced` objects that no report reaches. `summary` is `current` or `stale`. `problems` lists each broken report as `missing-objects` or `corrupt-objects` with the object IDs, or as `unreadable` with the error. The command exits with code 1 when it finds a problem.
+The result has schema `urn:repometry:schema:store-check:1`. It counts the `reports`, the `objects` they reach and the `unreferenced` objects that no report reaches. `summary` is `current` or `stale`. `problems` lists each broken report as `missing-objects` or `corrupt-objects` with the object IDs, or as `unreadable` with the error. The command exits with 0 when it finds no problem, with 3 when it finds one, and with 1 when it cannot run. [Exit codes](cli.md#exit-codes) lists the codes of every command.
 
 `--repair` fixes what it can:
 

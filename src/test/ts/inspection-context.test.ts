@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
 import { inspectionContext } from '../../main/ts/report/json/projections/inspection-context.js';
 import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
@@ -41,6 +42,28 @@ test('the timeline marks a profile change without publishing its rules or digest
   const index = JSON.parse(text) as RepositorySummary;
   assert.deepEqual(index.commits.map(row => row.profileBoundary), ['changed', undefined]);
   assert.doesNotMatch(text, /profileDigest|\.yarn\/releases/);
+});
+
+test('legacy placement of Babel tools does not create a profile boundary', async () => {
+  const current = await analyzeSnapshot({ excludedOutput: null, snapshot: {
+    subject: { kind: 'commit', id: 'b'.repeat(40) },
+    files: [{ path: 'src/main.ts', bytes: Buffer.from('export function f(flag: boolean) { return flag ? 1 : 0; }\n') }],
+  } });
+  const entries = current.appliedConfig.plugins;
+  assert.ok(Array.isArray(entries));
+  const syntax = entries.find(entry => entry.id === 'babel-syntax');
+  const { '@babel/types': version, ...parserTools } = syntax.tools;
+  assert.equal(typeof version, 'string');
+  const plugins = entries.map(entry => {
+    if (entry === syntax) return { ...entry, tools: parserTools };
+    if (entry.id === 'structure' || entry.id === 'maintainability') {
+      return { ...entry, tools: { ...entry.tools, '@babel/types': version } };
+    }
+    return entry;
+  });
+  const historical: Report = { ...current, subject: { kind: 'commit', id: 'a'.repeat(40) },
+    appliedConfig: { ...current.appliedConfig, plugins } };
+  assert.deepEqual(boundaries(current, historical), [undefined, undefined]);
 });
 
 function boundaries(...reports: Report[]) {

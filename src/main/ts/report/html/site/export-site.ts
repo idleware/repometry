@@ -43,16 +43,9 @@ export interface SiteOptions extends InspectionOptions {
   readonly sources?: SourceLocator;
   readonly branch?: string;
   readonly readCommitMetadata?: ReadCommitMetadata;
-  /** The page footer with the project link and license; --no-footer leaves it out. */
-  readonly footer?: boolean;
 }
 
-/** A page without its footer, for reports published under someone else's name. */
-export function withoutFooter(html: string): string {
-  return html.replace(/\n[ \t]*<footer class="site-footer">[\s\S]*?<\/footer>/, '');
-}
-
-export async function viewerAssets(rows: readonly CommitSummary[], { title = '', pulls = [], footer = true }: SiteOptions) {
+export async function viewerAssets(rows: readonly CommitSummary[], { title = '', pulls = [] }: SiteOptions) {
   const files = new Map<string, Buffer>(await Promise.all((await listViewerAssets()).map(async ([name, source]) => {
     const bytes = await readFile(source);
     // The published viewer keeps its existing flat URLs for static hosts and open tabs.
@@ -63,7 +56,7 @@ export async function viewerAssets(rows: readonly CommitSummary[], { title = '',
   })));
   const index = files.get('index.html')!.toString('utf8')
     .replace('name="repometry-project" content=""', () => `name="repometry-project" content="${escapeAttribute(title)}"`);
-  files.set('index.html', Buffer.from(footer ? index : withoutFooter(index)));
+  files.set('index.html', Buffer.from(index));
   const latest = rows[0];
   for (const [name, data] of badges(latest, latest?.quality, latest?.counts?.security)) files.set(name, data);
   files.set('pulls.json', Buffer.from(`${JSON.stringify({ schema: pullReviewsSchema, reviews: pulls })}\n`));

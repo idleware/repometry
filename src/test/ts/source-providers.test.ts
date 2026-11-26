@@ -76,7 +76,7 @@ test('the viewer accepts loopback host aliases and rejects unrelated hosts', asy
   assert.equal(await status(`localhost:${Number(port) + 1}`), 403);
 });
 
-test('the blob cache reuses a Git object and clearing it empties only the source cache', async t => {
+test('the blob cache reuses a Git object until the cache is cleared', async t => {
   const root = await mkdtemp(join(tmpdir(), 'repometry-source-cache-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const bytes = Buffer.from('export const n = 3;');
@@ -87,7 +87,7 @@ test('the blob cache reuses a Git object and clearing it empties only the source
   assert.deepEqual(await cachedBlob(root, oid, load), bytes);
   assert.deepEqual(await readFile(join(root, 'sources', oid.slice(0, 2), oid)), bytes);
   assert.equal(loads, 1);
-  await clearCaches(root, true);
+  await clearCaches(root);
   assert.deepEqual(await cachedBlob(root, oid, load), bytes);
   assert.equal(loads, 2);
 });

@@ -51,9 +51,7 @@ export async function analyzeCommits(commits: readonly string[], options: RangeO
   };
   try {
     const pending = await pendingCommits(commits, inspection.output, skipSaved, signal, record);
-    // The remote worker accepts one request at a time.
-    const workers = inspection.worker === undefined ? concurrency ?? availableParallelism() : 1;
-    const chunks = historyChunks(pending, workers, process.availableMemory());
+    const chunks = historyChunks(pending, concurrency ?? availableParallelism(), process.availableMemory());
     if (!signal.aborted && chunks.length === 1) {
       await inspectCommits(chunks[0]!, inspectCommit, () => signal.aborted, record);
     } else if (!signal.aborted) {

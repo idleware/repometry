@@ -16,14 +16,13 @@ const dependencies: Readonly<Record<string, readonly string[]>> = {
   'api/gh': ['core'],
   'api/import': ['core'],
   'api/process': ['api/cache', 'core'],
-  'api/worker': ['core', 'report/json'],
   'report/json/wire': [],
   'report/json': ['core', 'report/json/wire'],
   'report/html/app': ['report/json/wire'],
   'report/html/site': ['core', 'report/json', 'report/json/wire'],
   'report/markdown': ['core'],
-  compose: ['core', 'plugins', 'api/git', 'api/gh', 'api/import', 'api/process', 'api/worker', 'report/json', 'report/json/wire'],
-  cli: ['compose', 'core', 'api/cache', 'api/git', 'api/gh', 'api/import', 'api/worker', 'report/json', 'report/json/wire', 'report/html/site',
+  compose: ['core', 'plugins', 'api/git', 'api/gh', 'api/import', 'api/process', 'report/json', 'report/json/wire'],
+  cli: ['compose', 'core', 'api/cache', 'api/git', 'api/gh', 'api/import', 'report/json', 'report/json/wire', 'report/html/site',
     'report/markdown'],
 };
 

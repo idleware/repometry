@@ -16,8 +16,6 @@ export interface AnalysisInput {
   readonly coverage?: { readonly text: string; readonly sourceRoot: string };
 }
 
-export type AnalysisExecutor = (input: AnalysisInput) => Promise<Report>;
-
 type Excludes = (path: string) => boolean;
 interface InspectionSource {
   readonly snapshot: SourceSnapshot;
@@ -33,7 +31,7 @@ interface InspectionCoverage {
 
 export interface InspectionPorts {
   readSource(excludes: Excludes): Promise<InspectionSource>;
-  readonly analyze: AnalysisExecutor;
+  analyze(input: AnalysisInput): Promise<Report>;
   readCoverage?(source: Pick<InspectionSource, 'root' | 'snapshot'>): Promise<InspectionCoverage>;
   importFindings?(report: Report, root: string, excludes: Excludes): Promise<Report>;
   recordChurn?(report: Report, root: string, paths: readonly string[]): Promise<Report>;

@@ -29,8 +29,8 @@ function tableNote(columns: readonly MetricColumn[]): string {
 
 function componentHint(hint: HTMLElement): void {
   hint.hidden = false;
-  hint.replaceChildren('No components are defined for this repository. Group paths into components in ',
-    element('code', '', '.repometry/components.json'), ' to compare them here.');
+  hint.replaceChildren('No components are defined for this repository. Set the components key in ',
+    element('code', '', 'repometry.config.json'), ' to compare groups of paths here.');
 }
 
 /** The Metrics page: a query, a grouping and columns over the folder's files, their languages, and the totals beside. */
