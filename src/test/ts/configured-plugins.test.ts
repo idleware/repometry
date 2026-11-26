@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import configSchema from '../../main/resources/report/json/config-v1.schema.json' with { type: 'json' };
+import processPluginsSchema from '../../main/resources/config/process-plugins-v1.schema.json' with { type: 'json' };
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { readProcessPlugins } from '../../main/ts/compose/process-plugins.js';
 import { DockerToolRunner, codeStructures, pluginApi, processPlugin, sourceFiles } from '../../main/ts/plugin.js';
@@ -21,6 +24,18 @@ const fixture = {
   tools: { node: '26' },
   providesLanguages: [{ id: 'fixture', label: 'Fixture', color: '#123456' }],
 };
+
+test('the standalone config schema validates the same plugin declarations as the CLI', () => {
+  const schemas = new Ajv2020();
+  const validate = schemas.compile(configSchema);
+  const config = { plugins: [fixture] };
+  assert.ok(validate(config), schemas.errorsText(validate.errors));
+  assert.equal(validate({ ...config, unknownKey: true }), false);
+  assert.equal(validate.errors?.[0]?.keyword, 'additionalProperties');
+  assert.equal(validate({ plugins: [{ ...fixture, command: [] }] }), false);
+  assert.equal(validate.errors?.[0]?.instancePath, '/plugins/0/command');
+  assert.deepEqual(schemas.getSchema(processPluginsSchema.$id)?.schema, processPluginsSchema);
+});
 
 test('configured repository parsers opt into file independence explicitly', () => {
   const operation = (definition: unknown) => readProcessPlugins([definition])[0]!.operations[0]!;

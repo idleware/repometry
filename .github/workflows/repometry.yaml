@@ -1,0 +1,127 @@
+# Repometry on itself, with the build that CI just made. ci.yaml calls it after its build job.
+# On a pull request it reviews the change. On a push to master it saves the commit's inspection to the `repometry`
+# branch, catches up earlier commits that no run inspected, and deploys the report to GitHub Pages.
+# docs/ci.md explains each part, and how to set up the same in another project.
+name: Repometry
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # the pull request's own commit, which its diff shows
+          fetch-depth: 0 # Git history for the merge base
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build # the built CLI and the tests' coverage
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: npm ci --omit=dev --ignore-scripts
+      # Issues the change adds or worsens on its changed lines, and their coverage: annotations, the run summary and one
+      # comment, updated on every push. A fork's token can't comment. Exit code 3 fails the check.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          PULL_NUMBER: ${{ github.event.pull_request.number }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          status=0
+          node target/main/ts/cli/main.js review "origin/$BASE_REF" --import lcov=target/coverage/lcov.info \
+            --ci github --markdown "$RUNNER_TEMP/review.md" || status=$?
+          if [ -f "$RUNNER_TEMP/review.md" ] && [ "$FROM_FORK" = false ]; then
+            gh pr comment "$PULL_NUMBER" --edit-last --create-if-none --body-file "$RUNNER_TEMP/review.md"
+          fi
+          exit "$status"
+
+  history:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    # One run at a time, in push order: quick pushes queue instead of cancelling each other.
+    concurrency:
+      group: repometry
+      queue: max
+    permissions:
+      contents: write # pushes the repometry branch
+    env:
+      GIT_AUTHOR_NAME: ${{ vars.GIT_AUTHOR_NAME }}
+      GIT_AUTHOR_EMAIL: ${{ vars.GIT_AUTHOR_EMAIL }}
+      GIT_COMMITTER_NAME: ${{ vars.GIT_COMMITTER_NAME }}
+      GIT_COMMITTER_EMAIL: ${{ vars.GIT_COMMITTER_EMAIL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # Git history for churn, release tags and the catch-up
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build # the built CLI and the tests' coverage
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: npm ci --omit=dev --ignore-scripts
+      # The store is the repometry branch, or on the first run a new one with only its manifest. A new branch never
+      # replaces an existing one that failed to fetch: its push is rejected.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          store="$RUNNER_TEMP/store"
+          git init -q "$store"
+          if git -C "$store" fetch -q --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" repometry; then
+            git -C "$store" checkout -q FETCH_HEAD
+          else
+            printf '{\n  "schema": "urn:repometry:schema:metabranch:1"\n}\n' > "$store/manifest.json"
+          fi
+      # The 20 commits before this one get an inspection without coverage if they have none, then this commit gets one
+      # with it, and the report is built from the whole store. The catch-up is a range, which never includes the root
+      # commit. Exit code 2 is a partial result, which the log explains.
+      - run: |
+          repometry() { node target/main/ts/cli/main.js "$@" || [ $? = 2 ]; }
+          if git rev-parse -q --verify HEAD~2 > /dev/null; then
+            repometry analyze "$(git rev-list --first-parent -n 22 HEAD | tail -n 1)..HEAD~1" --store "$RUNNER_TEMP/store" --skip-saved
+          fi
+          repometry analyze --store "$RUNNER_TEMP/store" --import lcov=target/coverage/lcov.info
+          repometry report "html=$RUNNER_TEMP/site" --store "$RUNNER_TEMP/store" --title "${GITHUB_REPOSITORY#*/}" --sources github
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ runner.temp }}/store
+        run: |
+          git add -A
+          git diff --cached --quiet && exit 0 # a re-run finds nothing new
+          git commit -qm "chore(metrics): inspect ${GITHUB_SHA::7} [skip ci]"
+          git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/repometry
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+  # Deploys the report that `history` built. GitHub Pages serves it from the deployment, not from a branch.
+  pages:
+    needs: history
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    concurrency:
+      group: repometry-pages
+      queue: max
+    permissions:
+      pages: write
+      id-token: write # proves to Pages that the deployment comes from this run
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

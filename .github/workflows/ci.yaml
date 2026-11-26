@@ -12,9 +12,11 @@ env:
 
 permissions: {}
 
+# A newer run of a pull request replaces the older one. Master runs each get a group of their own, so none is
+# cancelled: their inspections wait in the Repometry workflow's queue.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/master' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Runs untrusted dependencies and code, so it holds no secrets.
@@ -26,54 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # A pull request is checked at its own head commit, so annotations match its diff.
+          # A pull request is built at its own head commit, so the coverage describes the lines its review compares.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0 # churn for the self-inspection, and the merge base for reviews
+          fetch-depth: 0 # the tests run on a full clone
           persist-credentials: false
-      # Named first, so pr-comment.yaml can mark an older comment out of date even when the tests fail.
-      - if: github.event_name == 'pull_request'
-        env:
-          PULL_NUMBER: ${{ github.event.pull_request.number }}
-          PULL_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/review"
-          printf '{"number":%s,"head":"%s"}\n' "$PULL_NUMBER" "$PULL_HEAD" > "$RUNNER_TEMP/review/pull.json"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run coverage
-      # The review of a pull request: issues it adds or worsens on its changed lines, and their coverage.
-      - if: github.event_name == 'pull_request'
-        run: >-
-          node target/main/ts/cli/main.js review "origin/$GITHUB_BASE_REF" --import lcov=target/coverage/lcov.info
-          --ci github --markdown "$RUNNER_TEMP/review/review.md"
-      # pr-comment.yaml posts it, from a run that holds a write token but none of this code.
-      - if: always() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: review
-          path: ${{ runner.temp }}/review
-          if-no-files-found: ignore
-          retention-days: 1
+      # The built CLI for the release and Repometry jobs, and the coverage for Repometry.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build
           path: |
             target/main
+            target/coverage/lcov.info
             package.json
             package-lock.json
-          retention-days: 1
-      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        run: node target/main/ts/cli/main.js analyze --store "$RUNNER_TEMP/store" --import lcov=target/coverage/lcov.info
-      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: repometry
-          path: |
-            ${{ runner.temp }}/store/commits/${{ github.sha }}
-            ${{ runner.temp }}/store/objects
           retention-days: 1
 
   # Installs nothing: publishes the built artifact with pinned zx-semrel only.
@@ -115,76 +88,12 @@ jobs:
           GIT_COMMITTER_EMAIL: ${{ vars.GIT_COMMITTER_EMAIL }}
           GIT_SIGN_KEY: ${{ secrets.GIT_SIGN_KEY }}
 
-  # Repometry on itself: the inspection goes to the `repometry` branch, the rebuilt report to `gh-pages`.
-  # The token is passed only to the three steps that push.
-  report:
+  # Repometry on itself, with this build: the review of a pull request, and on master the history and the report.
+  repometry:
     needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
-    concurrency:
-      group: report
-      cancel-in-progress: false
     permissions:
-      contents: write
-    env:
-      GIT_AUTHOR_NAME: ${{ vars.GIT_AUTHOR_NAME }}
-      GIT_AUTHOR_EMAIL: ${{ vars.GIT_AUTHOR_EMAIL }}
-      GIT_COMMITTER_NAME: ${{ vars.GIT_COMMITTER_NAME }}
-      GIT_COMMITTER_EMAIL: ${{ vars.GIT_COMMITTER_EMAIL }}
-    steps:
-      # Creates the branch with only its manifest on the first run; later runs find it and push nothing.
-      - working-directory: ${{ runner.temp }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          status=0; git ls-remote --exit-code --heads "$remote" repometry >/dev/null || status=$?
-          [ "$status" = 0 ] && exit 0 # the branch exists
-          [ "$status" = 2 ] || exit "$status"
-          git init -q metabranch && cd metabranch
-          printf '{\n  "schema": "urn:repometry:schema:metabranch:1"\n}\n' > manifest.json
-          git add manifest.json
-          git commit -qm "chore(metrics): start the repometry data branch [skip ci]"
-          git push -q "$remote" HEAD:refs/heads/repometry
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: repometry
-          fetch-tags: true # release tags for the report; titles and authors come with the inspections
-          persist-credentials: false
-      # The inspection's commit file and objects land in place; an object already on the branch has the same bytes.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: repometry
-          path: .
-      - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git add -A
-          git diff --cached --quiet && exit 0 # a re-run finds the inspection already pushed
-          git commit -qm "chore(metrics): inspect ${GITHUB_SHA::7} [skip ci]"
-          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/repometry
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build
-          path: ${{ runner.temp }}/repometry
-      - run: |
-          npm ci --omit=dev --ignore-scripts --prefix "$RUNNER_TEMP/repometry"
-          node "$RUNNER_TEMP/repometry/target/main/ts/cli/main.js" report "html=$RUNNER_TEMP/site" --store . --title repometry --sources github
-      # Replaces the site on gh-pages with this report, creating the branch on the first run like the data branch.
-      - working-directory: ${{ runner.temp }}/site
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git init -q
-          status=0; git ls-remote --exit-code --heads "$remote" gh-pages >/dev/null || status=$?
-          [ "$status" = 0 ] || [ "$status" = 2 ] || exit "$status"
-          if [ "$status" = 0 ]; then git fetch -q --depth 1 "$remote" gh-pages && git reset -q --soft FETCH_HEAD; fi
-          git add -A
-          git diff --cached --quiet && exit 0 # the same report is already published
-          git commit -qm "docs: update the repometry report for ${GITHUB_SHA::7}"
-          git push -q "$remote" HEAD:refs/heads/gh-pages
+      contents: write # the repometry branch, on master
+      pages: write # the report on GitHub Pages, on master
+      id-token: write # the same
+      pull-requests: write # the review comment
+    uses: $/.github/workflows/repometry.yaml
