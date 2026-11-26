@@ -1,3 +1,10 @@
+## [0.10.1](https://github.com/idleware/repometry/compare/v0.10.0...v0.10.1) (2026-11-26)
+
+### Fixes & improvements
+* fix: keep go's telemetry out of the tool's temporary home ([e345773](https://github.com/idleware/repometry/commit/e345773d1af7abce1eafe479596e6eb55e5df555))
+* docs: document analyze exit codes and the review checkout ([8fb616b](https://github.com/idleware/repometry/commit/8fb616b198222c959d022d7331c1d3b76d5760c8))
+* perf: analyze long histories in parallel ([986ab46](https://github.com/idleware/repometry/commit/986ab46d9bb28a4ac725412694a3afccb3fd28b4))
+
 ## [0.10.0](https://github.com/idleware/repometry/compare/v0.9.0...v0.10.0) (2026-11-25)
 
 ### Features
