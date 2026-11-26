@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { constants, mkdtempSync, rmSync } from 'node:fs';
+import { constants, rmSync } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { validateToolInvocation, writeToolSnapshot } from './tool-snapshot.js';
 import { toolFailure } from './failure.js';
 import { cacheRoot } from '../cache/root.js';
 import { cachedGoParser } from './go-parser-cache.js';
-import { toolEnvironment } from './host-tool.js';
+import { createToolHome, toolEnvironment } from './host-tool.js';
 import type { VersionedHostTool } from './host-tool.js';
 
 export class HostLanguageRunner {
@@ -60,7 +60,7 @@ let goHome: string | undefined;
 
 function goProcessHome(): string {
   if (goHome !== undefined) return goHome;
-  const home = mkdtempSync(join(tmpdir(), 'repometry-go-parser-'));
+  const home = createToolHome('repometry-go-parser-');
   goHome = home;
   process.once('exit', () => {
     try {

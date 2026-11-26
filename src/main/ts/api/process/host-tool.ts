@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
-import { accessSync, constants, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
 import { toolFailure } from './failure.js';
@@ -24,7 +24,7 @@ export function probeHostTool(name: string, args: readonly string[], path: strin
   VersionedHostTool | { readonly unavailableReason: string } {
   const tool = findHostTool(name, path);
   if (!tool) return { unavailableReason: `${name} not found on PATH` };
-  const home = mkdtempSync(join(tmpdir(), 'repometry-tool-version-'));
+  const home = createToolHome('repometry-tool-version-');
   try {
     const result = spawnSync(tool.binary, args, { cwd: home, env: toolEnvironment(path, home), encoding: 'utf8',
       timeout: 5_000, maxBuffer: 4_096, killSignal: 'SIGKILL', windowsHide: true });
@@ -74,6 +74,22 @@ function versionFailure(name: string, result: SpawnSyncReturns<string>): string 
   if (firstLine) return toolFailure(message, Buffer.from(firstLine)).replace('\n', ': ');
   if (result.signal) return `${message}: terminated by ${result.signal}`;
   return result.status === 0 ? `${message}: no version output` : `${message}: exit status ${result.status}`;
+}
+
+/**
+ * Creates a private home folder for a host tool, with go's telemetry off in it. With telemetry on, go leaves a process
+ * behind that writes to the home after the command ends, which makes the home's removal fail or brings the folder back.
+ * The mode file sits where go looks for its configuration on Linux and on macOS. On Windows go finds no configuration
+ * folder in this environment, which turns telemetry off as well.
+ */
+export function createToolHome(prefix: string): string {
+  const home = mkdtempSync(join(tmpdir(), prefix));
+  for (const configuration of ['.config', join('Library', 'Application Support')]) {
+    const telemetry = join(home, configuration, 'go', 'telemetry');
+    mkdirSync(telemetry, { recursive: true });
+    writeFileSync(join(telemetry, 'mode'), 'off');
+  }
+  return home;
 }
 
 export function toolEnvironment(PATH: string, HOME: string): NodeJS.ProcessEnv {
