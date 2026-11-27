@@ -1,7 +1,9 @@
-import type { Node } from 'web-tree-sitter';
-import type { Grammar } from '../language.js';
-import { measures } from '../language.js';
+import { measures } from '@repometry/tree-sitter';
+import type { LanguageUnit as Grammar } from '@repometry/tree-sitter';
+import manifest from '../resources/grammar.json' with { type: 'json' };
 import { goSyntax } from './go-syntax.js';
+
+type Node = Parameters<Grammar['name']>[0];
 
 function receiver(type: Node | null | undefined): string | undefined {
   let pointers = 0;
@@ -46,7 +48,8 @@ const tokens: Grammar['tokens'] = {
 
 export const go: Grammar = {
   language: { id: 'go', label: 'Go', color: '#00add8', extensions: ['.go'], measures, syntax: goSyntax },
-  asset: new URL('../../../../resources/languages/go/tree-sitter.wasm', import.meta.url),
+  tool: { package: manifest.package, version: manifest.version },
+  asset: new URL('../resources/tree-sitter.wasm', import.meta.url),
   prepareSource: text => text.endsWith('\n') ? text : text + '\n',
   lineBreaks: /\r\n|[\n\r\u2028\u2029]/g,
   columns: 'bytes', name,

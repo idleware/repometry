@@ -14,7 +14,7 @@ import { readProcessPlugins } from '../../main/ts/compose/process-plugins.js';
 import { DockerToolRunner, codeStructures, pluginApi, processPlugin, sourceFiles } from '../../main/ts/plugin.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import type { FileMetricsReport } from '../../main/ts/report/json/wire/file-metrics-model.js';
-import type { Report } from '../../main/ts/core/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 
 const cli = resolve('target/main/ts/cli/main.js');
 const digest = 'a'.repeat(64);

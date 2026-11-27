@@ -1,10 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { isRecord } from '../../../core/engine/plugin.js';
-import { findingImportMethods } from '../../../core/model/scanner-import.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { findingImportMethods } from '@repometry/core/internal/model/scanner-import.js';
 import { nativeScanners, securityCounts } from './security-summary.js';
-import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
+import { normalizeFindingIgnore } from '@repometry/core/internal/model/finding-ignore.js';
 import type { Report } from '../validation/report.js';
-import { comparePaths, digest } from '../../../core/model/snapshot.js';
+import { comparePaths, digest } from '@repometry/core/internal/model/snapshot.js';
 
 import { ordered, presentLanguages, presentSelectors, stringList } from './profile-selectors.js';
 import type { InspectionContext } from '../wire/inspection-context-model.js';

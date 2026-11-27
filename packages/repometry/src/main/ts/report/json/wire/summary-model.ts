@@ -1,13 +1,13 @@
-import type { QualitySummary } from '../../../core/model/quality-summary.js';
-import type { MetricDescriptor } from '../../../core/model/metric-descriptor.js';
-import type { SourceLocator } from '../../../core/model/source-locator.js';
+import type { QualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import type { MetricDescriptor } from '@repometry/core/internal/model/metric-descriptor.js';
+import type { SourceLocator } from '@repometry/core/internal/model/source-locator.js';
 import type { PublicHistoryEntry } from './public-history-model.js';
 import type { ProfileBoundary } from './inspection-context-model.js';
 
 export const summarySchema = 'urn:repometry:schema:repository-summary:1';
 export type MetricValues = Readonly<Record<number, number | null>>;
-export type { MetricDescriptor } from '../../../core/model/metric-descriptor.js';
-export type { SourceLocator } from '../../../core/model/source-locator.js';
+export type { MetricDescriptor } from '@repometry/core/internal/model/metric-descriptor.js';
+export type { SourceLocator } from '@repometry/core/internal/model/source-locator.js';
 
 export interface InspectionCounts {
   readonly findingCount: number;

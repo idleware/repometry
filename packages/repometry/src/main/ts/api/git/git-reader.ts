@@ -1,8 +1,8 @@
 import { checkMetaManifest } from '../../report/json/validation/metabranch.js';
 import { GitBlobReader, gitTreeFiles } from './git.js';
-import { qualitySummary } from '../../core/model/quality-summary.js';
-import { utf8 } from '../../core/model/snapshot.js';
-import type { Subject } from '../../core/model/snapshot.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import { utf8 } from '@repometry/core/internal/model/snapshot.js';
+import type { Subject } from '@repometry/core/internal/model/snapshot.js';
 import { compareReports, readStoredReport, validSubjectId } from '../../report/json/validation/report.js';
 import { headerSummary } from '../../report/json/store/local-store.js';
 import { ObjectCache, objectPath, storedObjects } from '../../report/json/store/report-tree.js';

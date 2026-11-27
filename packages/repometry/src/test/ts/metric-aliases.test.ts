@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
-import type { Report } from '../../main/ts/core/model/report.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 import { commitSummary, repositorySummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
 import { complexFunctions } from '../../main/ts/report/json/projections/inspection-details.js';

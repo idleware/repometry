@@ -7,7 +7,7 @@ import { commitSummary, orderSummaries, repositorySummary, withCommitMetadata } 
 import type { ReadCommitMetadata } from '../../json/projections/commit-summary.js';
 import type { CommitSummary, SourceLocator } from '../../json/wire/summary-model.js';
 import { packJson } from '../../json/wire/compact-json.js';
-import { comparePaths, digest } from '../../../core/model/snapshot.js';
+import { comparePaths, digest } from '@repometry/core/internal/model/snapshot.js';
 import type { Report, ReportReader } from '../../json/validation/report.js';
 import { pullReviewsSchema } from '../../json/wire/pull-review-model.js';
 import type { PullReview } from '../../json/wire/pull-review-model.js';

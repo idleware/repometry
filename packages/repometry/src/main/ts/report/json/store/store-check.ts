@@ -1,6 +1,6 @@
 import { lstat, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Subject } from '../../../core/model/source.js';
+import type { Subject } from '@repometry/core/internal/model/source.js';
 import { repositorySummary } from '../projections/commit-summary.js';
 import { readStoredReport } from '../validation/report.js';
 import { hasCode } from './directory.js';

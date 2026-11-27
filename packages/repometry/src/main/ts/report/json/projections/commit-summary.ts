@@ -1,6 +1,6 @@
-import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
-import { isRecord } from '../../../core/model/plugin-data.js';
-import { qualitySummary } from '../../../core/model/quality-summary.js';
+import { canonicalMetricId, definitions } from '@repometry/core/internal/model/measurement.js';
+import { isRecord } from '@repometry/core/internal/model/plugin-data.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
 import { securityCounts } from './security-summary.js';
 import { compareHistoryEntries } from '../wire/public-history-model.js';
 import type { PublicHistoryEntry } from '../wire/public-history-model.js';

@@ -1,14 +1,14 @@
 import { posix, win32 } from 'node:path';
 import reportSchema from '../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
-import { isRecord, pluginApi } from '../../core/engine/plugin.js';
-import type { DataContract, MetricDescriptor, Plugin } from '../../core/engine/plugin.js';
-import { comparePaths } from '../../core/model/snapshot.js';
-import { definitions, measurements } from '../../core/model/measurement.js';
-import type { Measurement } from '../../core/model/measurement.js';
-import { lcovLines } from '../../core/model/line-coverage.js';
-import type { FileLineCoverage, FunctionCallCount, HitRun, LineCoverage } from '../../core/model/line-coverage.js';
-import { lcovInput } from '../../core/model/coverage-input.js';
-import type { CoverageInput } from '../../core/model/coverage-input.js';
+import { isRecord, pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract, MetricDescriptor, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
+import { definitions, measurements } from '@repometry/core/internal/model/measurement.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
+import { lcovLines } from '@repometry/core/internal/model/line-coverage.js';
+import type { FileLineCoverage, FunctionCallCount, HitRun, LineCoverage } from '@repometry/core/internal/model/line-coverage.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import type { CoverageInput } from '@repometry/core/internal/model/coverage-input.js';
 
 interface CoverageResult {
   readonly measurements: readonly Measurement[];

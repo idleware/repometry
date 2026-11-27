@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { isSourcePathname } from '../../core/ports/source-provider.js';
-import type { ToolInvocation } from '../../core/ports/tool-runner.js';
+import { isSourcePathname } from '@repometry/core/internal/ports/source-provider.js';
+import type { ToolInvocation } from '@repometry/core/internal/ports/tool-runner.js';
 
 export function validateToolInvocation(invocation: ToolInvocation): void {
   if (!invocation.argv[0] || invocation.argv.some(arg => arg.includes('\0'))) throw new Error('A tool command and valid arguments are required');

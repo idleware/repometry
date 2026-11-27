@@ -1,6 +1,6 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { join, sep } from 'node:path';
-import { isRecord } from '../../../core/engine/plugin.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import { unpackJson } from '../../json/wire/compact-json.js';
 import { validateSummaryIndex } from '../../json/validation/summary-validation.js';
 import { serveAssets } from './server.js';

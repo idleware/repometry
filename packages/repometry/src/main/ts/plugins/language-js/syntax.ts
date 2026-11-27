@@ -1,4 +1,4 @@
-import type { LanguageSyntax } from '../../core/model/language.js';
+import type { LanguageSyntax } from '@repometry/core/internal/model/language.js';
 
 export const jsSyntax: LanguageSyntax = {
   lineComments: ['//'],

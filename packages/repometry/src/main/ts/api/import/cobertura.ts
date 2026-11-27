@@ -1,5 +1,5 @@
 import { posix, win32 } from 'node:path';
-import { comparePaths } from '../../core/model/snapshot.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
 import { readCoverageXml } from './coverage-xml.js';
 import type { CoverageSource } from './go-cover.js';
 

@@ -9,15 +9,21 @@
     "node": ">=24"
   },
   "workspaces": [
+    "packages/core",
+    "packages/tree-sitter",
+    "packages/language-go",
+    "packages/language-python",
     "packages/repometry"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test": "npm test --workspaces",
-    "coverage": "npm run build:test --workspaces && c8 --all --src packages/repometry/target/main/ts --src packages/repometry/target/verification/main/ts --include 'packages/*/src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage npm exec --workspaces -- node --test 'target/verification/test/ts/*.test.js'"
+    "test": "npm run build && npm test --workspaces --if-present",
+    "coverage": "npm run build --workspaces && npm run build:test --workspaces --if-present && c8 --all --src packages/core/target/main/ts --src packages/tree-sitter/target/main/ts --src packages/language-go/target/main/ts --src packages/language-python/target/main/ts --src packages/repometry/target/main/ts --src packages/core/target/verification/main/ts --src packages/repometry/target/verification/main/ts --include 'packages/*/src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage npm exec --workspace packages/core --workspace packages/repometry -- node --test 'target/verification/test/ts/*.test.js'"
   },
   "devDependencies": {
-    "c8": "12.0.0"
+    "@types/node": "24.19.2",
+    "c8": "12.0.0",
+    "typescript": "7.0.2"
   },
   "release": {
     "tagFormat": "pure",

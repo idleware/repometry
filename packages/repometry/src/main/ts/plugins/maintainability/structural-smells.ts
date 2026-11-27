@@ -1,6 +1,6 @@
-import type { StructuralObservation } from '../../core/model/code-structure.js';
-import type { Finding } from '../../core/model/finding.js';
-import { structuralRules } from '../../core/profile/maintainability.js';
+import type { StructuralObservation } from '@repometry/core/internal/model/code-structure.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { structuralRules } from '@repometry/core/internal/profile/maintainability.js';
 
 export function structuralSmells(path: string, observations: readonly StructuralObservation[]): Finding[] {
   const findings: Finding[] = [];

@@ -1,6 +1,6 @@
-import type { FindingLocation } from '../../core/model/finding.js';
-import { annotationLimit } from '../../core/model/pull-review.js';
-import type { IssueEffect, PullReview, ReviewedIssue, ReviewReason } from '../../core/model/pull-review.js';
+import type { FindingLocation } from '@repometry/core/internal/model/finding.js';
+import { annotationLimit } from '@repometry/core/internal/model/pull-review.js';
+import type { IssueEffect, PullReview, ReviewedIssue, ReviewReason } from '@repometry/core/internal/model/pull-review.js';
 
 /** The first line of every review comment, which finds the comment to update. */
 export const reviewMarker = '<!-- repometry-review -->';

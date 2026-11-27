@@ -1,7 +1,7 @@
 import { gitText } from '../api/git/git.js';
 import { readCoverageFiles } from '../api/import/lcov-files.js';
 import type { CoverageInputs } from '../api/import/lcov-files.js';
-import type { SourceSnapshot } from '../core/model/source.js';
+import type { SourceSnapshot } from '@repometry/core/internal/model/source.js';
 
 export function readInspectionCoverage(inputs: CoverageInputs, { root, snapshot }: { root: string; snapshot: SourceSnapshot }) {
   const { subject } = snapshot;

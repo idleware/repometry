@@ -1,6 +1,6 @@
-import type { OperationCacheOptions } from '../core/engine/operation-cache.js';
-import type { Report } from '../core/model/report.js';
-import type { AnalysisInput } from '../core/usecases/inspect.js';
+import type { OperationCacheOptions } from '@repometry/core/internal/engine/operation-cache.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import type { AnalysisInput } from '@repometry/core/internal/usecases/inspect.js';
 import { collectRepositorySyntax, defaultFilePlan, inspectAfterFiles, inspectFiles, inspectRepositories } from './analysis-steps.js';
 import { assembleAnalysisReport } from './analysis-report.js';
 import { AnalysisResults } from './analysis-results.js';

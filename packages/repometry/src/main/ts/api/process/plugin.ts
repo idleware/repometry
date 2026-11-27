@@ -1,10 +1,10 @@
-import { isRecord } from '../../core/engine/plugin.js';
-import type { InspectionInputs, Operation, Plugin } from '../../core/engine/plugin.js';
-import { isJsonValue } from '../../core/model/plugin-data.js';
-import type { JsonValue } from '../../core/model/plugin-data.js';
-import { digest, sourceFile, sourceFiles, utf8 } from '../../core/model/snapshot.js';
-import type { SourceFile } from '../../core/model/source.js';
-import type { ToolInvocation, ToolRunner } from '../../core/ports/tool-runner.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import type { InspectionInputs, Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { isJsonValue } from '@repometry/core/internal/model/plugin-data.js';
+import type { JsonValue } from '@repometry/core/internal/model/plugin-data.js';
+import { digest, sourceFile, sourceFiles, utf8 } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceFile } from '@repometry/core/internal/model/source.js';
+import type { ToolInvocation, ToolRunner } from '@repometry/core/internal/ports/tool-runner.js';
 import { toolFailure } from './failure.js';
 
 export const processPluginProtocol = 'repometry.plugin-process/v1';

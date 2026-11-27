@@ -1,8 +1,8 @@
 import { appendFile, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { isRecord } from '../../core/engine/plugin.js';
-import { annotationLimit } from '../../core/model/pull-review.js';
-import type { PullReview } from '../../core/model/pull-review.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { annotationLimit } from '@repometry/core/internal/model/pull-review.js';
+import type { PullReview } from '@repometry/core/internal/model/pull-review.js';
 
 /** The number of the pull request whose event started this GitHub Actions run, if any. */
 export async function gitHubPullRequest(): Promise<number | undefined> {

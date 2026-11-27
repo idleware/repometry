@@ -1,10 +1,10 @@
-import type { DataContract, Operation, Plugin } from '../core/engine/plugin.js';
-import { changesInput } from '../core/model/changes.js';
-import { cloneSources } from '../core/model/clone-source.js';
-import { codeStructure, codeStructures } from '../core/model/code-structure.js';
-import { lcovInput } from '../core/model/coverage-input.js';
-import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
-import type { SourceFile, SourceSnapshot } from '../core/model/source.js';
+import type { DataContract, Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { changesInput } from '@repometry/core/internal/model/changes.js';
+import { cloneSources } from '@repometry/core/internal/model/clone-source.js';
+import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import { sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceFile, SourceSnapshot } from '@repometry/core/internal/model/source.js';
 import { builtInPluginIds } from './built-ins.js';
 import { claimMatcher } from './languages.js';
 import type { LanguageProvider, LanguageRegistry } from './languages.js';

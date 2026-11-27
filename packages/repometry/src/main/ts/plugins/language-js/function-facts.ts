@@ -1,6 +1,6 @@
 import { VISITOR_KEYS, isBlockStatement, isFunction } from '@babel/types';
 import type { Function as BabelFunction, Node } from '@babel/types';
-import type { FunctionComplexity } from '../../core/model/code-structure.js';
+import type { FunctionComplexity } from '@repometry/core/internal/model/code-structure.js';
 import type { FunctionNaming } from './qualified-names.js';
 
 const decisionNodes = new Set(['IfStatement', 'ConditionalExpression', 'ForStatement', 'ForInStatement', 'ForOfStatement',

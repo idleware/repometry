@@ -3,12 +3,12 @@ import type { ValidateFunction } from 'ajv';
 import schema from '../../resources/config/process-plugins-v1.schema.json' with { type: 'json' };
 import { DockerToolRunner } from '../api/process/docker-tool-runner.js';
 import { processPlugin } from '../api/process/plugin.js';
-import { pluginApi } from '../core/engine/plugin.js';
-import type { FileClaims, Plugin } from '../core/engine/plugin.js';
-import { codeStructure, codeStructures } from '../core/model/code-structure.js';
-import type { ProvidedLanguage } from '../core/model/language.js';
-import type { JsonValue } from '../core/model/plugin-data.js';
-import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { FileClaims, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
+import type { JsonValue } from '@repometry/core/internal/model/plugin-data.js';
+import { sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
 import { builtInPluginIds } from './built-ins.js';
 
 type Selectors = Pick<FileClaims, 'extensions' | 'globs'>;

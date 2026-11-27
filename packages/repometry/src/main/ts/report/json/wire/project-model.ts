@@ -1,4 +1,4 @@
-import type { QualitySummary } from '../../../core/model/quality-summary.js';
+import type { QualitySummary } from '@repometry/core/internal/model/quality-summary.js';
 import type { PublicHistoryEntry } from './public-history-model.js';
 
 export interface ProjectEntry {

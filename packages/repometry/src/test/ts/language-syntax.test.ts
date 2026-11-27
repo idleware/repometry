@@ -11,16 +11,18 @@ import catalogSchema from '../../main/resources/report/json/metric-catalog-v1.sc
 import reportJsonSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { analyzeSnapshot } from './helpers/analysis.js';
 import { defaultLanguages, languageRegistry } from '../../main/ts/compose/languages.js';
-import { goSyntax } from '../../main/ts/plugins/language-treesitter/languages/go-syntax.js';
-import { pythonSyntax } from '../../main/ts/plugins/language-treesitter/languages/python-syntax.js';
+import { go } from '@repometry/language-go';
+import { python } from '@repometry/language-python';
 import { pluginApi, codeStructure, sourceFile } from '../../main/ts/plugin.js';
 import type { LanguageSyntax, Plugin } from '../../main/ts/plugin.js';
-import { isLanguageSyntax } from '../../main/ts/core/model/language.js';
-import { reportSchema } from '../../main/ts/core/model/report.js';
-import type { Report } from '../../main/ts/core/model/report.js';
+import { isLanguageSyntax } from '@repometry/core/internal/model/language.js';
+import { reportSchema } from '@repometry/core/internal/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { inspectionAsset } from '../../main/ts/report/json/projections/inspection-details.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
+
+const [goSyntax, pythonSyntax] = [go.language.syntax!, python.language.syntax!];
 
 const fixtureSyntax = { lineComments: [';'], strings: [{ quote: '~' }], keywords: ['zap'] } satisfies LanguageSyntax;
 const cli = resolve('target/main/ts/cli/main.js');

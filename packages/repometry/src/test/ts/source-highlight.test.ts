@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { goSyntax } from '../../main/ts/plugins/language-treesitter/languages/go-syntax.js';
-import { pythonSyntax } from '../../main/ts/plugins/language-treesitter/languages/python-syntax.js';
+import { go } from '@repometry/language-go';
+import { python } from '@repometry/language-python';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { languageIdOf, syntaxOf, useLanguages } from '../../main/ts/report/html/app/viewer-languages.js';
 import { tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
 import type { LanguageSyntax } from '../../main/ts/report/json/wire/file-metrics-model.js';
+
+const [goSyntax, pythonSyntax] = [go.language.syntax!, python.language.syntax!];
 
 const kinds = (runs: readonly (readonly [string, string])[], kind: string) => runs.filter(([run]) => run === kind).map(([, value]) => value);
 

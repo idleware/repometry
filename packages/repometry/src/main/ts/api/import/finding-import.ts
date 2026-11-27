@@ -1,14 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isRecord } from '../../core/engine/plugin.js';
-import { digest } from '../../core/model/snapshot.js';
-import type { Finding, FindingLocation } from '../../core/model/finding.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { digest } from '@repometry/core/internal/model/snapshot.js';
+import type { Finding, FindingLocation } from '@repometry/core/internal/model/finding.js';
 
-import { uniqueScanners, scannerText as text } from '../../core/model/scanner-import.js';
-import type { FindingInput, Scanner, ImportMetadata } from '../../core/model/scanner-import.js';
-export { findingImportMethods } from '../../core/model/scanner-import.js';
-export type { FindingInput } from '../../core/model/scanner-import.js';
+import { uniqueScanners, scannerText as text } from '@repometry/core/internal/model/scanner-import.js';
+import type { FindingInput, Scanner, ImportMetadata } from '@repometry/core/internal/model/scanner-import.js';
+export { findingImportMethods } from '@repometry/core/internal/model/scanner-import.js';
+export type { FindingInput } from '@repometry/core/internal/model/scanner-import.js';
 
 interface Imported {
   readonly findings: readonly Finding[];

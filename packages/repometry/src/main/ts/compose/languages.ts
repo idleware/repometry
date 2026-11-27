@@ -1,11 +1,11 @@
 import { extname } from 'node:path';
-import { plan } from '../core/engine/plan.js';
-import type { FileClaims, Operation, Plugin } from '../core/engine/plugin.js';
-import { fileTypeId } from '../core/model/file-types.js';
-import { codeStructure, codeStructures } from '../core/model/code-structure.js';
-import type { ProvidedLanguage } from '../core/model/language.js';
-import { isExcludedDirectory } from '../core/model/snapshot.js';
-import { exclusionMatcher } from '../core/profile/exclusions.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import type { FileClaims, Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
+import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
+import { isExcludedDirectory } from '@repometry/core/internal/model/snapshot.js';
+import { exclusionMatcher } from '@repometry/core/internal/profile/exclusions.js';
 import { describeProvider, selectedSyntax, selectParsers } from './parser-order.js';
 import type { ParserOrder, ParserPlugin } from './parser-order.js';
 import { languageMeasures, restrictStructureMeasures, structureImplementation } from './structure-measures.js';

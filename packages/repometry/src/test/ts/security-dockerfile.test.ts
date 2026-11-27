@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { manifestProducts } from '../../main/ts/core/engine/manifest.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { DataContract } from '../../main/ts/core/engine/plugin.js';
-import { findingResult } from '../../main/ts/core/model/finding.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { sourceFile, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { manifestProducts } from '@repometry/core/internal/engine/manifest.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract } from '@repometry/core/internal/engine/plugin.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { sourceFile, workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { dockerfile } from '../../main/ts/plugins/security/dockerfile.js';
 
 const digest = (char: string): string => `sha256:${char.repeat(64)}`;

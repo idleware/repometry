@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import type { DataContract } from '../../main/ts/core/engine/plugin.js';
-import { findingResult } from '../../main/ts/core/model/finding.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import type { DataContract } from '@repometry/core/internal/engine/plugin.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { actionsSecurity } from '../../main/ts/plugins/security/actions-security.js';
 
 const sha = 'b4ffde65f46336ab88eb53be808477a3936bae11';

@@ -1,9 +1,9 @@
-import type { Report } from '../../../core/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 import type { FileMetricsReport } from './file-metrics-model.js';
 import type { InspectionContext } from './inspection-context-model.js';
 import type { ComplexFunction } from './public-history-model.js';
 import type { ComponentMetrics } from './component-model.js';
-import type { LineCoverage } from '../../../core/model/line-coverage.js';
+import type { LineCoverage } from '@repometry/core/internal/model/line-coverage.js';
 
 export interface InspectionDetails {
   readonly metrics: FileMetricsReport;

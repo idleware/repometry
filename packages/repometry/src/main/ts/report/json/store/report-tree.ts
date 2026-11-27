@@ -1,5 +1,5 @@
-import { isRecord } from '../../../core/model/plugin-data.js';
-import { comparePaths, digest } from '../../../core/model/snapshot.js';
+import { isRecord } from '@repometry/core/internal/model/plugin-data.js';
+import { comparePaths, digest } from '@repometry/core/internal/model/snapshot.js';
 
 /**
  * A saved report keeps per-file rows in content-addressed objects, so an unchanged file version is stored once

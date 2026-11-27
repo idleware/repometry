@@ -1,10 +1,10 @@
-import type { Plugin } from '../core/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
 import { coverage } from './coverage/coverage.js';
 import { diffCoverage } from './coverage/diff-coverage.js';
 import { duplication } from './duplication/duplication.js';
 import { babelProvider } from './language-js/babel-provider.js';
 import { jsSecurity } from './language-js/js-security.js';
-import { treeSitter, usedGrammarTools } from './language-treesitter/tree-sitter.js';
+import { treeSitter, usedGrammarTools } from './tree-sitter.js';
 import { maintainability } from './maintainability/maintainability.js';
 import { actionsSecurity } from './security/actions-security.js';
 import { dockerfile } from './security/dockerfile.js';

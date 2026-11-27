@@ -1,8 +1,8 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import { codeStructure } from '../../core/model/code-structure.js';
-import { definitions, measurements } from '../../core/model/measurement.js';
-import type { Measurement } from '../../core/model/measurement.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { definitions, measurements } from '@repometry/core/internal/model/measurement.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
 
 export const structure: Plugin = {
   id: 'structure',

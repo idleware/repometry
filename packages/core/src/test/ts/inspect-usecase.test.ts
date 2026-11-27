@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { executeInspection } from '../../main/ts/core/usecases/inspect.js';
-import { reportSchema } from '../../main/ts/core/model/report.js';
-import type { Report } from '../../main/ts/core/model/report.js';
-import type { SourceSnapshot } from '../../main/ts/core/model/source.js';
+import { executeInspection } from '../../main/ts/usecases/inspect.js';
+import { reportSchema } from '../../main/ts/model/report.js';
+import type { Report } from '../../main/ts/model/report.js';
+import type { SourceSnapshot } from '../../main/ts/model/source.js';
 
 const snapshot: SourceSnapshot = { subject: { kind: 'working-tree', id: 'a'.repeat(64) }, files: [] };
 const report: Report = {

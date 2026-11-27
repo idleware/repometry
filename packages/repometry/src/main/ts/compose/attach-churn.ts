@@ -1,5 +1,5 @@
-import { definitions } from '../core/model/measurement.js';
-import type { Measurement } from '../core/model/measurement.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
 import type { Report } from '../report/json/validation/report.js';
 import { reportSchema } from '../report/json/validation/report.js';
 import { gitText } from '../api/git/git.js';

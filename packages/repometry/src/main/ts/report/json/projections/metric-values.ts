@@ -1,8 +1,8 @@
 import type { MetricDescriptor, MetricValues } from '../wire/summary-model.js';
-import type { Measurement } from '../../../core/model/measurement.js';
-import type { StructureMeasure } from '../../../core/model/code-structure.js';
-import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
-import type { Report } from '../../../core/model/report.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
+import type { StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
+import { canonicalMetricId, definitions } from '@repometry/core/internal/model/measurement.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 
 const structureMetricIds: Partial<Record<StructureMeasure, string>> = {
   functions: definitions.functions, cyclomaticComplexity: definitions.complexity,

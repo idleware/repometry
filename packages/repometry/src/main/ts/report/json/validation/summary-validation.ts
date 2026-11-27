@@ -4,7 +4,7 @@ import summaryContract from '../../../../resources/report/json/repository-summar
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary, RepositorySummary } from '../wire/summary-model.js';
 import type { MetricDescriptor } from '../wire/summary-model.js';
-import { isMetricDescriptor } from '../../../core/engine/manifest.js';
+import { isMetricDescriptor } from '@repometry/core/internal/engine/manifest.js';
 
 const validator = new Ajv2020({ schemas: [metricCatalog, summaryContract] });
 

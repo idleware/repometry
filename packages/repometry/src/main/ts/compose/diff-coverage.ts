@@ -1,14 +1,14 @@
-import { execute } from '../core/engine/execute.js';
-import { plan } from '../core/engine/plan.js';
-import type { Plugin, Product } from '../core/engine/plugin.js';
-import { digest, sourceDirectoriesExcluded, sourceLineCounts } from '../core/model/snapshot.js';
-import { executeDiffCoverage } from '../core/usecases/diff-coverage.js';
-import type { DiffCoveragePorts, DiffCoverageReport } from '../core/usecases/diff-coverage.js';
-import { defaultSourceExclusions, generatedSourcePolicy, sourceExclusionMatcher } from '../core/profile/exclusions.js';
-import { changesInput } from '../core/model/changes.js';
-import { lcovInput } from '../core/model/coverage-input.js';
-import { diffCoverageResult } from '../core/model/diff-coverage.js';
-import type { DiffCoverageResult } from '../core/model/diff-coverage.js';
+import { execute } from '@repometry/core/internal/engine/execute.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import type { Plugin, Product } from '@repometry/core/internal/engine/plugin.js';
+import { digest, sourceDirectoriesExcluded, sourceLineCounts } from '@repometry/core/internal/model/snapshot.js';
+import { executeDiffCoverage } from '@repometry/core/internal/usecases/diff-coverage.js';
+import type { DiffCoveragePorts, DiffCoverageReport } from '@repometry/core/internal/usecases/diff-coverage.js';
+import { defaultSourceExclusions, generatedSourcePolicy, sourceExclusionMatcher } from '@repometry/core/internal/profile/exclusions.js';
+import { changesInput } from '@repometry/core/internal/model/changes.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import { diffCoverageResult } from '@repometry/core/internal/model/diff-coverage.js';
+import type { DiffCoverageResult } from '@repometry/core/internal/model/diff-coverage.js';
 import { builtInPlugins } from './built-ins.js';
 import { candidatesOf, diffCoveragePhases, phaseInputs, selectOperations } from './phases.js';
 import { diffMethod, findMergeBase, readChanges } from '../api/git/changes.js';
@@ -18,8 +18,8 @@ import type { CoverageInputs } from '../api/import/lcov-files.js';
 import { defaultLanguages, languageRegistry } from './languages.js';
 import type { ParserOrder } from './parser-order.js';
 
-export { diffCoverageSchema } from '../core/usecases/diff-coverage.js';
-export type { DiffCoverageReport } from '../core/usecases/diff-coverage.js';
+export { diffCoverageSchema } from '@repometry/core/internal/usecases/diff-coverage.js';
+export type { DiffCoverageReport } from '@repometry/core/internal/usecases/diff-coverage.js';
 
 export interface DiffCoverageRequest extends CoverageInputs {
   readonly directory: string;

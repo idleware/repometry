@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execute } from '../../main/ts/core/engine/execute.js';
-import { manifestProducts } from '../../main/ts/core/engine/manifest.js';
-import { plan } from '../../main/ts/core/engine/plan.js';
-import type { DataContract, InspectionInputs } from '../../main/ts/core/engine/plugin.js';
-import { findingResult } from '../../main/ts/core/model/finding.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { sourceFile } from '../../main/ts/core/model/snapshot.js';
-import { exclusionMatcher } from '../../main/ts/core/profile/exclusions.js';
+import { execute } from '@repometry/core/internal/engine/execute.js';
+import { manifestProducts } from '@repometry/core/internal/engine/manifest.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import type { DataContract, InspectionInputs } from '@repometry/core/internal/engine/plugin.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
+import { exclusionMatcher } from '@repometry/core/internal/profile/exclusions.js';
 import { ignoreMarker, maxScannedBytes, secrets } from '../../main/ts/plugins/security/secrets.js';
 
 const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

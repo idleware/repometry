@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { DataContract } from '../../main/ts/core/engine/plugin.js';
-import { findingResult } from '../../main/ts/core/model/finding.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { sourceFile, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract } from '@repometry/core/internal/engine/plugin.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { sourceFile, workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { jsTsExtensions } from '../../main/ts/plugins/language-js/extensions.js';
 import { isSecretName, jsSecurity } from '../../main/ts/plugins/language-js/js-security.js';
 

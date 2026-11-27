@@ -1,5 +1,5 @@
-import type { Report } from '../../../core/model/report.js';
-import type { QualitySummary } from '../../../core/model/quality-summary.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import type { QualitySummary } from '@repometry/core/internal/model/quality-summary.js';
 
 export interface PublicHistoryEntry {
   readonly sha: string;

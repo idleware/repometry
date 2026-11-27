@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addedRanges, rawChanges } from '../../main/ts/api/git/changes.js';
 import type { GitChanges } from '../../main/ts/api/git/changes.js';
-import { assessDiffCoverage } from '../../main/ts/core/usecases/diff-coverage-policy.js';
-import { execute } from '../../main/ts/core/engine/execute.js';
-import { plan } from '../../main/ts/core/engine/plan.js';
-import type { Product } from '../../main/ts/core/engine/plugin.js';
-import { changesInput } from '../../main/ts/core/model/changes.js';
-import { lcovInput } from '../../main/ts/core/model/coverage-input.js';
-import type { CoverageInput } from '../../main/ts/core/model/coverage-input.js';
-import { diffCoverageResult } from '../../main/ts/core/model/diff-coverage.js';
+import { assessDiffCoverage } from '@repometry/core/internal/usecases/diff-coverage-policy.js';
+import { execute } from '@repometry/core/internal/engine/execute.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import type { Product } from '@repometry/core/internal/engine/plugin.js';
+import { changesInput } from '@repometry/core/internal/model/changes.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import type { CoverageInput } from '@repometry/core/internal/model/coverage-input.js';
+import { diffCoverageResult } from '@repometry/core/internal/model/diff-coverage.js';
 import { diffCoverage } from '../../main/ts/plugins/coverage/diff-coverage.js';
 
 test('Git changes preserve paths and use only the added side of hunks', () => {

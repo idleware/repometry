@@ -1,5 +1,5 @@
-import { plan } from '../core/engine/plan.js';
-import type { SourceContext, SourcePlugin } from '../core/ports/source-provider.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import type { SourceContext, SourcePlugin } from '@repometry/core/internal/ports/source-provider.js';
 import { builtInPlugins } from './built-ins.js';
 
 export function resolveSourceLocator(option: string | undefined, context: Omit<SourceContext, 'option'>,

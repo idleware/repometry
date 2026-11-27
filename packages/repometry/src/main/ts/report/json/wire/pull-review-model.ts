@@ -1,6 +1,6 @@
-import type { DiffCoverage } from '../../../core/model/diff-coverage.js';
-import type { InspectionComparison } from '../../../core/model/comparison.js';
-import type { Finding } from '../../../core/model/finding.js';
+import type { DiffCoverage } from '@repometry/core/internal/model/diff-coverage.js';
+import type { InspectionComparison } from '@repometry/core/internal/model/comparison.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
 
 /** Reviews saved before 0.9 under `reviews/<number>.json`; the viewer lists them. */
 export const storedPullReviewSchema = 'urn:repometry:schema:pull-review:1';

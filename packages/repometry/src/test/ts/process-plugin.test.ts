@@ -7,10 +7,10 @@ import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.j
 import { processPlugin, processPluginProtocol } from '../../main/ts/api/process/plugin.js';
 import type { ProcessPluginManifest } from '../../main/ts/api/process/plugin.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import { measurements } from '../../main/ts/core/model/measurement.js';
-import { digest, sourceFile, sourceFiles } from '../../main/ts/core/model/snapshot.js';
-import type { ToolRunner } from '../../main/ts/core/ports/tool-runner.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import { measurements } from '@repometry/core/internal/model/measurement.js';
+import { digest, sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
+import type { ToolRunner } from '@repometry/core/internal/ports/tool-runner.js';
 
 const metric = { id: 'fixture.process-count/v1', label: 'Process count', unit: 'count', scope: 'file', aggregate: 'sum', better: 'none' } as const;
 const fileText = 'process sample';

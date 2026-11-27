@@ -1,7 +1,7 @@
-import { isRecord } from '../../../core/engine/plugin.js';
-import { isSensitiveFinding } from '../../../core/model/finding.js';
-import type { Report } from '../../../core/model/report.js';
-import { findingImportMethods } from '../../../core/model/scanner-import.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { isSensitiveFinding } from '@repometry/core/internal/model/finding.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import { findingImportMethods } from '@repometry/core/internal/model/scanner-import.js';
 
 export function nativeScanners(report: Report): readonly { name: string; version: string }[] {
   const scanners = report.appliedConfig.securityScanners;

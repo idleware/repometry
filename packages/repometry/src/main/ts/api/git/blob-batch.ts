@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { validSubjectId } from '../../core/model/report.js';
+import { validSubjectId } from '@repometry/core/internal/model/report.js';
 import { gitExecutable } from './git-executable.js';
 
 const idleTimeout = 10_000;

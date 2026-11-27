@@ -1,4 +1,4 @@
-import type { FindingIgnoreRule } from '../../../core/model/ignore-rule.js';
+import type { FindingIgnoreRule } from '@repometry/core/internal/model/ignore-rule.js';
 
 export type ProfileBoundary = 'changed' | 'unavailable';
 

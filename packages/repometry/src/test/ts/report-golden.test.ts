@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { definitions } from '../../main/ts/core/model/measurement.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
 import type { ObjectSource } from '../../main/ts/report/json/store/report-tree.js';
 import { readStoredReport, reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';

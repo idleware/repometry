@@ -1,5 +1,5 @@
 import type { Node } from 'web-tree-sitter';
-import type { StructuralCheck } from '../../core/model/code-structure.js';
+import type { StructuralCheck } from '@repometry/core/internal/model/code-structure.js';
 import type { Flow, Traversal, Visit, Work } from './flow.js';
 import type { NodeRule } from './language.js';
 import { expressionOperators, logicalOperator } from './logic.js';

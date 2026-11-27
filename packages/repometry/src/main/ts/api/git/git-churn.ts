@@ -1,9 +1,9 @@
 import { gitText, gitUtf8 } from './git.js';
 
-import { churnSettings } from '../../core/model/churn.js';
-import type { ChurnWindow } from '../../core/model/churn.js';
-export { churnSettings } from '../../core/model/churn.js';
-export type { ChurnWindow } from '../../core/model/churn.js';
+import { churnSettings } from '@repometry/core/internal/model/churn.js';
+import type { ChurnWindow } from '@repometry/core/internal/model/churn.js';
+export { churnSettings } from '@repometry/core/internal/model/churn.js';
+export type { ChurnWindow } from '@repometry/core/internal/model/churn.js';
 
 interface Churn {
   readonly touches: ReadonlyMap<string, number>;

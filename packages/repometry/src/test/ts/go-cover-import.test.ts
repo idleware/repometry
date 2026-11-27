@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { readCoverageFiles } from '../../main/ts/api/import/lcov-files.js';
 import { readInputs } from '../../main/ts/cli/imports.js';
-import { sourceLineCounts, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { sourceLineCounts, workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { mapCoverage } from '../../main/ts/plugins/coverage/coverage.js';
 
 const source = Buffer.from('package example\n\nfunc Run() {\n\tstep()\n\tmaybe()\n}\n');

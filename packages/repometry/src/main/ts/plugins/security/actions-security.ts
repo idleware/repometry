@@ -1,8 +1,8 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import { findingResult } from '../../core/model/finding.js';
-import type { Finding, FindingResult } from '../../core/model/finding.js';
-import { sourceFile } from '../../core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding, FindingResult } from '@repometry/core/internal/model/finding.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
 
 const tool = 'actions-security';
 

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { comparePaths, digest, utf8 } from '../../core/model/snapshot.js';
+import { comparePaths, digest, utf8 } from '@repometry/core/internal/model/snapshot.js';
 import { coberturaToLcov } from './cobertura.js';
 import { goCoverSource, goCoverToLcov } from './go-cover.js';
 import type { CoverageSource } from './go-cover.js';

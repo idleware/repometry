@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { writeGitHubReview } from '../../main/ts/api/gh/github.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { pullReviewSchema } from '../../main/ts/core/model/pull-review.js';
-import type { PullReview, ReviewedIssue } from '../../main/ts/core/model/pull-review.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { pullReviewSchema } from '@repometry/core/internal/model/pull-review.js';
+import type { PullReview, ReviewedIssue } from '@repometry/core/internal/model/pull-review.js';
 import { pullReviewMarkdown } from '../../main/ts/report/markdown/pull-review.js';
 
 function finding(path: string, message: string, line?: number, endLine?: number): Finding {

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execute } from '../../main/ts/core/engine/execute.js';
-import { plan } from '../../main/ts/core/engine/plan.js';
-import { manifestProducts } from '../../main/ts/core/engine/manifest.js';
-import { ReportProducts } from '../../main/ts/core/engine/report-products.js';
+import { execute } from '@repometry/core/internal/engine/execute.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import { manifestProducts } from '@repometry/core/internal/engine/manifest.js';
+import { ReportProducts } from '@repometry/core/internal/engine/report-products.js';
 import { builtInPlugins } from '../../main/ts/plugins/built-in.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { DataContract, MetricDescriptor, Plugin } from '../../main/ts/core/engine/plugin.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract, MetricDescriptor, Plugin } from '@repometry/core/internal/engine/plugin.js';
 
 const a: DataContract<number> = { id: 'test.a/v1', accepts: (value): value is number => typeof value === 'number' };
 const b: DataContract<number> = { ...a, id: 'test.b/v1' };

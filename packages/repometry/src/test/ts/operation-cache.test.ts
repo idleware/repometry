@@ -5,10 +5,10 @@ import { basename, join } from 'node:path';
 import { test } from 'node:test';
 import { serialize } from 'node:v8';
 import { inspect } from '../../main/ts/compose/inspect.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { DataContract, Plugin } from '../../main/ts/core/engine/plugin.js';
-import { measurements } from '../../main/ts/core/model/measurement.js';
-import { sourceFile } from '../../main/ts/core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { measurements } from '@repometry/core/internal/model/measurement.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
 import { LocalOperationCache } from '../../main/ts/report/json/store/operation-cache.js';
 
 test('inspection reuses validated cached products only for the same inputs, settings, and toolchain', async t => {

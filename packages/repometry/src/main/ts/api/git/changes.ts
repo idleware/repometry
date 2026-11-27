@@ -1,9 +1,9 @@
 import { gitText, gitUtf8 } from './git.js';
-import { physicalLines, utf8 } from '../../core/model/snapshot.js';
-import type { SourceSnapshot } from '../../core/model/snapshot.js';
+import { physicalLines, utf8 } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceSnapshot } from '@repometry/core/internal/model/snapshot.js';
 
-import type { GitChanges, LineHunk, LineRange } from '../../core/model/changes.js';
-export type { GitChanges, LineRange } from '../../core/model/changes.js';
+import type { GitChanges, LineHunk, LineRange } from '@repometry/core/internal/model/changes.js';
+export type { GitChanges, LineRange } from '@repometry/core/internal/model/changes.js';
 
 export const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 export const regularFile = /^100(?:644|755)$/;

@@ -1,12 +1,12 @@
-import { fileTypeId, fileTypes } from '../../../core/model/file-types.js';
-import type { LanguageLookup } from '../../../core/model/language.js';
-import { isRecord } from '../../../core/engine/plugin.js';
-import type { Measurement } from '../../../core/model/measurement.js';
-import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
+import { fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
+import type { LanguageLookup } from '@repometry/core/internal/model/language.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
+import { canonicalMetricId, definitions } from '@repometry/core/internal/model/measurement.js';
 import { legacySyntaxPlugin } from './inspection-context.js';
 import type { Report } from '../validation/report.js';
-import type { ChurnWindow } from '../../../core/model/churn.js';
-import { comparePaths } from '../../../core/model/snapshot.js';
+import type { ChurnWindow } from '@repometry/core/internal/model/churn.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
 import { metricProjection } from './metric-values.js';
 
 import { fileMetricsSchema } from '../wire/file-metrics-model.js';

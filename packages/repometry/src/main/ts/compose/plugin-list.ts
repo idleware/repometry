@@ -1,4 +1,4 @@
-import type { Plugin } from '../core/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
 import { languageRegistry } from './languages.js';
 import { builtInPlugins } from './built-ins.js';
 import type { ParserOrder, ParserPlugin } from './parser-order.js';

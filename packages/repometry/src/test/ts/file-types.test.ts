@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fileTypeId, fileTypes } from '../../main/ts/core/model/file-types.js';
-import { reportSchema } from '../../main/ts/core/model/report.js';
-import type { Report } from '../../main/ts/core/model/report.js';
+import { fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
+import { reportSchema } from '@repometry/core/internal/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
 
 const descriptors = new Map(fileTypes.map(type => [type.id, type]));

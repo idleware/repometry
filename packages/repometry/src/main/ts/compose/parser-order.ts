@@ -1,6 +1,6 @@
-import { isRecord } from '../core/engine/plugin.js';
-import type { Plugin } from '../core/engine/plugin.js';
-import type { LanguageSyntax, ProvidedLanguage } from '../core/model/language.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import type { LanguageSyntax, ProvidedLanguage } from '@repometry/core/internal/model/language.js';
 
 export interface ParserPlugin extends Plugin {
   readonly unavailableReason?: string;

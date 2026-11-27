@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { definitions } from '../../main/ts/core/model/measurement.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
 import { GitReportReader } from '../../main/ts/api/git/git-reader.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';

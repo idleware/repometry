@@ -1,8 +1,8 @@
-import type { Operation } from '../core/engine/plugin.js';
-import { codeStructure, codeStructures, structureCodeLines } from '../core/model/code-structure.js';
-import type { CodeStructure, StructureMeasure } from '../core/model/code-structure.js';
-import type { ProvidedLanguage } from '../core/model/language.js';
-import { digest } from '../core/model/snapshot.js';
+import type { Operation } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructure, codeStructures, structureCodeLines } from '@repometry/core/internal/model/code-structure.js';
+import type { CodeStructure, StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
+import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
+import { digest } from '@repometry/core/internal/model/snapshot.js';
 
 type LanguageMeasures = ReadonlyMap<string, readonly StructureMeasure[]>;
 

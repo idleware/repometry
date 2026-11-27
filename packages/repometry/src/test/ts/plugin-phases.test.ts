@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { DataContract, Operation, Plugin } from '../../main/ts/core/engine/plugin.js';
-import { changesInput } from '../../main/ts/core/model/changes.js';
-import { codeStructure, codeStructures } from '../../main/ts/core/model/code-structure.js';
-import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
-import { lcovInput } from '../../main/ts/core/model/coverage-input.js';
-import { findingResult } from '../../main/ts/core/model/finding.js';
-import { sourceFile, sourceFiles } from '../../main/ts/core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract, Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { changesInput } from '@repometry/core/internal/model/changes.js';
+import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import { sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
 import { coverage as lcov } from '../../main/ts/plugins/coverage/coverage.js';
 
 // One rule for every plugin: an operation runs in the phase that offers, or whose operations output, all it reads.

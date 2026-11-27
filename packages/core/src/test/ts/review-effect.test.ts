@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { FileLineChange, LineChanges, LineRange } from '../../main/ts/core/model/changes.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { classifyIssues, debtEffect } from '../../main/ts/core/usecases/review-effect.js';
-import type { SourceLines } from '../../main/ts/core/usecases/review-effect.js';
+import type { FileLineChange, LineChanges, LineRange } from '../../main/ts/model/changes.js';
+import type { Finding } from '../../main/ts/model/finding.js';
+import { classifyIssues, debtEffect } from '../../main/ts/usecases/review-effect.js';
+import type { SourceLines } from '../../main/ts/usecases/review-effect.js';
 
 function complexity(path: string, line: number, endLine: number, anchor: string, value: number): Finding {
   return { tool: 'repometry', rule: 'function-complexity', category: 'structure', level: 'medium',

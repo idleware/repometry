@@ -4,10 +4,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { codeStructure } from '../../main/ts/core/model/code-structure.js';
-import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
-import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
-import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { codeStructure } from '@repometry/core/internal/model/code-structure.js';
+import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import { workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { languageRegistry } from '../../main/ts/compose/languages.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
@@ -115,10 +115,10 @@ test('changing the extractor fixture output requires a plugin version bump', asy
 });
 
 test('vendored grammars match their recorded package provenance', async () => {
-  const resources = new URL('../resources/languages/', import.meta.resolve('repometry/plugin'));
   for (const id of ['go', 'python']) {
-    const grammar = new URL(id + '/tree-sitter.wasm', resources);
-    const provenance = JSON.parse(await readFile(new URL(id + '/grammar.json', resources), 'utf8'));
+    const resources = new URL('../resources/', import.meta.resolve('@repometry/language-' + id));
+    const grammar = new URL('tree-sitter.wasm', resources);
+    const provenance = JSON.parse(await readFile(new URL('grammar.json', resources), 'utf8'));
     assert.equal(provenance.package, 'tree-sitter-' + id);
     assert.equal(provenance.version, '0.25.0');
     assert.equal(provenance.license, 'MIT');

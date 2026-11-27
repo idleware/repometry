@@ -1,4 +1,4 @@
-import type { LanguageSyntax } from '../../../core/model/language.js';
+import type { LanguageSyntax } from '@repometry/core';
 
 export const goSyntax: LanguageSyntax = { lineComments: ['//'], blockComments: [['/*', '*/']],
   strings: [{ quote: '"' }, { quote: "'" }, { quote: '`', multiline: true, raw: true }],

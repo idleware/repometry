@@ -1,6 +1,6 @@
 import { HistoryCache } from '../compose/history-cache.js';
 import { inspectWithOptions } from '../compose/inspect.js';
-import type { Report } from '../core/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
 import type { parseConfig } from './config.js';
 
 export interface RangeInspection {

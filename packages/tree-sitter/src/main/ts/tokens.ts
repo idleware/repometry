@@ -1,7 +1,7 @@
 import { hash } from 'node:crypto';
 import type { Tree, TreeCursor } from 'web-tree-sitter';
-import type { Candidate, CloneSource } from '../../core/model/clone-source.js';
-import { duplicationSettings as limits } from '../../core/profile/maintainability.js';
+import type { Candidate, CloneSource } from '@repometry/core/internal/model/clone-source.js';
+import { duplicationSettings as limits } from '@repometry/core/internal/profile/maintainability.js';
 import type { Grammar } from './language.js';
 import { lowerBound } from './source-lines.js';
 import type { SourceLines, Span } from './source-lines.js';

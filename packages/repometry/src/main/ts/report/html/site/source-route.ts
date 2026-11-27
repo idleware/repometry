@@ -1,6 +1,6 @@
-import { validSubjectId } from '../../../core/model/report.js';
-import { isSourcePathname } from '../../../core/ports/source-provider.js';
-import type { SourceProvider } from '../../../core/ports/source-provider.js';
+import { validSubjectId } from '@repometry/core/internal/model/report.js';
+import { isSourcePathname } from '@repometry/core/internal/ports/source-provider.js';
+import type { SourceProvider } from '@repometry/core/internal/ports/source-provider.js';
 
 export interface SourceAccess {
   readonly read: NonNullable<SourceProvider['read']>;

@@ -1,9 +1,9 @@
-import type { LanguageSyntax } from '../../../core/model/language.js';
-import type { Report } from '../../../core/model/report.js';
-import type { ChurnWindow } from '../../../core/model/churn.js';
+import type { LanguageSyntax } from '@repometry/core/internal/model/language.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import type { ChurnWindow } from '@repometry/core/internal/model/churn.js';
 import type { MetricDescriptor, MetricValues } from './summary-model.js';
 
-export type { LanguageSyntax } from '../../../core/model/language.js';
+export type { LanguageSyntax } from '@repometry/core/internal/model/language.js';
 
 export const fileMetricsSchema = 'urn:repometry:schema:file-metrics:1';
 

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { validSubjectId } from '../../core/model/report.js';
+import { validSubjectId } from '@repometry/core/internal/model/report.js';
 
 export async function cachedBlob(root: string, oid: string, load: () => Promise<Buffer | undefined>): Promise<Buffer | undefined> {
   if (!validSubjectId('commit', oid)) throw new Error('Invalid source blob ID');

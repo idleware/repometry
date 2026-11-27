@@ -1,6 +1,6 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { SourceContext, SourcePlugin } from '../../core/ports/source-provider.js';
-import type { SourceLocator } from '../../core/model/source-locator.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { SourceContext, SourcePlugin } from '@repometry/core/internal/ports/source-provider.js';
+import type { SourceLocator } from '@repometry/core/internal/model/source-locator.js';
 
 const manifest = {
   api: pluginApi, version: '1.0.0', kinds: ['source'],

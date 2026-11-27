@@ -1,11 +1,11 @@
-import type { Outcome } from '../core/engine/execute.js';
-import type { PlannedOperation } from '../core/engine/plan.js';
-import type { Plugin } from '../core/engine/plugin.js';
-import { ReportProducts } from '../core/engine/report-products.js';
-import type { Finding } from '../core/model/finding.js';
-import type { Measurement } from '../core/model/measurement.js';
-import type { StructureMeasure } from '../core/model/code-structure.js';
-import type { Diagnostic, Report } from '../core/model/report.js';
+import type { Outcome } from '@repometry/core/internal/engine/execute.js';
+import type { PlannedOperation } from '@repometry/core/internal/engine/plan.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { ReportProducts } from '@repometry/core/internal/engine/report-products.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
+import type { StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
+import type { Diagnostic, Report } from '@repometry/core/internal/model/report.js';
 
 export class AnalysisResults {
   readonly measurements: Measurement[] = [];

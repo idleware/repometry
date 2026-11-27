@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { definitions } from '../../main/ts/core/model/measurement.js';
-import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { mapCoverage } from '../../main/ts/plugins/coverage/coverage.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';

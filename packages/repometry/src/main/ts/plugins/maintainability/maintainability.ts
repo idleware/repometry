@@ -1,12 +1,12 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import { codeStructure, structureCodeLines } from '../../core/model/code-structure.js';
-import { findingResult } from '../../core/model/finding.js';
-import type { FindingResult } from '../../core/model/finding.js';
-import type { Measurement } from '../../core/model/measurement.js';
-import { definitions } from '../../core/model/measurement.js';
-import { sourceFile } from '../../core/model/snapshot.js';
-import { structuralRules } from '../../core/profile/maintainability.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructure, structureCodeLines } from '@repometry/core/internal/model/code-structure.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { FindingResult } from '@repometry/core/internal/model/finding.js';
+import type { Measurement } from '@repometry/core/internal/model/measurement.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
+import { structuralRules } from '@repometry/core/internal/profile/maintainability.js';
 import { structuralSmells } from './structural-smells.js';
 
 export const maintainability: Plugin = {

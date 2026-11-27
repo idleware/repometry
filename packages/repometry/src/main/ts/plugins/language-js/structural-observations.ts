@@ -1,6 +1,6 @@
 import { isClass, isFunction } from '@babel/types';
 import type { Node } from '@babel/types';
-import type { FunctionComplexity, StructuralCheck, StructuralObservation } from '../../core/model/code-structure.js';
+import type { FunctionComplexity, StructuralCheck, StructuralObservation } from '@repometry/core/internal/model/code-structure.js';
 import { children } from './function-facts.js';
 import type { FunctionNaming } from './qualified-names.js';
 

@@ -1,23 +1,23 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../../../resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
 import schemaV2 from '../../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
-import { isRecord } from '../../../core/engine/plugin.js';
-import { isMetricDescriptor } from '../../../core/engine/manifest.js';
-import { isFinding } from '../../../core/model/finding.js';
-import { canonicalMetricId } from '../../../core/model/measurement.js';
-import { lcovLines } from '../../../core/model/line-coverage.js';
-import { digest } from '../../../core/model/snapshot.js';
-import type { Subject } from '../../../core/model/source.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { isMetricDescriptor } from '@repometry/core/internal/engine/manifest.js';
+import { isFinding } from '@repometry/core/internal/model/finding.js';
+import { canonicalMetricId } from '@repometry/core/internal/model/measurement.js';
+import { lcovLines } from '@repometry/core/internal/model/line-coverage.js';
+import { digest } from '@repometry/core/internal/model/snapshot.js';
+import type { Subject } from '@repometry/core/internal/model/source.js';
 import { unpackJson } from '../wire/compact-json.js';
 import { rebuildReport, storedReportSchema } from '../store/report-tree.js';
 import type { ObjectSource } from '../store/report-tree.js';
 import type { CommitSummary } from '../wire/summary-model.js';
-import { reportSchema } from '../../../core/model/report.js';
-import type { Report } from '../../../core/model/report.js';
-import type { ReportReader as DomainReportReader, ReportWriter } from '../../../core/ports/report.js';
+import { reportSchema } from '@repometry/core/internal/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import type { ReportReader as DomainReportReader, ReportWriter } from '@repometry/core/internal/ports/report.js';
 
-export { reportSchema, validSubjectId } from '../../../core/model/report.js';
-export type { Diagnostic, Report } from '../../../core/model/report.js';
+export { reportSchema, validSubjectId } from '@repometry/core/internal/model/report.js';
+export type { Diagnostic, Report } from '@repometry/core/internal/model/report.js';
 
 export interface ReportReader extends DomainReportReader {
   listSummaries?(): Promise<readonly CommitSummary[]>;

@@ -1,5 +1,18 @@
 import type { Node } from 'web-tree-sitter';
-import type { ProvidedLanguage } from '../../core/model/language.js';
+import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
+
+// The published web-tree-sitter 0.27.2 declarations reference browser globals from their optional Emscripten and WASM
+// APIs. The engine calls Parser.init without an options object and loads grammars from bytes. Declared here, in a module,
+// so the shim ships with the declarations of every package that uses these types.
+declare global {
+  interface EmscriptenModule {
+    locateFile?: (filename: string, directory: string) => string;
+  }
+
+  namespace WebAssembly {
+    interface Module {}
+  }
+}
 
 export interface TokenRules {
   readonly candidates: ReadonlySet<string>;
@@ -16,6 +29,8 @@ export interface NodeRule {
 
 export interface Grammar {
   readonly language: ProvidedLanguage;
+  /** The grammar package the WASM file was built from, recorded in the plugin's tools. */
+  readonly tool: { readonly package: string; readonly version: string };
   readonly asset: URL;
   readonly decode?: (bytes: Uint8Array) => string;
   readonly prepareSource: (text: string) => string;

@@ -1,13 +1,13 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import { comparePaths } from '../../core/model/snapshot.js';
-import { findingResult } from '../../core/model/finding.js';
-import type { Finding, FindingLocation, FindingResult } from '../../core/model/finding.js';
-import { definitions } from '../../core/model/measurement.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
+import { findingResult } from '@repometry/core/internal/model/finding.js';
+import type { Finding, FindingLocation, FindingResult } from '@repometry/core/internal/model/finding.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
 
-import { cloneSources } from '../../core/model/clone-source.js';
-import type { Candidate, CloneSource } from '../../core/model/clone-source.js';
-import { duplicationSettings } from '../../core/profile/maintainability.js';
+import { cloneSources } from '@repometry/core/internal/model/clone-source.js';
+import type { Candidate, CloneSource } from '@repometry/core/internal/model/clone-source.js';
+import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
 
 export const duplication: Plugin = {
   id: 'duplication', version: '1.0.0', api: pluginApi,

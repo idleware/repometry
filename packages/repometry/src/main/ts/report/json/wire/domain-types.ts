@@ -1,2 +1,2 @@
-export type { Finding } from '../../../core/model/finding.js';
-export type { QualitySummary } from '../../../core/model/quality-summary.js';
+export type { Finding } from '@repometry/core/internal/model/finding.js';
+export type { QualitySummary } from '@repometry/core/internal/model/quality-summary.js';

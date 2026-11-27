@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { isRecord } from '../core/engine/plugin.js';
-import { normalizeProfile } from '../core/profile/profile.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { normalizeProfile } from '@repometry/core/internal/profile/profile.js';
 import type { Component } from '../report/json/wire/component-model.js';
 import type { Invocation } from './arguments.js';
 import { readProcessPlugins } from '../compose/process-plugins.js';

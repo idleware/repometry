@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
 import { HistoryCache } from '../../main/ts/compose/history-cache.js';
-import { pluginApi } from '../../main/ts/core/engine/plugin.js';
-import type { Plugin } from '../../main/ts/core/engine/plugin.js';
-import { codeStructures } from '../../main/ts/core/model/code-structure.js';
-import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
-import { digest, sourceFile, sourceFiles } from '../../main/ts/core/model/snapshot.js';
-import type { AnalysisInput } from '../../main/ts/core/usecases/inspect.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import { definitions, measurements } from '@repometry/core/internal/model/measurement.js';
+import { digest, sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
+import type { AnalysisInput } from '@repometry/core/internal/usecases/inspect.js';
 
 function input(entries: Record<string, string>, excludedPaths: readonly string[] = []): AnalysisInput {
   const files = Object.entries(entries).map(([path, source]) => ({ path, bytes: Buffer.from(source) }));

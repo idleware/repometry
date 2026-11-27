@@ -1,4 +1,4 @@
-import { textLineCount } from '../../core/model/snapshot.js';
+import { textLineCount } from '@repometry/core/internal/model/snapshot.js';
 
 export interface BlobRequest {
   readonly id: string;

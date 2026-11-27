@@ -1,5 +1,5 @@
-import { isRecord } from '../../../core/engine/plugin.js';
-import { comparePaths } from '../../../core/model/snapshot.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
 import type { Report } from '../validation/report.js';
 
 export function presentLanguages(inventory: NonNullable<Report['pluginData']>['inventory']) {

@@ -1,5 +1,5 @@
 import type { Node } from 'web-tree-sitter';
-import type { FunctionComplexity, StructuralCheck, StructuralObservation } from '../../core/model/code-structure.js';
+import type { FunctionComplexity, StructuralCheck, StructuralObservation } from '@repometry/core/internal/model/code-structure.js';
 import { Control } from './control.js';
 import { Flow, Traversal } from './flow.js';
 import type { Visit } from './flow.js';

@@ -1,8 +1,8 @@
 import { lstat, mkdir, open, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import type { Subject } from '../../../core/model/snapshot.js';
-import { isRecord } from '../../../core/engine/plugin.js';
+import type { Subject } from '@repometry/core/internal/model/snapshot.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import { commitSummary, needsMaintainabilityRefresh, orderSummaries, repositorySummary } from '../projections/commit-summary.js';
 import { summarySchema } from '../wire/summary-model.js';
 import type { CommitSummary } from '../wire/summary-model.js';

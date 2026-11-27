@@ -1,15 +1,15 @@
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import type { GitChanges, LineRange } from '../../core/model/changes.js';
-import { comparePaths } from '../../core/model/snapshot.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import type { GitChanges, LineRange } from '@repometry/core/internal/model/changes.js';
+import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
 import { mapCoverage } from './coverage.js';
-import { lcovInput } from '../../core/model/coverage-input.js';
-import type { CoverageInput } from '../../core/model/coverage-input.js';
+import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
+import type { CoverageInput } from '@repometry/core/internal/model/coverage-input.js';
 
-import { changesInput } from '../../core/model/changes.js';
-import { diffCoverageResult } from '../../core/model/diff-coverage.js';
-import type { DiffCoverage, DiffCoverageResult, FileCoverage } from '../../core/model/diff-coverage.js';
-export type { DiffCoverage } from '../../core/model/diff-coverage.js';
+import { changesInput } from '@repometry/core/internal/model/changes.js';
+import { diffCoverageResult } from '@repometry/core/internal/model/diff-coverage.js';
+import type { DiffCoverage, DiffCoverageResult, FileCoverage } from '@repometry/core/internal/model/diff-coverage.js';
+export type { DiffCoverage } from '@repometry/core/internal/model/diff-coverage.js';
 
 export const diffCoverage: Plugin = {
   id: 'diff-coverage',

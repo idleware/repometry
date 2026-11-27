@@ -6,19 +6,19 @@ import { GitBlobReader, resolveGitCommit } from '../api/git/git.js';
 import { readLineChanges } from '../api/git/line-changes.js';
 import { hasCoverageInputs } from '../api/import/lcov-files.js';
 import type { CoverageInputs } from '../api/import/lcov-files.js';
-import type { Plugin } from '../core/engine/plugin.js';
-import type { LineChanges } from '../core/model/changes.js';
-import type { FindingIgnoreRule } from '../core/model/ignore-rule.js';
-import type { PullReview } from '../core/model/pull-review.js';
-import { checkOptions, projectReview } from '../core/usecases/review.js';
-import type { ReviewOptions } from '../core/usecases/review.js';
-import type { SourceLines } from '../core/usecases/review-effect.js';
+import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
+import type { LineChanges } from '@repometry/core/internal/model/changes.js';
+import type { FindingIgnoreRule } from '@repometry/core/internal/model/ignore-rule.js';
+import type { PullReview } from '@repometry/core/internal/model/pull-review.js';
+import { checkOptions, projectReview } from '@repometry/core/internal/usecases/review.js';
+import type { ReviewOptions } from '@repometry/core/internal/usecases/review.js';
+import type { SourceLines } from '@repometry/core/internal/usecases/review-effect.js';
 import { measureChangedLines } from './diff-coverage.js';
 import { HistoryCache } from './history-cache.js';
 import { inspectWithOptions } from './inspect.js';
 import type { ParserOrder } from './parser-order.js';
 
-export { projectReview, reviewExitCode, reviewReason } from '../core/usecases/review.js';
+export { projectReview, reviewExitCode, reviewReason } from '@repometry/core/internal/usecases/review.js';
 
 export interface ReviewRequest extends ReviewOptions, CoverageInputs {
   /** The repository root. */

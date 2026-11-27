@@ -1,10 +1,10 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { isFinding } from '../../main/ts/core/model/finding.js';
-import { definitions } from '../../main/ts/core/model/measurement.js';
-import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
-import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
+import { isFinding } from '@repometry/core/internal/model/finding.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import { workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import { readReport } from '../../main/ts/report/json/validation/report.js';
 
 function scan(sources: Record<string, string>) {

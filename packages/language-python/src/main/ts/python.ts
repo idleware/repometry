@@ -1,8 +1,10 @@
-import type { Node } from 'web-tree-sitter';
-import type { Grammar } from '../language.js';
-import { measures } from '../language.js';
+import { measures } from '@repometry/tree-sitter';
+import type { LanguageUnit as Grammar } from '@repometry/tree-sitter';
+import manifest from '../resources/grammar.json' with { type: 'json' };
 import { pythonSource } from './python-source.js';
 import { pythonSyntax } from './python-syntax.js';
+
+type Node = Parameters<Grammar['name']>[0];
 
 function irrefutable(pattern: Node): boolean {
   const pending = [pattern];
@@ -67,7 +69,8 @@ function tokenKind(text: string, kind: string | undefined): string | undefined {
 
 export const python: Grammar = {
   language: { id: 'python', label: 'Python', color: '#3572a5', extensions: ['.py'], measures: [...measures, 'classes'], syntax: pythonSyntax },
-  asset: new URL('../../../../resources/languages/python/tree-sitter.wasm', import.meta.url),
+  tool: { package: manifest.package, version: manifest.version },
+  asset: new URL('../resources/tree-sitter.wasm', import.meta.url),
   decode: pythonSource, prepareSource: text => text.replace(/\r(?!\n)/g, '\n'),
   trimObservationComments: true, requireNonemptyBlock: 'block',
   columns: 'codepoints', name: node => node.childForFieldName('name')?.text.normalize('NFKC'),

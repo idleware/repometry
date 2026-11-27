@@ -1,36 +1,26 @@
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import type { Node, Parser, Tree } from 'web-tree-sitter';
-import goManifest from '../../../resources/languages/go/grammar.json' with { type: 'json' };
-import pythonManifest from '../../../resources/languages/python/grammar.json' with { type: 'json' };
-import { pluginApi } from '../../core/engine/plugin.js';
-import type { Plugin } from '../../core/engine/plugin.js';
-import { codeStructure } from '../../core/model/code-structure.js';
-import type { SourceFile } from '../../core/model/source.js';
-import { sourceFile } from '../../core/model/snapshot.js';
-import { duplicationSettings } from '../../core/profile/maintainability.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import type { Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructure } from '@repometry/core/internal/model/code-structure.js';
+import type { SourceFile } from '@repometry/core/internal/model/source.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
+import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
 import type { Grammar } from './language.js';
-import { go } from './languages/go.js';
-import { python } from './languages/python.js';
 import { SourceLines } from './source-lines.js';
 import { Structure } from './structure.js';
 import { firstSyntaxIssue } from './syntax-issue.js';
 import { scanClones } from './tokens.js';
 
-const packages = new Map([[go, goManifest], [python, pythonManifest]]);
-const grammars = [...packages.keys()];
-const byExtension = new Map(grammars.flatMap(grammar => grammar.language.extensions!.map(extension => [extension, grammar] as const)));
 const parsers = new Map<Grammar, Promise<Parser>>();
 let initialized: Promise<void> | undefined;
 
-export const treeSitter: Plugin = {
-  id: 'tree-sitter', version: '1.0.0', api: pluginApi, kinds: ['language'],
-  providesLanguages: grammars.map(({ language }) => language),
-  tools: { 'web-tree-sitter': '0.27.2',
-    ...Object.fromEntries([...packages.values()].map(manifest => [manifest.package, manifest.version])) },
-  settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } },
-  produces: [{ contract: codeStructure.id, persistence: 'transient' }],
-  operations: [{
+/** The tree-sitter language plugin for the given language units, which parse in that order of precedence. */
+export function treeSitter(grammars: readonly Grammar[]): Plugin {
+  const byExtension = new Map(grammars.flatMap(grammar => grammar.language.extensions!.map(extension => [extension, grammar] as const)));
+  // At this depth the emitted `execute` keeps the text it had as a module constant: profiles digest that text.
+  const operations: Operation[] = [{
     id: 'parse', role: 'provider', inputs: { file: sourceFile }, output: codeStructure,
     async execute(inputs) {
       const file = inputs.read('file', sourceFile);
@@ -38,12 +28,15 @@ export const treeSitter: Plugin = {
       if (!grammar) throw new Error('No grammar for ' + file.path);
       return inspectFile(file, grammar);
     },
-  }],
-};
-
-export function usedGrammarTools(plugin: Plugin, languages: ReadonlySet<string>) {
-  return Object.fromEntries([...packages].filter(([grammar]) => languages.has(grammar.language.id))
-    .map(([, manifest]) => [manifest.package, plugin.tools?.[manifest.package] ?? manifest.version]));
+  }];
+  return {
+    id: 'tree-sitter', version: '1.0.0', api: pluginApi, kinds: ['language'],
+    providesLanguages: grammars.map(({ language }) => language),
+    tools: { 'web-tree-sitter': '0.27.2', ...Object.fromEntries(grammars.map(({ tool }) => [tool.package, tool.version])) },
+    settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } },
+    produces: [{ contract: codeStructure.id, persistence: 'transient' }],
+    operations,
+  };
 }
 
 async function inspectFile({ path, bytes }: SourceFile, grammar: Grammar) {

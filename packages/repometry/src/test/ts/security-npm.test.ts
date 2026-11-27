@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execute } from '../../main/ts/core/engine/execute.js';
-import { plan } from '../../main/ts/core/engine/plan.js';
-import { findingResult, isFinding } from '../../main/ts/core/model/finding.js';
-import type { Finding } from '../../main/ts/core/model/finding.js';
-import { sourceFile } from '../../main/ts/core/model/snapshot.js';
-import { exclusionMatcher } from '../../main/ts/core/profile/exclusions.js';
+import { execute } from '@repometry/core/internal/engine/execute.js';
+import { plan } from '@repometry/core/internal/engine/plan.js';
+import { findingResult, isFinding } from '@repometry/core/internal/model/finding.js';
+import type { Finding } from '@repometry/core/internal/model/finding.js';
+import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
+import { exclusionMatcher } from '@repometry/core/internal/profile/exclusions.js';
 import { findingsPerRule, npmSupplyChain } from '../../main/ts/plugins/security/npm-supply-chain.js';
 
 const tasks = plan({ plugins: [npmSupplyChain], select: ['npm-supply-chain/scan'], inputs: new Map([['file', sourceFile.id]]) });

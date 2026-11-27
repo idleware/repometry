@@ -1,5 +1,5 @@
-import { coverageGrade, securityGrade } from '../../../core/model/quality-summary.js';
-import type { Grade, QualitySummary } from '../../../core/model/quality-summary.js';
+import { coverageGrade, securityGrade } from '@repometry/core/internal/model/quality-summary.js';
+import type { Grade, QualitySummary } from '@repometry/core/internal/model/quality-summary.js';
 import type { PublicHistoryEntry } from '../../json/wire/public-history-model.js';
 
 const colors: Record<Grade, string> = { A: '#5ec269', B: '#74a83a', C: '#d9a400', D: '#ec8a2c', F: '#db4a3f' };

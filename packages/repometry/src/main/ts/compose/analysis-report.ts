@@ -1,17 +1,17 @@
-import { codeStructure, codeStructures, structureMeasures } from '../core/model/code-structure.js';
+import { codeStructure, codeStructures, structureMeasures } from '@repometry/core/internal/model/code-structure.js';
 import type { ParserPlugin } from './parser-order.js';
-import { definitions } from '../core/model/measurement.js';
-import { debtModel } from '../core/model/quality-summary.js';
-import { reportSchema } from '../core/model/report.js';
-import type { Report } from '../core/model/report.js';
-import { comparePaths, digest, sourceDirectoriesExcluded, textLineCount } from '../core/model/snapshot.js';
-import type { SourceSnapshot } from '../core/model/source.js';
-import { defaultSourceExclusions, generatedSourcePolicy } from '../core/profile/exclusions.js';
-import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
-import type { AnalysisInput } from '../core/usecases/inspect.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { debtModel } from '@repometry/core/internal/model/quality-summary.js';
+import { reportSchema } from '@repometry/core/internal/model/report.js';
+import type { Report } from '@repometry/core/internal/model/report.js';
+import { comparePaths, digest, sourceDirectoriesExcluded, textLineCount } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceSnapshot } from '@repometry/core/internal/model/source.js';
+import { defaultSourceExclusions, generatedSourcePolicy } from '@repometry/core/internal/profile/exclusions.js';
+import { duplicationSettings, structuralRules } from '@repometry/core/internal/profile/maintainability.js';
+import type { AnalysisInput } from '@repometry/core/internal/usecases/inspect.js';
 import type { AnalysisResults } from './analysis-results.js';
 import type { AnalysisSources } from './phases.js';
-import { fileTypeId } from '../core/model/file-types.js';
+import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
 import { builtInGrammarTools } from './built-ins.js';
 
 export const analysisProfile = 'repository/v4';

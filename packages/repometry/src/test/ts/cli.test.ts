@@ -13,9 +13,9 @@ import summaryV1 from '../../main/resources/report/json/repository-summary-v1.sc
 import compactV1 from '../../main/resources/report/json/compact-json-v1.schema.json' with { type: 'json' };
 import fileMetricsV1 from '../../main/resources/report/json/file-metrics-v1.schema.json' with { type: 'json' };
 import reportV2 from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
-import { definitions } from '../../main/ts/core/model/measurement.js';
-import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
-import { defaultSourceExclusions, generatedSourcePolicy } from '../../main/ts/core/profile/exclusions.js';
+import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
+import { defaultSourceExclusions, generatedSourcePolicy } from '@repometry/core/internal/profile/exclusions.js';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';

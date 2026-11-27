@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { normalizeProfile } from '../../core/profile/profile.js';
+import { normalizeProfile } from '@repometry/core/internal/profile/profile.js';
 
 export async function readProfile(file: string | undefined, optional = false) {
   if (file === undefined) return { exclude: [], ignore: [] };

@@ -1,6 +1,6 @@
 import { addedRanges, diffMethod, oid, patchHunks, rawChanges, regularFile, removedRanges, stableDiff } from './changes.js';
 import { GitBlobReader, gitText, gitUtf8 } from './git.js';
-import type { FileLineChange, LineChanges, LineRange } from '../../core/model/changes.js';
+import type { FileLineChange, LineChanges, LineRange } from '@repometry/core/internal/model/changes.js';
 
 /**
  * The changed lines of every regular file between two commits, on both sides, following renames. A binary file, or one

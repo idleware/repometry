@@ -1,9 +1,9 @@
 import { lstat, readdir, realpath, readFile } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, sep } from 'node:path';
-import { comparePaths, isExcludedDirectory, workingSnapshot } from '../../core/model/snapshot.js';
-import type { SourceFile, SourceSnapshot } from '../../core/model/snapshot.js';
-import { isClaimedText, maxClaimedFileBytes } from '../../core/model/source.js';
-import { isGeneratedSource } from '../../core/profile/exclusions.js';
+import { comparePaths, isExcludedDirectory, workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceFile, SourceSnapshot } from '@repometry/core/internal/model/snapshot.js';
+import { isClaimedText, maxClaimedFileBytes } from '@repometry/core/internal/model/source.js';
+import { isGeneratedSource } from '@repometry/core/internal/profile/exclusions.js';
 
 export function containsPath(parent: string, path: string): boolean {
   const rest = relative(parent, path);

@@ -1,7 +1,7 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { join, posix, win32 } from 'node:path';
-import { comparePaths, sourceLineCounts } from '../../core/model/snapshot.js';
-import type { SourceSnapshot } from '../../core/model/source.js';
+import { comparePaths, sourceLineCounts } from '@repometry/core/internal/model/snapshot.js';
+import type { SourceSnapshot } from '@repometry/core/internal/model/source.js';
 
 export interface CoverageSource {
   readonly root: string;

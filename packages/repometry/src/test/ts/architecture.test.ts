@@ -6,13 +6,35 @@ import { parse } from '@babel/parser';
 import { traverseFast } from '@babel/types';
 import type { Node } from '@babel/types';
 import { analysisPhases, diffCoveragePhases } from '../../main/ts/compose/phases.js';
-import { structureMeasures } from '../../main/ts/core/model/code-structure.js';
-import { fileTypes } from '../../main/ts/core/model/file-types.js';
-import { findingCategories } from '../../main/ts/core/model/finding.js';
+import { structureMeasures } from '@repometry/core/internal/model/code-structure.js';
+import { fileTypes } from '@repometry/core/internal/model/file-types.js';
+import { findingCategories } from '@repometry/core/internal/model/finding.js';
 import { builtInPlugins } from '../../main/ts/plugins/built-in.js';
 import summarySchema from '../../main/resources/report/json/repository-summary-v1.schema.json' with { type: 'json' };
 
-const source = resolve('src/main/ts');
+/**
+ * Every package's sources under the module path they had in one tree, so the layer rules below read the same. The rank is
+ * the package direction: a package imports only packages of a lower rank, by name, and declares each in its dependencies.
+ */
+const packages = [
+  { name: '@repometry/core', dir: '../core', prefix: 'core/', rank: 0 },
+  { name: '@repometry/tree-sitter', dir: '../tree-sitter', prefix: 'plugins/language-treesitter/', rank: 1 },
+  { name: '@repometry/language-go', dir: '../language-go', prefix: 'plugins/language-treesitter/languages/go/', rank: 2 },
+  { name: '@repometry/language-python', dir: '../language-python', prefix: 'plugins/language-treesitter/languages/python/', rank: 2 },
+  { name: 'repometry', dir: '.', prefix: '', rank: 3 },
+].map(entry => ({ ...entry, source: resolve(entry.dir, 'src/main/ts'),
+  dependencies: Object.keys((JSON.parse(readFileSync(resolve(entry.dir, 'package.json'), 'utf8')) as
+    { dependencies?: Record<string, string> }).dependencies ?? {}) }));
+type Package = (typeof packages)[number];
+
+/** The package a module path belongs to: the one with the longest matching prefix. */
+function packageOf(file: string): Package {
+  return packages.filter(({ prefix }) => file.startsWith(prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0]!;
+}
+
+const sourceFiles = packages.flatMap(({ source, prefix }) => readdirSync(source, { recursive: true, encoding: 'utf8' })
+  .filter(file => file.endsWith('.ts')).map(file => prefix + file.split('\\').join('/')));
+const readSource = (file: string) => { const owner = packageOf(file); return readFileSync(join(owner.source, file.slice(owner.prefix.length)), 'utf8'); };
 const exceptions = resolve('src/test/resources/architecture/legacy-edges.txt');
 
 const dependencies: Readonly<Record<string, readonly string[]>> = {
@@ -46,7 +68,8 @@ function imports(files: readonly string[]): Edge[] {
   const paths = new Set(files);
   const edges: Edge[] = [];
   for (const from of files) {
-    const code = readFileSync(join(source, from), 'utf8');
+    const code = readSource(from);
+    const owner = packageOf(from);
     const tree = parse(code, { sourceType: 'module', plugins: ['typescript', 'importAttributes'], createImportExpressions: true });
 
     function add(specifier: string | undefined, kind: Edge['kind']): void {
@@ -58,8 +81,21 @@ function imports(files: readonly string[]): Edge[] {
       if (from.startsWith('plugins/') && !from.startsWith('plugins/language-js/')) {
         assert.ok(!specifier.startsWith('@babel/'), `Babel dependency outside the language provider: ${from}`);
       }
+      const named = /^(@repometry\/[^/]+|repometry)(\/.*)?$/.exec(specifier);
+      if (named) {
+        const target = packages.find(({ name }) => name === named[1]);
+        assert.ok(target && target.rank < owner.rank, `${from} imports ${named[1]} against the package direction`);
+        assert.ok(owner.dependencies.includes(target.name), `${from} imports ${target.name}, which ${owner.name} does not declare`);
+        const subpath = named[2] ?? '';
+        const to = subpath === '' ? target.prefix + 'index.ts'
+          : /^\/internal\/.+\.js$/.test(subpath) ? target.prefix + subpath.slice('/internal/'.length, -3) + '.ts' : '';
+        assert.ok(paths.has(to), `Unresolved package import from ${from} to ${specifier}`);
+        edges.push({ from, to, kind });
+        return;
+      }
       if (!specifier.startsWith('.') || !specifier.endsWith('.js')) return;
       const to = posix.normalize(posix.join(dirname(from), specifier.slice(0, -3) + '.ts'));
+      assert.equal(packageOf(to).name, owner.name, `A relative import leaves ${owner.name}: ${from} to ${specifier}`);
       assert.ok(paths.has(to), `Unresolved internal import from ${from} to ${specifier}`);
       edges.push({ from, to, kind });
     }
@@ -111,7 +147,8 @@ function assertAcyclic(files: readonly string[], edges: readonly Edge[]): void {
 }
 
 test('module imports match their declared boundaries and runtime imports are acyclic', () => {
-  const files = readdirSync(source, { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('.ts'));
+  const files = sourceFiles;
+  assert.ok(packages.every(({ prefix }) => files.some(file => packageOf(file).prefix === prefix)), 'a package has no sources');
   const edges = imports(files);
   const actual = [...new Set(edges.filter(edge => !allowed(edge))
     .map(({ from, to, kind }) => `${kind} ${from} → ${to}`))].sort();
@@ -249,7 +286,6 @@ test('the plugin boundary checker passes comments, core vocabulary, longer words
 });
 
 test('core and compose name no built-in plugin and import no plugin module but the composition root', () => {
-  const files = readdirSync(source, { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('.ts'));
-  const found = files.flatMap(file => pluginBoundaryViolations(file, readFileSync(join(source, file), 'utf8')));
+  const found = sourceFiles.flatMap(file => pluginBoundaryViolations(file, readSource(file)));
   assert.deepEqual(found.map(({ file, line, what }) => `${file}:${line}: ${what}`), []);
 });

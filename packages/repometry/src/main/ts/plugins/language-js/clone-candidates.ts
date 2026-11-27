@@ -1,8 +1,8 @@
 import { NODE_FIELDS, VISITOR_KEYS, isFunction, isStatement } from '@babel/types';
 import type { Node } from '@babel/types';
 import { createHash } from 'node:crypto';
-import type { Candidate, CloneSource } from '../../core/model/clone-source.js';
-import { duplicationSettings } from '../../core/profile/maintainability.js';
+import type { Candidate, CloneSource } from '@repometry/core/internal/model/clone-source.js';
+import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
 
 export function cloneCandidates(path: string, ast: Node, codeLines: readonly number[]): CloneSource {
   const candidates: Candidate[] = [];

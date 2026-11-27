@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "target/verification",
+    "declaration": false
+  },
+  "include": ["src/main/ts/**/*.ts", "src/test/ts/**/*.ts"],
+  "exclude": []
+}

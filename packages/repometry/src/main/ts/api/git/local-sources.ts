@@ -1,6 +1,6 @@
-import { utf8 } from '../../core/model/snapshot.js';
-import { validSubjectId } from '../../core/model/report.js';
-import { isSourcePathname } from '../../core/ports/source-provider.js';
+import { utf8 } from '@repometry/core/internal/model/snapshot.js';
+import { validSubjectId } from '@repometry/core/internal/model/report.js';
+import { isSourcePathname } from '@repometry/core/internal/ports/source-provider.js';
 import { cacheRoot } from '../cache/root.js';
 import { GitBlobBatch } from './blob-batch.js';
 import { gitText, gitTreeFiles } from './git.js';
