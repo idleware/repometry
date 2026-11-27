@@ -1,3 +1,9 @@
+## [0.12.0](https://github.com/idleware/repometry/compare/v0.11.0...v0.12.0) (2026-11-27)
+
+### Features
+* feat: parse Go and Python with built-in tree-sitter grammars, no system tools needed ([2772317](https://github.com/idleware/repometry/commit/277231738365c88cb26f0aa5928b680f2d2136ba))
+* feat: choose the parser of each language with the parsers config key ([1260c80](https://github.com/idleware/repometry/commit/1260c801cb643b1f273695d03f53ef0274ea7b3f))
+
 ## [0.11.0](https://github.com/idleware/repometry/compare/v0.10.1...v0.11.0) (2026-11-27)
 
 ### Fixes & improvements
