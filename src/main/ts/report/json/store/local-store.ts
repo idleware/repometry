@@ -21,6 +21,36 @@ const headerStart = `{"schema":"${storedReportSchema}"`;
 // Reports saved before objects carried the same summary header under the compact JSON schema.
 const summaryHeaders = [headerStart, `{"schema":"${compactJsonSchema}"`].map(start => `${start},"summary":`);
 
+async function checkedReportObjects(report: Report): Promise<ReturnType<typeof splitReport>> {
+  const packed = splitReport({ ...report });
+  if (sameReport(report, await restore(packed))) return packed;
+  // A custom JSON representation can change how a value is split.
+  const expected = JSON.stringify(report);
+  const normalized = splitReport(JSON.parse(expected) as Record<string, unknown>);
+  if (JSON.stringify(await restore(normalized)) === expected) return normalized;
+  throw new Error(`The store cannot keep report ${report.subject.id} exactly`);
+}
+
+function restore({ stored, objects }: ReturnType<typeof splitReport>) {
+  const source: ObjectSource = { read: async ids => ids.map(id => JSON.parse(objects.get(id)!) as unknown) };
+  return rebuildReport(stored, source);
+}
+
+function sameReport(report: Report, restored: Readonly<Record<string, unknown>>): boolean {
+  const rows = report.measurements;
+  const restoredRows = restored.measurements;
+  const customJson = (value: object): boolean => typeof (value as { toJSON?: unknown }).toJSON === 'function';
+  if (customJson(report) || customJson(rows) || rows.some(customJson)) return false;
+  if (!Array.isArray(restoredRows) || restoredRows.length !== rows.length) return false;
+  // Arrays with equal JSON chunks have equal JSON as a whole. The placeholder preserves the field order.
+  if (JSON.stringify({ ...report, measurements: null }) !== JSON.stringify({ ...restored, measurements: null })) return false;
+  const chunk = 4096;
+  for (let start = 0; start < rows.length; start += chunk) {
+    if (JSON.stringify(rows.slice(start, start + chunk)) !== JSON.stringify(restoredRows.slice(start, start + chunk))) return false;
+  }
+  return true;
+}
+
 export class LocalReportStore implements ReportStore {
   readonly objects: LocalObjectStore;
   private readonly cache = new ObjectCache();
@@ -36,12 +66,7 @@ export class LocalReportStore implements ReportStore {
     await mkdir(this.directory, { mode: 0o700, recursive: true });
     await ensureDirectory(base);
     await ensureDirectory(folder);
-    const value = JSON.parse(JSON.stringify(report)) as Record<string, unknown>;
-    const { stored, objects } = splitReport(value);
-    const saved: ObjectSource = { read: async ids => ids.map(id => JSON.parse(objects.get(id)!) as unknown) };
-    if (JSON.stringify(await rebuildReport(stored, saved)) !== JSON.stringify(value)) {
-      throw new Error(`The store cannot keep report ${report.subject.id} exactly`);
-    }
+    const { stored, objects } = await checkedReportObjects(report);
     const row = report.subject.kind === 'commit' ? commitSummary(report) : undefined;
     if (row && !validateSummaryRow(row)) throw new Error(`Invalid report summary: ${report.subject.id}`);
     await replaceFile(this.directory, 'manifest.json', `${JSON.stringify(metaManifest, null, 2)}\n`, true);

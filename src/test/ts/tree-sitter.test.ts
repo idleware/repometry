@@ -260,6 +260,9 @@ test('reports similar code while retaining full grades across Go and Python', as
 });
 
 test('parse diagnostics identify the first syntax issue in source coordinates', async () => {
+  await assert.rejects(parse('bare-else.py', 'else:\n'), { message: 'Unexpected syntax at line 1, column 1' });
+  await assert.rejects(parse('missing-if-colon.py', 'if x\n    pass\n'), { message: 'Expected ":" at line 1, column 5' });
+  await assert.rejects(parse('unfinished.py', 'text = "broken\n'), { message: 'Unterminated string at line 1, column 8' });
   await assert.rejects(parse('stray.go', 'package p\nfunc f() {\n x := 1+ )\n}\n'),
     { message: 'Unexpected syntax at line 3, column 10' });
   await assert.rejects(parse('missing-colon.py', 'def c()\n    pass\n'),

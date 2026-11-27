@@ -116,7 +116,7 @@ export function storedObjects(load: (ids: readonly string[]) => Promise<readonly
   };
 }
 
-/** Splits a JSON-normalized report into the commit record and the objects it references. */
+/** Splits a report into the commit record and the objects it references. */
 export function splitReport(report: Row): { readonly stored: StoredReport; readonly objects: ReadonlyMap<string, string> } {
   const objects = new Map<string, string>();
   const put = (value: unknown, path: string): string => {
@@ -131,8 +131,11 @@ export function splitReport(report: Row): { readonly stored: StoredReport; reado
     list: (slot, rows) => Array.isArray(rows) && lists.push([slot, rows]),
     config: () => undefined, definitions: () => undefined, catalog: (key, value) => catalog[key] = value,
   });
-  const paths = [...new Set(lists.flatMap(([, rows]) => rows.flatMap(row => typeof row.path === 'string' ? [row.path] : [])))]
-    .sort(comparePaths);
+  const namedPaths = new Set<string>();
+  for (const [, rows] of lists) {
+    for (const { path } of rows) if (typeof path === 'string') namedPaths.add(path);
+  }
+  const paths = [...namedPaths].sort(comparePaths);
   const index = new Map(paths.map((path, position) => [path, position]));
   const nodes = paths.map((): FileNode => ({}));
   const entries = new Map(lists.map(([slot, rows]) => [slot, liftRows(rows, slot, index, nodes)]));

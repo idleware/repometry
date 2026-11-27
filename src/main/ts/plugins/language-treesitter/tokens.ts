@@ -6,43 +6,59 @@ import type { Grammar } from './language.js';
 import { lowerBound } from './source-lines.js';
 import type { SourceLines, Span } from './source-lines.js';
 
-interface Token extends Span {
-  readonly exact: string;
-  readonly similar: string;
-}
-
-interface ScannedTokens {
-  readonly comments: Span[];
-  readonly ranges: Span[];
-  readonly tokens: Token[];
-}
-
-type Tokenized = Pick<ScannedTokens, 'ranges' | 'tokens'> & ReturnType<SourceLines['classify']>;
-
-export function scanTokens(tree: Tree, source: SourceLines, grammar: Grammar): Tokenized {
+export function scanClones(path: string, tree: Tree, source: SourceLines, grammar: Grammar) {
   const cursor = tree.walk();
   try {
-    const { comments, ranges, tokens } = new TokenScanner(cursor, source, grammar).scan();
-    const lines = source.classify(comments);
-    return lines.codeLines.length < limits.minCodeLines ? { ...lines, ranges: [], tokens: [] } : { ...lines, ranges, tokens };
+    return new TokenScanner(cursor, source, grammar).scan(path);
   } finally {
     cursor.delete();
   }
 }
 
+class FingerprintInput {
+  private bytes = Buffer.allocUnsafe(256);
+  private readonly offsets = [0];
+
+  append(spelling: string): void {
+    const start = this.offsets.at(-1)!;
+    // UTF-8 needs at most three bytes per UTF-16 code unit. Only measure near the buffer boundary.
+    if (start + spelling.length * 3 > this.bytes.length) this.reserve(start, Buffer.byteLength(spelling));
+    this.offsets.push(start + this.bytes.write(spelling, start));
+  }
+
+  private reserve(start: number, needed: number): void {
+    if (start + needed <= this.bytes.length) return;
+    const bytes = Buffer.allocUnsafe(Math.max(start + needed, this.bytes.length * 2));
+    this.bytes.copy(bytes, 0, 0, start);
+    this.bytes = bytes;
+  }
+
+  fingerprint(start: number, end: number): string {
+    return hash('sha256', this.bytes.subarray(this.offsets[start], this.offsets[end]), 'base64url');
+  }
+}
+
 class TokenScanner {
-  private readonly result: ScannedTokens = { comments: [], ranges: [], tokens: [] };
+  private readonly comments: Span[] = [];
+  private readonly ranges: Span[] = [];
+  private readonly starts: number[] = [];
+  private readonly ends: number[] = [];
+  private readonly exact = new FingerprintInput();
+  private readonly similar = new FingerprintInput();
   private readonly collect: boolean;
+  private candidateEnd = 0;
 
   constructor(private readonly cursor: TreeCursor, private readonly source: SourceLines, private readonly grammar: Grammar) {
     this.collect = source.count >= limits.minCodeLines;
   }
 
-  scan(): ScannedTokens {
+  scan(path: string) {
     do {
       if (this.read(this.cursor.nodeType)) continue;
-      if (!this.advance()) return this.result;
+      if (!this.advance()) break;
     } while (true);
+    const lines = this.source.classify(this.comments);
+    return { ...lines, clones: this.cloneSource(path, lines.codeLines) };
   }
 
   private advance(): boolean {
@@ -54,63 +70,63 @@ class TokenScanner {
 
   private read(type: string): boolean {
     if (this.grammar.comments.has(type)) {
-      this.result.comments.push(span(this.cursor));
+      this.comments.push(span(this.cursor));
       return false;
     }
     if (this.grammar.extras.has(type)) return false;
-    // Every declaration, statement and block named by the language table is eligible, except imports.
-    if (this.collect && this.grammar.tokens.candidates.has(type)) this.result.ranges.push(span(this.cursor));
+    if (this.collect && this.grammar.tokens.candidates.has(type)) this.candidate();
     const kind = this.collect ? this.grammar.tokens.kinds.get(type) : undefined;
     if (!kind && this.cursor.gotoFirstChild()) return true;
-    if (this.collect) this.record(type, kind);
+    if (this.candidateEnd) {
+      const start = this.cursor.startIndex;
+      if (start < this.candidateEnd) this.record(start, type, kind);
+    }
     return false;
   }
 
-  private record(type: string, literal: string | undefined): void {
-    const { start, end } = span(this.cursor);
+  private candidate(): void {
+    const range = span(this.cursor);
+    if (range.end - range.start < limits.minNodes) return;
+    if (this.source.line(range.end - 1) - this.source.line(range.start) + 1 < limits.minCodeLines) return;
+    // Only tokens inside ranges that could meet both minima can be part of a fingerprint.
+    this.ranges.push(range);
+    this.candidateEnd = Math.max(this.candidateEnd, range.end);
+  }
+
+  private record(start: number, type: string, literal: string | undefined): void {
+    const end = this.cursor.endIndex;
     const value = this.source.text.slice(start, end);
     if (!value.trim()) return;
     const [spelling, kind] = this.grammar.tokens.normalize?.(type, value, literal) ?? [value, literal];
     // Each spelling is its UTF-16 length, a colon, then the text. A kind is !kind:.
     const exact = spelling.length + ':' + spelling;
-    this.result.tokens.push({ start, end, exact, similar: kind === undefined ? exact : '!' + kind + ':' });
+    this.starts.push(start);
+    this.ends.push(end);
+    this.exact.append(exact);
+    this.similar.append(kind === undefined ? exact : '!' + kind + ':');
+  }
+
+  private cloneSource(path: string, lines: readonly number[]): CloneSource {
+    const candidates: Candidate[] = [];
+    const seen = new Set<string>();
+    for (const range of this.ranges) {
+      const start = lowerBound(this.starts, range.start);
+      const end = lowerBound(this.starts, range.end);
+      const nodes = end - start; // Existing ranking field holds the significant token count.
+      if (nodes < limits.minNodes) continue;
+      const key = start + ':' + end;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const span = { start: this.starts[start]!, end: this.ends[end - 1]! };
+      const { line, endLine } = this.source.position(span);
+      const codeLines = lowerBound(lines, endLine + 1) - lowerBound(lines, line);
+      if (codeLines >= limits.minCodeLines) candidates.push({ ...span, line, endLine, nodes, codeLines,
+        exact: this.exact.fingerprint(start, end), similar: this.similar.fingerprint(start, end) });
+    }
+    return { path, scheme: this.grammar.language.id + '-tokens/v1', codeLines: lines, candidates };
   }
 }
 
 function span({ startIndex: start, endIndex: end }: TreeCursor): Span {
   return { start, end };
-}
-
-function fingerprintBuffer(tokens: readonly Token[], field: 'exact' | 'similar') {
-  const starts = [0];
-  const segments = tokens.map(token => {
-    const segment = token[field];
-    starts.push(starts.at(-1)! + segment.length);
-    return segment;
-  });
-  const text = segments.join('');
-  return (start: number, end: number) => hash('sha256', text.slice(starts[start], starts[end]), 'base64url');
-}
-
-export function cloneSource(path: string, scanned: Tokenized, source: SourceLines, grammar: Grammar): CloneSource {
-  const candidates: Candidate[] = [];
-  const { tokens, ranges, codeLines: lines } = scanned;
-  const offsets = tokens.map(({ start }) => start);
-  const exact = fingerprintBuffer(tokens, 'exact');
-  const similar = fingerprintBuffer(tokens, 'similar');
-  const seen = new Set<string>();
-  for (const range of ranges) {
-    const start = lowerBound(offsets, range.start);
-    const end = lowerBound(offsets, range.end);
-    const nodes = end - start; // Existing ranking field holds the significant token count in the token scheme.
-    if (nodes < limits.minNodes) continue;
-    const key = start + ':' + end;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const span = { start: tokens[start]!.start, end: tokens[end - 1]!.end };
-    const { line, endLine } = source.position(span);
-    const codeLines = lowerBound(lines, endLine + 1) - lowerBound(lines, line);
-    if (codeLines >= limits.minCodeLines) candidates.push({ ...span, line, endLine, nodes, codeLines, exact: exact(start, end), similar: similar(start, end) });
-  }
-  return { path, scheme: grammar.language.id + '-tokens/v1', codeLines: lines, candidates };
 }

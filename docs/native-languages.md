@@ -108,7 +108,7 @@ The parser differs from the compiler's own parser in these ways:
 - Python 2 files, and Python nested deeper than CPython allows, are measured.
 - A few valid but unusual files are rejected with a diagnostic.
 - Duplication fingerprints depend on token-level formatting, such as a trailing comma or adjacent string literals.
-- A very large file needs much memory. A 10 MiB Go file needs about 2.5 GB.
+- A very large file needs much memory: about 110 to 160 MB for each MiB of source. A 1 MiB file needs about 0.3 GB, and a 10 MiB file 1.1 to 1.6 GB.
 
 ## Profile
 

@@ -15,7 +15,7 @@ import { python } from './languages/python.js';
 import { SourceLines } from './source-lines.js';
 import { Structure } from './structure.js';
 import { firstSyntaxIssue } from './syntax-issue.js';
-import { cloneSource, scanTokens } from './tokens.js';
+import { scanClones } from './tokens.js';
 
 const packages = new Map([[go, goManifest], [python, pythonManifest]]);
 const grammars = [...packages.keys()];
@@ -71,10 +71,8 @@ function extract(path: string, grammar: Grammar, source: SourceLines, tree: Tree
     throw new SyntaxError('Expected a ' + grammar.requireFirst.replaceAll('_', ' ') +
       ' at ' + source.location(header ? header.startIndex : 0, grammar.columns));
   }
-  const tokens = scanTokens(tree, source, grammar);
-  const { codeLines, commentLines } = tokens;
-  return { path, ...new Structure(grammar, source, codeLines).measure(root), codeLines, commentLines,
-    clones: cloneSource(path, tokens, source, grammar) };
+  const facts = scanClones(path, tree, source, grammar);
+  return { path, ...new Structure(grammar, source, facts.codeLines).measure(root), ...facts };
 }
 
 function firstHeader(root: Node, grammar: Grammar): Node | null {
