@@ -26,10 +26,12 @@ test('a range argument is BASE..HEAD or BASE.., and anything else is a single re
 test('an unknown revision is one line without git output, unless REPOMETRY_DEBUG is set', async t => {
   const store = await mkdtemp(join(tmpdir(), 'repometry-range-'));
   t.after(() => rm(store, { recursive: true, force: true }));
+  // The CLI names the repository's top level, which is above the package's directory.
+  const repository = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim();
   for (const revision of ['no-such-revision~3', 'no-such-revision..HEAD']) {
     const result = invoke(['analyze', revision, '--store', store]);
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, `repometry: no-such-revision${revision.endsWith('~3') ? '~3' : ''} is not a commit in ${process.cwd()}\n`);
+    assert.equal(result.stderr, `repometry: no-such-revision${revision.endsWith('~3') ? '~3' : ''} is not a commit in ${repository}\n`);
   }
   const debug = spawnSync(process.execPath, [cli, 'analyze', 'no-such-revision', '--store', store],
     { encoding: 'utf8', env: { ...process.env, REPOMETRY_DEBUG: '1' } });

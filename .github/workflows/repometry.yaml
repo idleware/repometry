@@ -40,7 +40,7 @@ jobs:
           FROM_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           status=0
-          node target/main/ts/cli/main.js review "origin/$BASE_REF" --import lcov=target/coverage/lcov.info \
+          node packages/repometry/target/main/ts/cli/main.js review "origin/$BASE_REF" --import lcov=target/coverage/lcov.info \
             --ci github --markdown "$RUNNER_TEMP/review.md" || status=$?
           if [ -f "$RUNNER_TEMP/review.md" ] && [ "$FROM_FORK" = false ]; then
             gh pr comment "$PULL_NUMBER" --edit-last --create-if-none --body-file "$RUNNER_TEMP/review.md"
@@ -88,7 +88,7 @@ jobs:
       # with it, and the report is built from the whole store. The catch-up is a range, which never includes the root
       # commit. Exit code 2 is a partial result, which the log explains.
       - run: |
-          repometry() { node target/main/ts/cli/main.js "$@" || [ $? = 2 ]; }
+          repometry() { node packages/repometry/target/main/ts/cli/main.js "$@" || [ $? = 2 ]; }
           if git rev-parse -q --verify HEAD~2 > /dev/null; then
             repometry analyze "$(git rev-list --first-parent -n 22 HEAD | tail -n 1)..HEAD~1" --store "$RUNNER_TEMP/store" --skip-saved
           fi

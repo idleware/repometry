@@ -1,16 +1,16 @@
 {
-  "$schema": "./src/main/resources/report/json/config-v1.schema.json",
+  "$schema": "./packages/repometry/src/main/resources/report/json/config-v1.schema.json",
   "ignore": [
     {
       "tool": "js-security",
       "rule": "weak-hash",
-      "path": "src/test/**",
+      "path": "packages/repometry/src/test/**",
       "reason": "Tests compute Git object ids, which are SHA-1 by Git's design."
     },
     {
       "tool": "js-security",
       "rule": "http-url",
-      "path": "src/test/**",
+      "path": "packages/repometry/src/test/**",
       "reason": "Lockfile fixtures use http registry URLs on purpose, to test the supply-chain rules."
     }
   ]

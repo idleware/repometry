@@ -1,68 +1,118 @@
 {
-  "name": "repometry",
-  "version": "0.12.1",
-  "description": "Track repository metrics without SaaS",
+  "name": "repometry-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repometry and its plugins",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/idleware/repometry.git"
-  },
-  "homepage": "https://github.com/idleware/repometry#readme",
-  "bugs": {
-    "url": "https://github.com/idleware/repometry/issues"
-  },
-  "keywords": [
-    "repository",
-    "metrics",
-    "coverage",
-    "maintainability",
-    "static-analysis"
-  ],
   "type": "module",
   "engines": {
     "node": ">=24"
   },
-  "bin": {
-    "repometry": "target/main/ts/cli/main.js"
-  },
-  "exports": {
-    ".": {
-      "types": "./target/main/ts/index.d.ts",
-      "default": "./target/main/ts/index.js"
-    },
-    "./plugin": {
-      "types": "./target/main/ts/plugin.d.ts",
-      "default": "./target/main/ts/plugin.js"
-    },
-    "./report": {
-      "types": "./target/main/ts/report.d.ts",
-      "default": "./target/main/ts/report.js"
-    }
-  },
-  "files": [
-    "target/main",
-    "!target/main/**/*.map"
+  "workspaces": [
+    "packages/repometry"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && tsc -p tsconfig.browser.json && node -e \"const fs = require('node:fs'); fs.chmodSync('target/main/ts/cli/main.js', 0o755); fs.cpSync('src/main/resources', 'target/main/resources', { recursive: true })\"",
-    "build:test": "npm run build && node -e \"require('node:fs').rmSync('target/verification', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node -e \"require('node:fs').cpSync('src/main/resources', 'target/verification/main/resources', { recursive: true })\"",
-    "test": "npm run build:test && node --test 'target/verification/test/ts/*.test.js'",
-    "coverage": "npm run build:test && c8 --all --src target/main/ts --src target/verification/main/ts --include 'src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage node --test 'target/verification/test/ts/*.test.js'",
-    "prepack": "npm run build",
-    "release": "npx --yes zx-semrel@1.25.1"
-  },
-  "dependencies": {
-    "@babel/parser": "7.29.15",
-    "@babel/types": "7.29.15",
-    "ajv": "8.20.0",
-    "web-tree-sitter": "0.27.2"
+    "build": "npm run build --workspaces",
+    "test": "npm test --workspaces",
+    "coverage": "npm run build:test --workspaces && c8 --all --src packages/repometry/target/main/ts --src packages/repometry/target/verification/main/ts --include 'packages/*/src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage npm exec --workspaces -- node --test 'target/verification/test/ts/*.test.js'"
   },
   "devDependencies": {
-    "@types/node": "24.19.2",
-    "c8": "12.0.0",
-    "typescript": "7.0.2"
+    "c8": "12.0.0"
+  },
+  "release": {
+    "tagFormat": "pure",
+    "meta": "asset",
+    "populate": {
+      "schemas": {
+        "text": {
+          "type": "string",
+          "pattern": "(?![\\s\\S]*(?:gh[opsur]_|github_pat_|eyJ))[\\s\\S]*"
+        },
+        "secret": {
+          "type": "secret"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "[0-9a-f]{40}"
+        },
+        "repo": {
+          "const": "idleware/repometry"
+        },
+        "repoUrl": {
+          "type": "url",
+          "protocol": "https:",
+          "hostname": "github.com",
+          "pathname": {
+            "pattern": "/idleware/repometry(\\.git)?"
+          },
+          "username": {},
+          "password": {}
+        },
+        "ghApi": {
+          "const": "https://api.github.com"
+        },
+        "registry": {
+          "enum": [
+            "",
+            "https://registry.npmjs.org",
+            "https://registry.npmjs.org/"
+          ]
+        },
+        "oidc": {
+          "const": "true"
+        },
+        "asset": {
+          "const": "asset"
+        }
+      },
+      "channels": {
+        "*": {
+          "*": {
+            "schema": "text"
+          },
+          "repoName": {
+            "schema": "repo"
+          },
+          "repoAuthedUrl": {
+            "schema": "repoUrl"
+          },
+          "ghBasicAuth": {
+            "schema": "*"
+          }
+        },
+        "git-tag": {
+          "sha": {
+            "schema": "sha"
+          }
+        },
+        "npm": {
+          "registry": {
+            "schema": "registry"
+          },
+          "oidc": {
+            "schema": "oidc"
+          }
+        },
+        "gh-release": {
+          "token": {
+            "schema": "secret"
+          },
+          "apiUrl": {
+            "schema": "ghApi"
+          },
+          "assets": {
+            "schema": "*"
+          }
+        },
+        "meta": {
+          "type": {
+            "schema": "asset"
+          },
+          "data": {
+            "schema": "*"
+          }
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,65 @@
+{
+  "name": "repometry",
+  "version": "0.12.1",
+  "description": "Track repository metrics without SaaS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idleware/repometry.git"
+  },
+  "homepage": "https://github.com/idleware/repometry#readme",
+  "bugs": {
+    "url": "https://github.com/idleware/repometry/issues"
+  },
+  "keywords": [
+    "repository",
+    "metrics",
+    "coverage",
+    "maintainability",
+    "static-analysis"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "repometry": "target/main/ts/cli/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./target/main/ts/index.d.ts",
+      "default": "./target/main/ts/index.js"
+    },
+    "./plugin": {
+      "types": "./target/main/ts/plugin.d.ts",
+      "default": "./target/main/ts/plugin.js"
+    },
+    "./report": {
+      "types": "./target/main/ts/report.d.ts",
+      "default": "./target/main/ts/report.js"
+    }
+  },
+  "files": [
+    "target/main",
+    "!target/main/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && tsc -p tsconfig.browser.json && node -e \"const fs = require('node:fs'); fs.chmodSync('target/main/ts/cli/main.js', 0o755); fs.cpSync('src/main/resources', 'target/main/resources', { recursive: true }); for (const file of ['README.md', 'LICENSE']) fs.cpSync('../../' + file, file)\"",
+    "build:test": "npm run build && node -e \"require('node:fs').rmSync('target/verification', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node -e \"require('node:fs').cpSync('src/main/resources', 'target/verification/main/resources', { recursive: true })\"",
+    "test": "npm run build:test && node --test 'target/verification/test/ts/*.test.js'",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.15",
+    "@babel/types": "7.29.15",
+    "ajv": "8.20.0",
+    "web-tree-sitter": "0.27.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

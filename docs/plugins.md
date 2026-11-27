@@ -236,7 +236,7 @@ Repometry rejects a configured plugin with one of these messages:
 
 | Message | Meaning |
 | --- | --- |
-| `Config plugins<path> <reason>` | The entry does not match the [schema](../src/main/resources/config/process-plugins-v1.schema.json). The path names the field. |
+| `Config plugins<path> <reason>` | The entry does not match the [schema](../packages/repometry/src/main/resources/config/process-plugins-v1.schema.json). The path names the field. |
 | `Config plugins/<n>/id duplicates plugin <id>` | The `id` belongs to another configured plugin or a built-in one. |
 | `Config plugins/<n>/command/0 must name an executable` | The command is empty. |
 | `Config plugins/<n>/providesLanguages/<m> must claim an extension or glob` | A language has no selector. |

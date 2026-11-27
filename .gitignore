@@ -1,5 +1,9 @@
-/node_modules/
-/target/
+node_modules/
+target/
+/packages/*/README.md
+/packages/*/LICENSE
+/parcels/
+/zbr-context.json
 /.repometry/
 /.idea/
 /.claude/

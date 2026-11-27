@@ -1,4 +1,9 @@
 # npm trusted publishing is bound to this file name (ci.yaml) and the gh-cicd environment.
+# A push to master releases with zx-bulk-release in three jobs:
+#   receive — trusted, installs nothing: finds what to release and writes the release context
+#   build   — untrusted: installs, builds and tests; on a release it also packs the parcels; holds no secrets
+#   release — trusted, clean runner: verifies the parcels against the context and delivers them
+# A pull request runs build and the Repometry review only.
 name: CI
 
 on:
@@ -9,6 +14,7 @@ on:
 env:
   npm_config_audit: false
   npm_config_fund: false
+  ZBR: zx-bulk-release@4.0.1 # one version for every phase
 
 permissions: {}
 
@@ -19,8 +25,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs before any dependency is installed, so it may hold the token.
+  receive:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # reads the release tags; writes nothing without zbr-rebuild tags
+    outputs:
+      status: ${{ steps.receive.outputs.status }}
+      context: ${{ steps.receive.outputs.context }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # each package's commits since its last release tag
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - id: receive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # also puts the gh-release channel into the context
+        run: |
+          npx --yes "$ZBR" --receive
+          echo "context=$(jq -c . zbr-context.json)" >> "$GITHUB_OUTPUT"
+
   # Runs untrusted dependencies and code, so it holds no secrets.
   build:
+    needs: receive
+    if: ${{ !failure() && !cancelled() }} # also on pull requests, where receive is skipped
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
@@ -38,21 +71,34 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run coverage
-      # The built CLI for the release and Repometry jobs, and the coverage for Repometry.
+      # The built CLI for the Repometry jobs, and the coverage for Repometry.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build
           path: |
-            target/main
+            packages/repometry/target/main
+            packages/repometry/package.json
             target/coverage/lcov.info
             package.json
             package-lock.json
           retention-days: 1
+      - if: needs.receive.outputs.status == 'proceed'
+        env:
+          ZBR_CONTEXT: ${{ needs.receive.outputs.context }}
+        run: echo "$ZBR_CONTEXT" > zbr-context.json
+      - if: needs.receive.outputs.status == 'proceed'
+        run: npx --yes "$ZBR" --pack --no-build --no-test
+      - if: needs.receive.outputs.status == 'proceed'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: parcels
+          path: parcels
+          retention-days: 1
 
-  # Installs nothing: publishes the built artifact with pinned zx-semrel only.
+  # Installs nothing: verifies the parcels against the context from receive, then publishes them.
   release:
-    needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [receive, build]
+    if: needs.receive.outputs.status == 'proceed'
     runs-on: ubuntu-26.04
     environment: gh-cicd
     timeout-minutes: 15
@@ -60,37 +106,33 @@ jobs:
       group: release
       cancel-in-progress: false
     permissions:
-      contents: write # release commit, tag and GitHub release
-      packages: write # GitHub Packages copy
+      contents: write # tags and GitHub releases
       id-token: write # npm OIDC and provenance
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      # Taken from the receive outputs: unlike run artifacts, the build job cannot replace them.
+      - env:
+          ZBR_CONTEXT: ${{ needs.receive.outputs.context }}
+        run: echo "$ZBR_CONTEXT" > zbr-context.json
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: build
-      - run: chmod 755 target/main/ts/cli/main.js # artifacts drop file modes
-      - run: npm run release
+          name: parcels
+          path: parcels-unverified
+      - run: npx --yes "$ZBR" --verify parcels-unverified/:parcels/
+      - run: npx --yes "$ZBR" --deliver
         env:
           NPM_OIDC: true
           npm_config_ignore_scripts: true
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_USER: x-access-token
-          GIT_BRANCH: master
-          GIT_AUTHOR_NAME: ${{ vars.GIT_AUTHOR_NAME }}
-          GIT_AUTHOR_EMAIL: ${{ vars.GIT_AUTHOR_EMAIL }}
           GIT_COMMITTER_NAME: ${{ vars.GIT_COMMITTER_NAME }}
           GIT_COMMITTER_EMAIL: ${{ vars.GIT_COMMITTER_EMAIL }}
-          GIT_SIGN_KEY: ${{ secrets.GIT_SIGN_KEY }}
 
   # Repometry on itself, with this build: the review of a pull request, and on master the history and the report.
   repometry:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }} # receive, which build needs, is skipped on pull requests
     permissions:
       contents: write # the repometry branch, on master
       pages: write # the report on GitHub Pages, on master
