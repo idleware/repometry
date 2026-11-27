@@ -1,3 +1,13 @@
+## [0.11.0](https://github.com/idleware/repometry/compare/v0.10.1...v0.11.0) (2026-11-27)
+
+### Fixes & improvements
+* fix: reserve repository code structure for language providers, add the plugin author page ([4d4590a](https://github.com/idleware/repometry/commit/4d4590a0d2b9b5209d493cbb9155f84c5ce48644))
+* refactor: core and compose select plugin operations by contract, not by name ([92cd051](https://github.com/idleware/repometry/commit/92cd051f2a037ae16a7e4a966709e8c2c4488256))
+
+### Features
+* feat: import cobertura coverage, colour source from declared syntax, drop analyze --ci ([2aa69dc](https://github.com/idleware/repometry/commit/2aa69dcc697e9278e73fb79e685c4ddfdadfd188))
+* feat: cut the CLI to ten commands with one way to do each thing ([26d2021](https://github.com/idleware/repometry/commit/26d202175d0bf97ca4ae1fb5a52d8d65101af167))
+
 ## [0.10.1](https://github.com/idleware/repometry/compare/v0.10.0...v0.10.1) (2026-11-26)
 
 ### Fixes & improvements
