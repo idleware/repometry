@@ -8,8 +8,8 @@ import type { Metric } from './viewer-metrics.js';
 import { availableViews, charted, defaultPeriod, viewLabel, windowOf } from './viewer-trend-data.js';
 import type { Period, TrendData, TrendView } from './viewer-trend-data.js';
 import { periodControl, viewNavigation } from './viewer-trend-nav.js';
-import { debtChanges, seriesPoints, signedDuration, tickUnit, trendLegend } from './viewer-trend-points.js';
-import { renderSeries } from './viewer-trend-series.js';
+import { debtChanges, signedDuration, tickUnit, trendLegend } from './viewer-trend-points.js';
+import { profileLines, profileSwitch, renderSeries } from './viewer-trend-series.js';
 
 export type { Period, TrendData, TrendView } from './viewer-trend-data.js';
 
@@ -34,27 +34,44 @@ interface Page {
 }
 
 /** Remediation time as one bar per inspection's change; returns the legend under the chart. */
-function drawDebtChanges({ data, selected, shown, frame, link }: Page): string {
+function drawDebtChanges({ data, selected, shown, frame, link }: Page): HTMLElement {
   const bars = debtChanges(data, shown, selected.sha, link);
   const chart = element('div', 'chart');
-  frame.append(chart);
-  renderBarChart(chart, bars, { format: signedDuration, compact: data.compact, upIsWorse: true, tickUnit: tickUnit(bars.map(bar => bar.value), 'effort') });
-  return trendLegend(bars);
+  const key = element('p', 'trend-key');
+  const note = element('p', 'detail legend');
+  frame.append(chart, key);
+  const changes = bars.some(bar => bar.boundary);
+  function draw(): void {
+    const lines = profileLines();
+    renderBarChart(chart, bars, { format: signedDuration, compact: data.compact, upIsWorse: true,
+      tickUnit: tickUnit(bars.map(bar => bar.value), 'effort'), boundaries: lines });
+    const text = trendLegend(bars, lines);
+    note.textContent = text;
+    note.hidden = text === '';
+    key.hidden = !changes;
+    key.replaceChildren(...changes ? [profileSwitch(lines, () => {
+      draw();
+      key.querySelector<HTMLButtonElement>('.trend-key-profile')?.focus();
+    })] : []);
+  }
+  draw();
+  return note;
 }
 
 /**
  * The same chart as the Overview: the series, its companion in grey, and a key that switches either line. The title
  * repeats the item chosen in the sidebar; the key under the chart names each line. Returns the legend under the chart.
  */
-function drawSeries({ data, selected, shown, view, frame, link }: Page): string {
+function drawSeries({ data, selected, shown, view, frame, link }: Page): HTMLElement {
   const chart = element('div', 'chart');
   const key = element('p', 'trend-key');
+  const note = element('p', 'detail legend');
   frame.append(chart, key);
   const metric = view as Metric;
-  if (!renderSeries({ chart, key, data, shown, metric, selected: selected.sha, link }, { compact: data.compact })) {
+  if (!renderSeries({ chart, key, note, data, shown, metric, selected: selected.sha, link }, { compact: data.compact })) {
     chart.append(element('p', 'detail empty', 'No measurements for this series in the shown inspections.'));
   }
-  return trendLegend(seriesPoints(data, shown, metric, selected.sha, link));
+  return note;
 }
 
 /** Renders the whole page; returns the slot for the changed-line coverage history when that view is chosen. */
@@ -84,9 +101,9 @@ export function renderTrendsPage(container: HTMLElement, data: TrendData, select
   const page: Page = { data, selected, shown, view, frame, link };
   const slot = view === 'diff-coverage' ? element('div', 'trend-slot') : null;
   if (slot) frame.append(slot);
-  const legend = slot ? '' : view === 'debt-changes' ? drawDebtChanges(page) : drawSeries(page);
+  const legend = slot ? null : view === 'debt-changes' ? drawDebtChanges(page) : drawSeries(page);
   frame.append(element('p', 'detail', definitions[view] ?? definitionOf(view as Metric)));
-  if (legend) frame.append(element('p', 'detail legend', legend));
+  if (legend) frame.append(legend);
   container.replaceChildren(layout);
   return slot;
 }

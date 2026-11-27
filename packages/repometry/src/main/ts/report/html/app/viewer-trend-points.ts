@@ -102,12 +102,12 @@ export function plantFlags(values: readonly (number | null)[], metric: Metric): 
   return best === worst ? none : { best, worst };
 }
 
-/** Only what the chart cannot say by itself; empty when there is nothing to add. */
-export function trendLegend(points: readonly ChartPoint[]): string {
+/** Only what the chart cannot say by itself; empty when there is nothing to add. Profile lines are explained while drawn. */
+export function trendLegend(points: readonly ChartPoint[], profileLines = true): string {
   const parts = [
     points.some(entry => entry.partial && entry.value !== null) ? 'Dashed dots mark partial inspections' : '',
-    points.some(entry => entry.boundary === 'changed') ? 'Dashed lines mark profile changes' : '',
-    points.some(entry => entry.boundary === 'unavailable') ? 'Dotted lines mark missing profile information' : '',
+    profileLines && points.some(entry => entry.boundary === 'changed') ? 'Dashed lines mark profile changes' : '',
+    profileLines && points.some(entry => entry.boundary === 'unavailable') ? 'Dotted lines mark missing profile information' : '',
   ].filter(Boolean);
   return parts.length ? `${parts.join('. ')}.` : '';
 }

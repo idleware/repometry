@@ -37,20 +37,13 @@ export function measuredValues(values: readonly (number | null)[]): number[] {
   return values.flatMap(value => value === null ? [] : [value]);
 }
 
-/** Runs of consecutive measured points, broken only where a measurement is missing; a profile change is marked, not cut. */
+/**
+ * The measured points joined into one line: an inspection with no value is skipped, not a break, since most commits
+ * import no coverage; a profile change does not cut the line either. Fewer than two measurements draw no line.
+ */
 export function segments(values: readonly (number | null)[]): number[][] {
-  const result: number[][] = [];
-  let run: number[] = [];
-  for (const [index, value] of values.entries()) {
-    if (value !== null) {
-      run.push(index);
-      continue;
-    }
-    if (run.length) result.push(run);
-    run = [];
-  }
-  if (run.length) result.push(run);
-  return result.filter(segment => segment.length > 1);
+  const run = values.flatMap((value, index) => value === null ? [] : [index]);
+  return run.length > 1 ? [run] : [];
 }
 
 /**

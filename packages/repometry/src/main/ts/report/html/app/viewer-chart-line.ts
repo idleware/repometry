@@ -3,7 +3,7 @@ import type { LabelContext } from './viewer-chart-label.js';
 import { flagMark, markBoundaries, measuredValues, pointLink, segments, stepPath } from './viewer-chart-points.js';
 import type { ChartPoint } from './viewer-chart-points.js';
 import { niceStep, yAxis } from './viewer-chart-scale.js';
-import { line, setAttributes, svgNode } from './viewer-chart-svg.js';
+import { setAttributes, svgNode } from './viewer-chart-svg.js';
 import type { Layout } from './viewer-chart-svg.js';
 import { placeX } from './viewer-chart-x.js';
 
@@ -20,6 +20,8 @@ export interface ChartOptions {
   readonly height?: number | undefined;
   /** A second series drawn as a grey line behind the first, on its own scale labelled at the right edge. */
   readonly secondary?: SecondarySeries | undefined;
+  /** Draw a dashed line where the inspection profile changed; off unless asked for. */
+  readonly boundaries?: boolean;
 }
 
 export interface SecondarySeries {
@@ -58,14 +60,15 @@ function drawSecondary(svg: SVGSVGElement, layout: Layout, secondary: SecondaryS
 
 /**
  * A dot per commit is noise once commits sit close together: the line carries the curve, and a dot marks only what
- * says something (the selected and the last commit, flags, and a measurement with no neighbour to draw a line to).
+ * says something (the selected and the last commit, flags, and a lone measurement with no line to join). A profile
+ * change is no reason for a dot, and an inspection without a value gets none.
  * Hover and the keyboard move one dot along the line instead. Only a short, sparse series keeps a dot per commit.
  */
-function marked(points: readonly ChartPoint[], index: number, sparse: boolean): boolean {
+export function marked(points: readonly ChartPoint[], index: number, sparse: boolean): boolean {
   const point = points[index]!;
-  if (sparse || point.current || index === points.length - 1) return true;
-  if (point.flag || point.boundary) return true;
-  return point.value !== null && points[index - 1]?.value == null && points[index + 1]?.value == null;
+  if (point.value === null) return false;
+  if (sparse || point.current || index === points.length - 1 || point.flag) return true;
+  return points.filter(entry => entry.value !== null).length < 2;
 }
 
 function pointMarks(point: ChartPoint, cx: number, cy: number): SVGElement[] {
@@ -88,21 +91,20 @@ function drawMarks(svg: SVGSVGElement, layout: Layout, points: readonly ChartPoi
   for (const [index, point] of points.entries()) {
     if (!marked(points, index, sparse)) continue;
     const link = pointLink(point, index);
-    if (point.value === null) link.append(line('tc-missing-mark', { x1: x(index), x2: x(index), y1: axis - 7, y2: axis }));
-    else link.append(...pointMarks(point, x(index), y(point.value)));
-    if (point.value !== null && index === labelled) link.append(valueLabel(context, index));
+    link.append(...pointMarks(point, x(index), y(point.value!)));
+    if (index === labelled) link.append(valueLabel(context, index));
     svg.append(link);
   }
 }
 
 export function lineChart(svg: SVGSVGElement, layout: Layout, points: readonly ChartPoint[],
-  { format, ratio, compact, tickUnit = 1, labelCurrent = true, secondary }: ChartOptions): void {
+  { format, ratio, compact, tickUnit = 1, labelCurrent = true, secondary, boundaries = false }: ChartOptions): void {
   const second = secondary && secondScale(secondary);
   const y = yAxis(svg, layout, { values: measuredValues(points.map(point => point.value)), ratio, count: compact ? 3 : 4, format, tickUnit,
     zero: false, rightLabels: second?.labels });
   placeX(svg, layout, points);
   const x = (index: number) => layout.xs[index]!;
-  markBoundaries(svg, layout, points);
+  if (boundaries) markBoundaries(svg, layout, points);
   if (secondary && second!.high > 0) drawSecondary(svg, layout, secondary, second!.high, x);
   for (const segment of segments(points.map(point => point.value))) {
     const path = svgNode('path', 'tc-line');

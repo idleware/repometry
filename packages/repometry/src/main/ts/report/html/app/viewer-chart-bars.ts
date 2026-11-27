@@ -12,6 +12,8 @@ export interface BarOptions {
   readonly upIsWorse: boolean;
   /** Round tick values to this unit, as for line charts. */
   readonly tickUnit?: number | undefined;
+  /** Draw a dashed line where the inspection profile changed; off unless asked for. */
+  readonly boundaries?: boolean;
 }
 
 interface BarContext extends BarOptions {
@@ -62,7 +64,7 @@ export function barChart(svg: SVGSVGElement, layout: Layout, points: readonly Ch
   const y = yAxis(svg, layout, { values: measuredValues(points.map(point => point.value)), ratio: false, count: options.compact ? 3 : 4,
     format: options.format, tickUnit: options.tickUnit ?? 1, zero: true });
   placeX(svg, layout, points);
-  markBoundaries(svg, layout, points);
+  if (options.boundaries) markBoundaries(svg, layout, points);
   const x = (index: number) => layout.xs[index]!;
   layout.ys = points.map(point => point.value === null ? null : y(point.value));
   // In a long history the zero line already says "no change" and "not measured"; only bars that moved are drawn.

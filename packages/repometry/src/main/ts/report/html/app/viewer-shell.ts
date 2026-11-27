@@ -9,7 +9,6 @@ import { href, pages } from './viewer-route.js';
 import type { Page, Route } from './viewer-route.js';
 import { charted, stableWindow } from './viewer-trend-data.js';
 import type { TrendData } from './viewer-trend-data.js';
-import { seriesPoints, trendLegend } from './viewer-trend-points.js';
 import { renderSeries } from './viewer-trend-series.js';
 
 /** The area the Overview opens on: maintainability where it was measured, else coverage, else complexity. */
@@ -91,18 +90,15 @@ export function renderTrend(data: TrendData, selected: PublicHistoryEntry, metri
   const shown = charted(data.reports.slice(start, end).reverse());
   const link = (sha: string) => href({ page: 'overview', sha });
   const chart = byId('chart');
-  const hasData = renderSeries({ chart, key: byId('trend-key'), data, shown, metric, selected: selected.sha, link },
+  const hasData = renderSeries({ chart, key: byId('trend-key'), note: byId('trend-detail'), data, shown, metric, selected: selected.sha, link },
     { compact, height: compact ? undefined : 296, labelCurrent: false });
   chart.hidden = !hasData;
   byId('trend-empty').hidden = hasData;
   // With no chart, its empty line is the panel's one statement: no key, no reading notes, no second "not measured".
   byId('trend').dataset.empty = String(!hasData);
-  const points = seriesPoints(data, shown, metric, selected.sha, link);
   // The figures under the chart state the value and its change, so the chart is named for screen readers only.
   byId('trend-title').textContent = `${labelOf(metric)} by commit`;
-  const legend = trendLegend(points);
-  byId('trend-detail').textContent = legend;
-  byId('trend-detail').hidden = legend === '' || !hasData;
+  if (!hasData) byId('trend-detail').hidden = true;
 }
 
 export async function readOptional<T>(path: string): Promise<T | null> {
