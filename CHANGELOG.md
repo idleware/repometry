@@ -1,3 +1,8 @@
+## [0.12.1](https://github.com/idleware/repometry/compare/v0.12.0...v0.12.1) (2026-11-27)
+
+### Fixes & improvements
+* perf: cut peak memory on very large Go and Python files ([5208afe](https://github.com/idleware/repometry/commit/5208afeb202c6520562a2d1dbf63e3e30ef2dbbd))
+
 ## [0.12.0](https://github.com/idleware/repometry/compare/v0.11.0...v0.12.0) (2026-11-27)
 
 ### Features
