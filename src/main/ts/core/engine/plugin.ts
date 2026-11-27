@@ -18,7 +18,7 @@ export interface Product {
 
 export interface InspectionInputs {
   read<T>(port: string, contract: DataContract<T>): T;
-  emitDiagnostic?(message: string): void;
+  emitDiagnostic?(message: string, path?: string): void;
 }
 
 export interface Operation {

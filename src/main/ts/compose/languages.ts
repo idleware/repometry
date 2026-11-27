@@ -5,10 +5,10 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { LanguageDisplay, LanguageSyntax } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
-import { nativeLanguagePlugins, nativeLanguageSyntax } from './native-language-plugins.js';
+import { nativeLanguagePlugins } from './native-language-plugins.js';
 import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { restrictStructureMeasures } from './structure-measures.js';
-import { babelProvider } from '../plugins/language-js/babel-provider.js';
+import { builtInPlugins, hostLanguages } from './built-ins.js';
 
 export interface LanguageProvider {
   readonly plugin: Plugin;
@@ -19,6 +19,7 @@ export interface LanguageProvider {
 }
 
 export const defaultLanguages = languageRegistry([], false);
+export type LanguageRegistry = ReturnType<typeof languageRegistry>;
 
 export function languageRegistry(plugins: readonly Plugin[], includeNative = true): {
   select(path: string): LanguageProvider | undefined;
@@ -40,7 +41,7 @@ export function languageRegistry(plugins: readonly Plugin[], includeNative = tru
   const unavailable = native.filter(plugin => plugin.unavailableReason !== undefined).flatMap(plugin => plugin.providesLanguages ?? []);
   const skippedClaims = unavailable.map(claim => claimMatcher(claim));
   const enabled = native.filter(plugin => plugin.unavailableReason === undefined);
-  const entries = [babelProvider, ...languagePlugins, ...enabled].map(plugin => {
+  const entries = [...builtInPlugins.filter(plugin => plugin.kinds.includes('language')), ...languagePlugins, ...enabled].map(plugin => {
     const operations = plugin.operations.filter(operation => operation.role === 'provider'
       && operation.output.id === (operation.scope === 'repository' ? codeStructures.id : codeStructure.id));
     const [operation] = operations;
@@ -70,7 +71,7 @@ export function languageRegistry(plugins: readonly Plugin[], includeNative = tru
   const providers = entries.map(({ provider }) => provider);
   const declared = providers.flatMap(({ plugin }) => plugin.providesLanguages ?? []);
   const catalog = declared.map(({ id, label, color }) => ({ id, label, ...(color === undefined ? {} : { color }) }));
-  const syntaxById = new Map(nativeLanguageSyntax);
+  const syntaxById = new Map(hostLanguages.map(({ language, syntax }) => [language, syntax]));
   for (const { id, syntax } of declared) if (syntax !== undefined) syntaxById.set(id, syntax);
   if (new Set(catalog.map(({ id }) => id)).size !== catalog.length) throw new Error('Duplicate provided language ID');
   return { select, isSource: path => select(path) !== undefined || skipped(path), id: path => select(path)?.language(path) ?? fileTypeId(path), extensions, globs,

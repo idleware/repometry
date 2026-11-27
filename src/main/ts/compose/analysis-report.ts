@@ -10,8 +10,7 @@ import { defaultSourceExclusions, generatedSourcePolicy } from '../core/profile/
 import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
 import type { AnalysisInput } from '../core/usecases/inspect.js';
 import type { AnalysisResults } from './analysis-results.js';
-import { defaultProvider } from './analysis-sources.js';
-import type { AnalysisSources } from './analysis-sources.js';
+import type { AnalysisSources } from './phases.js';
 import { fileTypeId } from '../core/model/file-types.js';
 
 export const analysisProfile = 'repository/v3';
@@ -51,14 +50,14 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
 }
 
 function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], coverage }: AnalysisInput,
-  { languages, claimedPlugins, plugins }: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
-  const securityScanners = results.securityScanners(claimedPlugins);
+  { languages, plugins }: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
+  const securityScanners = results.securityScanners(plugins);
   return {
     profile: analysisProfile, mode: snapshot.subject.kind,
     source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
-    parser: defaultProvider.plugin.settings,
+    parser: languages.providers[0]!.plugin.settings,
     maintainability: { structuralRules, duplication: duplicationSettings, debtModel, remediation: 'nonoverlapping-complexity/v1' },
     coverage: coverage === undefined ? null : { inputDigest: digest(coverage.text), pathBase: coverage.sourceRoot,
       merge: 'any-hit', hitCounts: 'sum',

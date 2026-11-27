@@ -1,3 +1,4 @@
+import type { DataContract } from '../engine/plugin.js';
 import { isRecord } from './plugin-data.js';
 
 export interface Candidate {
@@ -34,3 +35,8 @@ export function isCloneSource(value: unknown): value is CloneSource {
     && value.codeLines.every((line: unknown, index, lines) => isCount(line) && line > (lines[index - 1] ?? 0))
     && Array.isArray(value.candidates) && value.candidates.every(isCandidate);
 }
+
+export const cloneSources: DataContract<readonly CloneSource[]> = {
+  id: 'repometry.clone-sources/v1',
+  accepts: (value): value is readonly CloneSource[] => Array.isArray(value) && value.every(isCloneSource),
+};

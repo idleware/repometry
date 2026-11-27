@@ -10,7 +10,7 @@ import type { ProvidedLanguage } from '../core/model/language.js';
 import type { JsonValue } from '../core/model/plugin-data.js';
 import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
 import { languageRegistry } from './languages.js';
-import { builtInPluginIds } from './plugin-list.js';
+import { builtInPluginIds } from './built-ins.js';
 
 type Selectors = Pick<FileClaims, 'extensions' | 'globs'>;
 

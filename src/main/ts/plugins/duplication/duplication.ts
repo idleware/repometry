@@ -1,22 +1,18 @@
 import { pluginApi } from '../../core/engine/plugin.js';
-import type { DataContract, Plugin } from '../../core/engine/plugin.js';
+import type { Plugin } from '../../core/engine/plugin.js';
 import { comparePaths } from '../../core/model/snapshot.js';
 import { findingResult } from '../../core/model/finding.js';
 import type { Finding, FindingLocation, FindingResult } from '../../core/model/finding.js';
 import { definitions } from '../../core/model/measurement.js';
 
-import { isCloneSource } from '../../core/model/clone-source.js';
+import { cloneSources } from '../../core/model/clone-source.js';
 import type { Candidate, CloneSource } from '../../core/model/clone-source.js';
 import { duplicationSettings } from '../../core/profile/maintainability.js';
-
-const cloneSources: DataContract<readonly CloneSource[]> = {
-  id: 'repometry.clone-sources/v1',
-  accepts: (value): value is readonly CloneSource[] => Array.isArray(value) && value.every(isCloneSource),
-};
 
 export const duplication: Plugin = {
   id: 'duplication', version: '1.0.0', api: pluginApi,
   kinds: ['analysis'],
+  rules: [{ id: 'identical-code', category: 'duplication' }, { id: 'similar-code', category: 'duplication' }],
   produces: [{ contract: findingResult.id, persistence: 'report', metrics: [
     { id: definitions.duplicatedLines, label: 'Duplicated lines', unit: 'count', scope: 'file', aggregate: 'sum', better: 'lower',
       group: 'Maintainability' },
@@ -26,8 +22,6 @@ export const duplication: Plugin = {
     execute(inputs) { return detectClones(inputs.read('sources', cloneSources)); },
   }],
 };
-
-export const duplicationInput = cloneSources;
 
 interface Occurrence extends Candidate { readonly path: string }
 

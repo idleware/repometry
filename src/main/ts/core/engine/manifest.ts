@@ -1,6 +1,7 @@
 import { isRecord } from './plugin.js';
 import type { MetricDescriptor, Plugin, ProductDeclaration, RuleDescriptor } from './plugin.js';
-import { definitions } from '../model/measurement.js';
+import { findingResult } from '../model/finding.js';
+import { definitions, measurements } from '../model/measurement.js';
 import { structureMeasures } from '../model/code-structure.js';
 import { isLanguageDisplay, isLanguageSyntax } from '../model/language.js';
 
@@ -11,16 +12,6 @@ const scopes = new Set(['repository', 'file', 'function']);
 const aggregates = new Set(['sum', 'max', 'none']);
 const directions = new Set(['lower', 'higher', 'none']);
 const coreMetrics = new Set<string>(Object.values(definitions));
-const coreProducts = new Set([
-  'repometry.measurements/v1', 'repometry.findings-and-measurements/v1',
-  'repometry.maintainability-file/v1', 'repometry.coverage-result/v1',
-  'repometry.source-locator/v1',
-]);
-
-export function isCoreReportProduct(contract: string): boolean {
-  return coreProducts.has(contract);
-}
-
 export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDeclaration> {
   const { id, produces, rules } = manifestDeclarations(plugin);
   const products = new Map<string, ProductDeclaration>();
@@ -29,8 +20,9 @@ export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDec
     if (!isRecord(product) || !text(product.contract) || !text(product.persistence) || !persistence.has(product.persistence)
       || products.has(product.contract)) throw new Error(`Invalid or duplicate product for plugin ${id}`);
     const { contract, schema, metrics } = product;
-    if (schema === undefined ? product.persistence !== 'transient' && !isCoreReportProduct(contract)
-      : typeof schema !== 'boolean' && !isRecord(schema)) {
+    // Only rows need no schema: the core row contracts, or a report product that declares its metrics.
+    const rows = [measurements.id, findingResult.id].includes(contract) || (product.persistence === 'report' && metrics !== undefined);
+    if (schema === undefined ? product.persistence !== 'transient' && !rows : typeof schema !== 'boolean' && !isRecord(schema)) {
       throw new Error(`Missing or invalid product schema for ${contract} in plugin ${id}`);
     }
     if (metrics !== undefined && (!Array.isArray(metrics) || !metrics.every(isMetricDescriptor))) {

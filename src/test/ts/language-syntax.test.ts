@@ -11,7 +11,7 @@ import catalogSchema from '../../main/resources/report/json/metric-catalog-v1.sc
 import reportJsonSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
 import { defaultLanguages, languageRegistry } from '../../main/ts/compose/languages.js';
-import { nativeLanguageSyntax } from '../../main/ts/compose/native-language-plugins.js';
+import { hostLanguages } from '../../main/ts/plugins/built-in.js';
 import { pluginApi, codeStructure, sourceFile } from '../../main/ts/plugin.js';
 import type { LanguageSyntax, Plugin } from '../../main/ts/plugin.js';
 import { isLanguageSyntax } from '../../main/ts/core/model/language.js';
@@ -59,7 +59,7 @@ test('rendering old reports attaches built-in syntax and falls back by language 
     ].map(file => ({ ...file, lines: 1, analysed: true })) },
   };
   const expected = new Map([['javascript', jsSyntax], ['typescript', jsSyntax],
-    ['go', nativeLanguageSyntax.get('go')], ['python', nativeLanguageSyntax.get('python')]]);
+    ...hostLanguages.map(({ language, syntax }) => [language, syntax] as const)]);
   const lookup = languageRegistry([provider('go', '.go')], false);
   for (const languages of [defaultLanguages, lookup]) {
     const entries = inspectionAsset(report, { languages }).inspection.metrics.languages!;

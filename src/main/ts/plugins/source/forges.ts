@@ -4,7 +4,7 @@ import type { SourceLocator } from '../../core/model/source-locator.js';
 
 const manifest = {
   api: pluginApi, version: '1.0.0', kinds: ['source'],
-  operations: [], produces: [{ contract: 'repometry.source-locator/v1', persistence: 'report' }],
+  operations: [], produces: [{ contract: 'repometry.source-locator/v1', persistence: 'transient' }],
 } as const;
 
 export const localSource: SourcePlugin = {

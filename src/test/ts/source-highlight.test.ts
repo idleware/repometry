@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nativeLanguageSyntax } from '../../main/ts/compose/native-language-plugins.js';
+import { hostLanguages } from '../../main/ts/plugins/built-in.js';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { languageIdOf, syntaxOf, useLanguages } from '../../main/ts/report/html/app/viewer-languages.js';
 import { tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
 import type { LanguageSyntax } from '../../main/ts/report/json/wire/file-metrics-model.js';
 
+const nativeLanguageSyntax = new Map(hostLanguages.map(({ language, syntax }) => [language, syntax]));
 const goSyntax = nativeLanguageSyntax.get('go')!;
 const pythonSyntax = nativeLanguageSyntax.get('python')!;
 

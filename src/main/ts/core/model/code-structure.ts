@@ -5,7 +5,7 @@ import type { CloneSource } from './clone-source.js';
 import { isMergedLineRanges } from './source.js';
 import type { SourceLineRange } from './source.js';
 
-export const structuralCheckIds = [
+const structuralCheckIds = [
   'function-parameters', 'return-statements', 'boolean-logic', 'nested-control-flow',
   'function-complexity', 'file-complexity',
 ] as const;
@@ -111,3 +111,6 @@ export const codeStructures: DataContract<readonly CodeStructure[]> = {
   accepts: (value): value is readonly CodeStructure[] => Array.isArray(value) && value.every(codeStructure.accepts)
     && new Set(value.map(({ path }) => path)).size === value.length,
 };
+
+/** The structure measure that rules of a finding category need. Without it, a file skips those rules. */
+export const ruleCategoryMeasures: Readonly<Partial<Record<string, StructureMeasure>>> = { structure: 'structuralRules', duplication: 'duplication' };

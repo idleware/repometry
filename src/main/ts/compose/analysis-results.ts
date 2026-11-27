@@ -6,7 +6,6 @@ import type { Finding } from '../core/model/finding.js';
 import type { Measurement } from '../core/model/measurement.js';
 import type { StructureMeasure } from '../core/model/code-structure.js';
 import type { Diagnostic, Report } from '../core/model/report.js';
-import { inspectionKeys } from './analysis-sources.js';
 
 export class AnalysisResults {
   readonly measurements: Measurement[] = [];
@@ -24,13 +23,13 @@ export class AnalysisResults {
   private readonly securityOperations: ReadonlyMap<string, string>;
   private readonly usedPlans = new Map<string, ReturnType<typeof operationProvenance>>();
 
-  constructor(plugins: readonly Plugin[], claimed: readonly Plugin[], oversized: readonly string[]) {
+  constructor(plugins: readonly Plugin[], oversized: readonly string[]) {
     this.products = new ReportProducts(plugins);
     this.diagnostics = oversized.map(oversizedClaim);
     this.scanOnly = new Set(plugins.filter(plugin => plugin.claims?.scanOnly).flatMap(({ id, operations }) =>
       operations.map(operation => `${id}/${operation.id}`)));
-    this.securityOperations = new Map(claimed.filter(plugin => plugin.kinds.includes('security')).flatMap(plugin =>
-      inspectionKeys(plugin).map(key => [key, plugin.id] as const)));
+    this.securityOperations = new Map(plugins.filter(plugin => plugin.kinds.includes('security')).flatMap(plugin =>
+      plugin.operations.filter(({ role }) => role === 'inspection').map(({ id }) => [`${plugin.id}/${id}`, plugin.id] as const)));
   }
 
   remember(task: PlannedOperation, syntaxProvider?: string): void {
@@ -67,9 +66,9 @@ export class AnalysisResults {
     }
   }
 
-  private recordInspection(task: PlannedOperation, messages: readonly string[], path?: string, paths?: readonly string[]): void {
-    for (const message of messages) this.diagnostics.push({ operation: task.key, state: 'partial', message,
-      ...(path === undefined ? {} : { path }) });
+  private recordInspection(task: PlannedOperation, messages: readonly { message: string; path?: string }[], path?: string,
+    paths?: readonly string[]): void {
+    for (const { message, path: own = path } of messages) this.diagnostics.push({ operation: task.key, state: 'partial', ...(own === undefined ? {} : { path: own }), message });
     const scanner = this.securityOperations.get(task.key);
     if (scanner) this.scanned.add(scanner);
     if (task.operation.role !== 'inspection' || (path === undefined && !paths?.length)) return;

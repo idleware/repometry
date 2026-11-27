@@ -1,6 +1,7 @@
 import type { LineChanges } from '../model/changes.js';
 import { pullReviewSchema } from '../model/pull-review.js';
 import type { PullReview, ReviewReason } from '../model/pull-review.js';
+import { isRecord } from '../model/plugin-data.js';
 import type { Diagnostic, Report } from '../model/report.js';
 import { classifyIssues, debtEffect } from './review-effect.js';
 import type { SourceLines } from './review-effect.js';
@@ -27,7 +28,7 @@ export interface ReviewInputs {
 }
 
 export const coverageDefaults = { minimumPercent: 80, minimumLines: 20 } as const;
-const ignoredOperations = new Set(['lcov/import', 'git/churn', 'source/claims']);
+const hostOperations = new Set(['git/churn', 'source/claims']);
 const settingsNote = 'This change edits Repometry settings, which can hide issues from this check.';
 
 export function projectReview(options: ReviewOptions, inputs: ReviewInputs): PullReview {
@@ -98,11 +99,19 @@ function ranges(path: string, lines: readonly number[]): { path: string; first: 
   return merged;
 }
 
+/** The operations that read the host's coverage input, which their stored records name as the external port `lcov`. */
+function coverageImporters({ appliedConfig }: Report): ReadonlySet<unknown> {
+  const records: unknown[] = Array.isArray(appliedConfig.operations) ? appliedConfig.operations : [];
+  return new Set(records.flatMap(record => isRecord(record) && isRecord(record.inputs)
+    && Object.values(record.inputs).some(input => isRecord(input) && input.external === 'lcov') ? [record.key] : []));
+}
+
 /** Failures on the head only leave the check unmeasured. Failures on both sides, and skipped large files, are notes. */
 function diagnose({ base, head, changes }: ReviewInputs): { unmeasured: ReviewReason[]; notes: ReviewReason[] } {
   const changed = new Set(changes.files.flatMap(file => file.path === null ? [] : [file.path]));
   const failing = (diagnostic: Diagnostic) => diagnostic.state === 'failed' || diagnostic.state === 'blocked';
   const failedOnBase = new Set(base.diagnostics.filter(failing).map(({ operation }) => operation));
+  const coverageImports = coverageImporters(head);
   const unmeasured: ReviewReason[] = [];
   const notes: ReviewReason[] = [];
   const brokenPaths = new Set(head.diagnostics.filter(item => item.state === 'failed' && item.path !== undefined).map(item => item.path));
@@ -113,7 +122,7 @@ function diagnose({ base, head, changes }: ReviewInputs): { unmeasured: ReviewRe
       message: diagnostic.message };
     if (diagnostic.operation === 'source/claims') {
       if (diagnostic.path !== undefined && changed.has(diagnostic.path)) notes.push(reason);
-    } else if (ignoredOperations.has(diagnostic.operation) || !failing(diagnostic)) {
+    } else if (hostOperations.has(diagnostic.operation) || coverageImports.has(diagnostic.operation) || !failing(diagnostic)) {
       continue;
     } else if (failedOnBase.has(diagnostic.operation) && (diagnostic.path === undefined || !changed.has(diagnostic.path))) {
       notes.push(reason);

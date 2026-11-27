@@ -4,7 +4,7 @@ import type { DataContract, InspectionInputs, Product } from './plugin.js';
 import type { PlannedOperation } from './plan.js';
 
 export type Outcome =
-  | { readonly state: 'completed'; readonly product: Product; readonly diagnostics?: readonly string[] }
+  | { readonly state: 'completed'; readonly product: Product; readonly diagnostics?: readonly { message: string; path?: string }[] }
   | { readonly state: 'failed' | 'blocked'; readonly reason: string };
 
 export async function execute(plan: readonly PlannedOperation[], external: ReadonlyMap<string, Product>,
@@ -35,7 +35,7 @@ async function runTask(task: PlannedOperation, inputs: ReadonlyMap<string, Produ
     const key = cache && operationCacheKey(task, inputs, cache.configurationDigest);
     const hit = key && cache ? await readCachedOperation(cache.store, key, task) : undefined;
     if (hit) return { state: 'completed', product: hit };
-    const diagnostics: string[] = [];
+    const diagnostics: { message: string; path?: string }[] = [];
     const context: InspectionInputs = {
       read: (port, contract) => {
         if (!Object.hasOwn(operation.inputs, port) || operation.inputs[port]?.id !== contract.id) {
@@ -43,7 +43,7 @@ async function runTask(task: PlannedOperation, inputs: ReadonlyMap<string, Produ
         }
         return readInput(inputs, port, contract);
       },
-      emitDiagnostic: message => diagnostics.push(message),
+      emitDiagnostic: (message, path) => diagnostics.push(path === undefined ? { message } : { message, path }),
     };
     const value = await operation.execute(context);
     const { output } = operation;

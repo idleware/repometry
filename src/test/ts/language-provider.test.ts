@@ -18,8 +18,10 @@ import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
 import { sourceFile, sourceFiles, workingSnapshot } from '../../main/ts/core/model/snapshot.js';
 import type { ToolRunner } from '../../main/ts/core/ports/tool-runner.js';
-import { fileQuality, maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
+import { maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
+import { findingResult } from '../../main/ts/core/model/finding.js';
 import { structure } from '../../main/ts/plugins/structure/structure.js';
+import { unmeasuredStructure } from '../../main/ts/compose/structure-measures.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
@@ -53,7 +55,7 @@ test('structure and maintainability consume facts from a language provider witho
     definition: definitions.complexity, target: 'function', path: 'fixture.js', line: 2, column: 1, name: 'choose', value: 4,
   }]);
   const quality = results.get('maintainability/file');
-  assert.ok(quality?.state === 'completed' && fileQuality.accepts(quality.product.value));
+  assert.ok(quality?.state === 'completed' && findingResult.accepts(quality.product.value));
   assert.equal(quality.product.value.findings[0]?.effortMinutes, 20);
   assert.equal(quality.product.value.measurements.find(row => row.definition === definitions.codeLines)?.value, 7);
 });
@@ -237,6 +239,39 @@ test('the structure contract accepts anchors and rejects empty ones', () => {
     observations: [{ rule: 'function-complexity', value: 1, label: 'run · Cognitive complexity', anchor }] });
   assert.equal(codeStructure.accepts(facts('run')), true);
   assert.equal(codeStructure.accepts(facts('')), false);
+});
+
+test('Babel structures measure everything for JavaScript and TypeScript', async () => {
+  const sources = { 'fixture.js': 'export function add(a, b) {\n  // sum\n  return a + b;\n}\n',
+    'fixture.ts': 'export class Box<T> {\n  constructor(readonly value: T) {}\n  get(): T { return this.value; }\n}\n' };
+  for (const [path, text] of Object.entries(sources)) {
+    const file = { path, bytes: new TextEncoder().encode(text) };
+    const facts = await babelProvider.operations[0]!.execute({ read: () => file as never });
+    assert.ok(codeStructure.accepts(facts));
+    assert.deepEqual(unmeasuredStructure(facts), [], path);
+  }
+});
+
+test('every plugin with rules in a category skips them on files whose structure lacks that measure', async () => {
+  const path = 'partial.fixture';
+  const provider: Plugin = {
+    id: 'partial-provider', version: '1.0.0', api: pluginApi, kinds: ['language'],
+    providesLanguages: [{ id: 'partial', label: 'Partial', extensions: ['.fixture'], measures: ['functions'] }],
+    produces: [{ contract: codeStructure.id, persistence: 'transient' }],
+    operations: [{ id: 'read', role: 'provider', inputs: { source: sourceFile }, output: codeStructure,
+      execute: () => ({ path, lines: 1, functions: 0 }) }],
+  };
+  const lint: Plugin = {
+    id: 'lint', version: '1.0.0', api: pluginApi, kinds: ['analysis'], claims: { extensions: ['.none'] },
+    rules: [{ id: 'long-file', category: 'structure' }, { id: 'copied', category: 'duplication' }, { id: 'leak', category: 'security' }],
+    produces: [{ contract: findingResult.id, persistence: 'report' }],
+    operations: [{ id: 'check', role: 'inspection', inputs: { source: sourceFile }, output: findingResult,
+      execute: () => ({ measurements: [], findings: [] }) }],
+  };
+  const report = await analyzeSnapshot({ snapshot: workingSnapshot([{ path, bytes: Buffer.from('x\n') }]), excludedOutput: null },
+    [provider, lint]);
+  assert.deepEqual(report.ruleSkips?.filter(skip => skip.plugin === 'lint'),
+    [{ path, plugin: 'lint', rules: ['long-file', 'copied'], reason: 'unmeasured' }]);
 });
 
 test('JS try adds no nesting level; only catch is a decision that nests its body', () => {

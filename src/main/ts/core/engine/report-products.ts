@@ -5,7 +5,6 @@ import { measurements } from '../model/measurement.js';
 import { isJsonValue } from '../model/plugin-data.js';
 import type { PersistedProduct, PluginData } from '../model/plugin-data.js';
 import { isRecord } from './plugin.js';
-import { isCoreReportProduct } from './manifest.js';
 import type { MetricDescriptor, Plugin, PluginConfigSchema, Product } from './plugin.js';
 import type { PlannedOperation } from './plan.js';
 
@@ -51,7 +50,8 @@ export class ReportProducts {
       const unknown = rows.measurements.find(row => !declared.has(row.definition));
       if (unknown) throw new Error(`Undeclared metric from ${task.key}: ${unknown.definition}`);
     }
-    if (!isCoreReportProduct(contract)) {
+    if (task.declaration.schema === undefined && !rows) throw new Error(`Report product ${contract} from ${task.key} has no schema and no rows`);
+    if (task.declaration.schema !== undefined) {
       if (!isJsonValue(value)) throw new Error(`Report product ${contract} is not JSON data`);
       const record = { operation: task.key, ...(path === undefined ? {} : { path }), value };
       const existing = this.products.get(contract);

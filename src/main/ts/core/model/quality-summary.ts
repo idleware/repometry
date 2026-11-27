@@ -67,7 +67,7 @@ function totalMeasured(values: ReadonlyMap<string, number> | undefined, expected
 function gradeMeasuredFiles(report: Report, code: ReadonlyMap<string, number> | undefined,
   duplication: ReadonlyMap<string, number> | undefined): QualitySummary['maintainability'] {
   if (report.findings === undefined || code === undefined) return null;
-  const skipped = new Set(report.ruleSkips?.filter(({ plugin }) => plugin === 'maintainability' || plugin === 'duplication')
+  const skipped = new Set(report.ruleSkips?.filter(({ reason }) => reason === 'unmeasured')
     .map(({ path }) => path));
   const measured = new Map([...code].filter(([path]) => duplication?.has(path) && !skipped.has(path)));
   if (measured.size === 0) return null;

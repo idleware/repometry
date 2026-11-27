@@ -1,6 +1,6 @@
 import { javascriptType, typescriptType } from '../../../core/model/file-types.js';
 import { isRecord } from '../../../core/model/plugin-data.js';
-import { legacySyntaxPlugin } from '../../../core/model/report.js';
+import { legacySyntaxPlugin } from './inspection-context.js';
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
 import { lcovLines } from '../../../core/model/line-coverage.js';
 import type { Report } from '../validation/report.js';

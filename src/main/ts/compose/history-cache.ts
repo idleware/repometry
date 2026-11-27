@@ -9,7 +9,7 @@ import { defaultSourceExclusions, generatedSourcePolicy } from '../core/profile/
 import { duplicationSettings, structuralRules } from '../core/profile/maintainability.js';
 import type { AnalysisInput } from '../core/usecases/inspect.js';
 import { analysisProfile } from './analysis-report.js';
-import type { AnalysisSources } from './analysis-sources.js';
+import type { AnalysisSources } from './phases.js';
 import type { LanguageProvider } from './languages.js';
 
 interface FileResult {

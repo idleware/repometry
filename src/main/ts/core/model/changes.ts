@@ -1,3 +1,6 @@
+import type { DataContract } from '../engine/plugin.js';
+import { isRecord } from './plugin-data.js';
+
 export interface LineRange {
   readonly first: number;
   readonly last: number;
@@ -33,3 +36,8 @@ export interface GitChanges {
   readonly files: ReadonlyMap<string, readonly LineRange[]>;
   readonly gaps: ReadonlyMap<string, string>;
 }
+
+export const changesInput: DataContract<GitChanges> = {
+  id: 'repometry.git-line-changes/v1',
+  accepts: (value): value is GitChanges => isRecord(value) && value.files instanceof Map && value.gaps instanceof Map,
+};

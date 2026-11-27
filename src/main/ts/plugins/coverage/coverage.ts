@@ -7,17 +7,8 @@ import { definitions, measurements } from '../../core/model/measurement.js';
 import type { Measurement } from '../../core/model/measurement.js';
 import { lcovLines } from '../../core/model/line-coverage.js';
 import type { FileLineCoverage, FunctionCallCount, HitRun, LineCoverage } from '../../core/model/line-coverage.js';
-import type { SourceLineRange } from '../../core/model/source.js';
-
-export interface CoverageInput {
-  readonly text: string;
-  readonly root: string;
-  readonly sourceLines: ReadonlyMap<string, number>;
-  readonly codeLines?: ReadonlyMap<string, ReadonlySet<number>>;
-  readonly unclassified?: ReadonlySet<string>;
-  readonly functionBodies?: ReadonlyMap<string, readonly SourceLineRange[]>;
-  readonly excludes?: (path: string) => boolean;
-}
+import { lcovInput } from '../../core/model/coverage-input.js';
+import type { CoverageInput } from '../../core/model/coverage-input.js';
 
 interface CoverageResult {
   readonly measurements: readonly Measurement[];
@@ -25,17 +16,7 @@ interface CoverageResult {
   readonly lineCoverage: LineCoverage;
 }
 
-export const lcovInput: DataContract<CoverageInput> = {
-  id: 'repometry.lcov-input/v1',
-  accepts: (value): value is CoverageInput => isRecord(value) && typeof value.text === 'string'
-    && typeof value.root === 'string' && value.sourceLines instanceof Map
-    && (value.codeLines === undefined || value.codeLines instanceof Map)
-    && (value.unclassified === undefined || value.unclassified instanceof Set)
-    && (value.functionBodies === undefined || value.functionBodies instanceof Map)
-    && (value.excludes === undefined || typeof value.excludes === 'function'),
-};
-
-export const coverageResult: DataContract<CoverageResult> = {
+const coverageResult: DataContract<CoverageResult> = {
   id: 'repometry.coverage-result/v1',
   accepts: (value): value is CoverageResult => isRecord(value) && measurements.accepts(value.measurements)
     && Array.isArray(value.gaps) && value.gaps.every(gap => isRecord(gap) && typeof gap.path === 'string' && typeof gap.reason === 'string')
@@ -72,7 +53,11 @@ export const coverage: Plugin = {
     role: 'inspection',
     inputs: { report: lcovInput },
     output: coverageResult,
-    execute: inputs => importCoverage(inputs.read('report', lcovInput)),
+    execute(inputs) {
+      const result = importCoverage(inputs.read('report', lcovInput));
+      for (const { path, reason } of result.gaps) inputs.emitDiagnostic?.(reason, path);
+      return result;
+    },
   }, {
     id: 'lines',
     role: 'inspection',

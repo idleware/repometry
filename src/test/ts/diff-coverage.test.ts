@@ -6,9 +6,11 @@ import { assessDiffCoverage } from '../../main/ts/core/usecases/diff-coverage-po
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
 import type { Product } from '../../main/ts/core/engine/plugin.js';
-import { lcovInput } from '../../main/ts/plugins/coverage/coverage.js';
-import type { CoverageInput } from '../../main/ts/plugins/coverage/coverage.js';
-import { changesInput, diffCoverage, diffCoverageResult } from '../../main/ts/plugins/coverage/diff-coverage.js';
+import { changesInput } from '../../main/ts/core/model/changes.js';
+import { lcovInput } from '../../main/ts/core/model/coverage-input.js';
+import type { CoverageInput } from '../../main/ts/core/model/coverage-input.js';
+import { diffCoverageResult } from '../../main/ts/core/model/diff-coverage.js';
+import { diffCoverage } from '../../main/ts/plugins/coverage/diff-coverage.js';
 
 test('Git changes preserve paths and use only the added side of hunks', () => {
   const old = 'a'.repeat(40);

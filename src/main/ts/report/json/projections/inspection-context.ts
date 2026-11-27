@@ -3,7 +3,6 @@ import { isRecord } from '../../../core/engine/plugin.js';
 import { findingImportMethods } from '../../../core/model/scanner-import.js';
 import { nativeScanners, securityCounts } from './security-summary.js';
 import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
-import { historicalPluginTools, legacySyntaxPlugin } from '../../../core/model/report.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths, digest } from '../../../core/model/snapshot.js';
 
@@ -81,4 +80,20 @@ function stringList(value: unknown): readonly string[] | null {
 
 function ordered(values: readonly string[]): readonly string[] {
   return [...new Set(values)].sort(comparePaths);
+}
+
+export const legacySyntaxPlugin = 'babel-syntax';
+
+// Keep history comparable when the parser starts recording its own tool versions.
+function historicalPluginTools(plugins: unknown): unknown {
+  if (!Array.isArray(plugins)) return plugins;
+  const syntax = plugins.find(entry => isRecord(entry) && entry.id === legacySyntaxPlugin);
+  if (!isRecord(syntax?.tools)) return plugins;
+  const { '@babel/types': types, ...native } = syntax.tools;
+  if (typeof types !== 'string') return plugins;
+  return plugins.map(entry => {
+    if (entry === syntax) return { ...syntax, tools: native };
+    if (!isRecord(entry) || (entry.id !== 'structure' && entry.id !== 'maintainability') || !isRecord(entry.tools)) return entry;
+    return { ...entry, tools: { '@babel/types': types, ...entry.tools } };
+  });
 }

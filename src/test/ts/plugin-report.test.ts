@@ -8,6 +8,10 @@ import { inspect } from '../../main/ts/compose/inspect.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract, MetricDescriptor, Plugin } from '../../main/ts/core/engine/plugin.js';
 import { definitions, measurements } from '../../main/ts/core/model/measurement.js';
+import { cloneSources } from '../../main/ts/core/model/clone-source.js';
+import { codeStructure } from '../../main/ts/core/model/code-structure.js';
+import { lcovInput } from '../../main/ts/core/model/coverage-input.js';
+import { findingResult } from '../../main/ts/core/model/finding.js';
 import { sourceFile } from '../../main/ts/core/model/snapshot.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import { inspectionAsset } from '../../main/ts/report/json/projections/inspection-details.js';
@@ -59,6 +63,45 @@ test('inspect routes files claimed by a registered plugin and saves its results'
   ]);
   assert.ok(report.pluginData?.inventory?.some(file => file.path === 'notes.txt' && file.analysed));
   assert.deepEqual((await new LocalReportStore(output).read(report.subject)).pluginData, report.pluginData);
+});
+
+const noFindings = () => ({ measurements: [], findings: [] });
+const findingsOnly = [{ contract: findingResult.id, persistence: 'report' as const }];
+
+test('a plugin that claims JavaScript and derives its own code structure is rejected: only a language provider supplies it', async () => {
+  const plugin: Plugin = { id: 'restructure', api: pluginApi, version: '1.0.0', kinds: ['analysis'], claims: { extensions: ['.js'] },
+    produces: [{ contract: codeStructure.id, persistence: 'transient' }, ...findingsOnly], operations: [
+      { id: 'derive', role: 'provider', inputs: { source: sourceFile }, output: codeStructure,
+        execute: inputs => ({ path: inputs.read('source', sourceFile).path, functions: [] }) },
+      { id: 'check', role: 'inspection', inputs: { source: sourceFile }, output: findingResult, execute: noFindings },
+    ] };
+  await assert.rejects(analyzeSnapshot(input, [plugin]),
+    { message: 'restructure/derive outputs repometry.code-structure/v1, which only a language provider supplies' });
+  const report = await analyzeSnapshot(input, [{ ...plugin, operations: plugin.operations.filter(({ role }) => role === 'inspection') }]);
+  assert.deepEqual(report.diagnostics, []);
+  const keys = (report.appliedConfig.operations as { key: string; inputs: unknown }[]).map(({ key, inputs }) => [key, inputs]);
+  assert.deepEqual(keys.filter(([key]) => key === 'structure/size' || key === 'restructure/check'), [
+    ['structure/size', { syntax: { operation: 'babel-syntax/parse' } }], ['restructure/check', { source: { external: 'file' } }]]);
+});
+
+test('every plugin runs its operations in the phase their inputs name', async () => {
+  const received: unknown[] = [];
+  const parsed: string[] = [];
+  const plugin: Plugin = { id: 'phases', api: pluginApi, version: '1.0.0', kinds: ['analysis'], produces: findingsOnly, operations: [
+    { id: 'clones', role: 'inspection', inputs: { sources: cloneSources }, output: findingResult,
+      execute: inputs => (received.push(inputs.read('sources', cloneSources).map(({ path, scheme }) => ({ path, scheme }))), noFindings()) },
+    { id: 'syntax', role: 'inspection', inputs: { syntax: codeStructure }, output: findingResult,
+      execute: inputs => (parsed.push(inputs.read('syntax', codeStructure).path), noFindings()) },
+    { id: 'lines', role: 'inspection', inputs: { lcov: lcovInput }, output: findingResult, execute: noFindings },
+  ] };
+  const report = await analyzeSnapshot(input, [plugin]);
+  assert.deepEqual(report.diagnostics, []);
+  assert.deepEqual(received, [[{ path: 'a.js', scheme: 'babel-syntax' }]]);
+  assert.deepEqual(parsed, ['a.js']);
+  const keys = (report.appliedConfig.operations as { key: string }[]).map(({ key }) => key);
+  assert.deepEqual(keys.filter(key => key.startsWith('phases/')), ['phases/syntax', 'phases/clones']);
+  const unoffered = { ...plugin, operations: [{ ...plugin.operations[0]!, inputs: { a: cloneSources, b: codeStructure } }] };
+  await assert.rejects(analyzeSnapshot(input, [unoffered]), /phases\/clones reads .*which no phase of its runs offers together/);
 });
 
 test('declared metrics, rules and custom JSON products round-trip through the report store', async t => {

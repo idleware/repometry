@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';
+import { manifestProducts } from '../../main/ts/core/engine/manifest.js';
+import { ReportProducts } from '../../main/ts/core/engine/report-products.js';
+import { builtInPlugins } from '../../main/ts/plugins/built-in.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract, MetricDescriptor, Plugin } from '../../main/ts/core/engine/plugin.js';
 
@@ -56,9 +59,20 @@ test('manifest operations must declare every output and custom report products n
   assert.throws(() => plan(request), /undeclared output.*test\.b\/v1/i);
   const produces = [{ contract: b.id, persistence: 'report' }] as const;
   assert.throws(() => plan({ ...request, plugins: [{ ...plugin, produces }] }), /schema.*test\.b\/v1/i);
+  assert.throws(() => plan({ ...request, plugins: [{ ...plugin, produces: [{ contract: b.id, persistence: 'cache' }] }] }),
+    /schema.*test\.b\/v1/i);
   const declared = { ...produces[0], schema: { type: 'number' } };
   const [task] = plan({ ...request, plugins: [{ ...plugin, produces: [declared] }] });
   assert.deepEqual(task?.declaration, declared);
+});
+
+test('a report product without a schema must carry rows', () => {
+  const plugin: Plugin = { id: 'fixture', api: pluginApi, version: '1', kinds: ['analysis'],
+    produces: [{ contract: b.id, persistence: 'report', metrics: [] }],
+    operations: [{ id: 'read', role: 'inspection', inputs: {}, output: b, execute: () => 1 }] };
+  const [task] = plan({ plugins: [plugin], select: ['fixture/read'], inputs: new Map() });
+  assert.throws(() => new ReportProducts([plugin]).record(task!, { contract: b.id, value: 1 }), /test\.b\/v1.*no schema and no rows/i);
+  for (const builtIn of builtInPlugins) assert.doesNotThrow(() => manifestProducts(builtIn), builtIn.id);
 });
 
 const metric: MetricDescriptor = {

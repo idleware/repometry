@@ -1,26 +1,15 @@
-import { isRecord, pluginApi } from '../../core/engine/plugin.js';
-import type { DataContract, Plugin } from '../../core/engine/plugin.js';
+import { pluginApi } from '../../core/engine/plugin.js';
+import type { Plugin } from '../../core/engine/plugin.js';
 import type { GitChanges, LineRange } from '../../core/model/changes.js';
 import { comparePaths } from '../../core/model/snapshot.js';
-import { lcovInput, mapCoverage } from './coverage.js';
-import type { CoverageInput } from './coverage.js';
+import { mapCoverage } from './coverage.js';
+import { lcovInput } from '../../core/model/coverage-input.js';
+import type { CoverageInput } from '../../core/model/coverage-input.js';
 
+import { changesInput } from '../../core/model/changes.js';
+import { diffCoverageResult } from '../../core/model/diff-coverage.js';
 import type { DiffCoverage, DiffCoverageResult, FileCoverage } from '../../core/model/diff-coverage.js';
 export type { DiffCoverage } from '../../core/model/diff-coverage.js';
-
-export const changesInput: DataContract<GitChanges> = {
-  id: 'repometry.git-line-changes/v1',
-  accepts: (value): value is GitChanges => isRecord(value) && value.files instanceof Map && value.gaps instanceof Map,
-};
-
-export const diffCoverageResult: DataContract<DiffCoverageResult> = {
-  id: 'repometry.diff-coverage-result/v1',
-  accepts: (value): value is DiffCoverageResult => isRecord(value) && Array.isArray(value.files) && Array.isArray(value.gaps)
-    && Array.isArray(value.uncovered)
-    && (value.status === 'complete' || value.status === 'partial' || value.status === 'not-applicable')
-    && typeof value.covered === 'number' && typeof value.total === 'number'
-    && (value.percent === null || typeof value.percent === 'number'),
-};
 
 export const diffCoverage: Plugin = {
   id: 'diff-coverage',

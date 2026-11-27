@@ -97,6 +97,26 @@ test('an operation failing on the head only leaves the review unmeasured', () =>
   assert.equal(reviewExitCode(review), 2);
 });
 
+test('a failed coverage import and host operations do not leave the review unmeasured', () => {
+  const diagnostics: Diagnostic[] = [{ operation: 'lcov/import', state: 'failed', message: 'Unreadable LCOV' },
+    { operation: 'git/churn', state: 'failed', message: 'No history' },
+    { operation: 'lint/check', state: 'failed', message: 'Lint failed' }];
+  // The coverage import is the operation whose stored record reads the host's coverage input.
+  const operations = [{ key: 'lcov/import', inputs: { report: { external: 'lcov' } } }, { key: 'lint/check', inputs: { source: { external: 'file' } } }];
+  const head = { ...report(headId, [], diagnostics), appliedConfig: { operations } };
+  assert.deepEqual(projectReview({}, inputs([], [], { head })).unmeasured, [{ operation: 'lint/check', message: 'Lint failed' }]);
+});
+
+test('a failed operation of any other coverage plugin leaves the review unmeasured', () => {
+  const diagnostics: Diagnostic[] = [{ operation: 'lcov/lines', state: 'failed', message: 'No lines' },
+    { operation: 'cover2/read', state: 'failed', message: 'Unreadable report' }];
+  const operations = [{ key: 'lcov/import', inputs: { report: { external: 'lcov' } } },
+    { key: 'lcov/lines', inputs: { coverage: { operation: 'lcov/import' } } }, { key: 'cover2/read', inputs: { source: { external: 'file' } } }];
+  const plugins = [{ id: 'lcov', kinds: ['coverage', 'import'] }, { id: 'cover2', kinds: ['coverage'] }];
+  const head = { ...report(headId, [], diagnostics), appliedConfig: { plugins, operations } };
+  assert.deepEqual(projectReview({}, inputs([], [], { head })).unmeasured.map(({ operation }) => operation), ['lcov/lines', 'cover2/read']);
+});
+
 test('a parse failure on a changed head file leaves the review unmeasured', () => {
   const failure: Diagnostic = { operation: 'babel-syntax/parse', state: 'failed', message: 'Unexpected token', path: 'src/a.ts' };
   const review = projectReview({}, inputs([], [], { head: report(headId, [], [failure]) }));

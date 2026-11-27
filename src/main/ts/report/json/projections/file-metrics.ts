@@ -3,7 +3,7 @@ import type { LanguageLookup } from '../../../core/model/language.js';
 import { isRecord } from '../../../core/engine/plugin.js';
 import type { Measurement } from '../../../core/model/measurement.js';
 import { canonicalMetricId, definitions } from '../../../core/model/measurement.js';
-import { legacySyntaxPlugin } from '../../../core/model/report.js';
+import { legacySyntaxPlugin } from './inspection-context.js';
 import type { Report } from '../validation/report.js';
 import type { ChurnWindow } from '../../../core/model/churn.js';
 import { comparePaths } from '../../../core/model/snapshot.js';
