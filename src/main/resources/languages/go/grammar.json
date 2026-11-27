@@ -1,0 +1,7 @@
+{
+  "package": "tree-sitter-go",
+  "version": "0.25.0",
+  "license": "MIT",
+  "integrity": "sha512-APBc/Dq3xz/e35Xpkhb1blu5UgW+2E3RyGWawZSCNcbGwa7jhSQPS8KsUupuzBla8PCo8+lz9W/JDJjmfRa2tw==",
+  "sha256": "9504573f352b20be7f2f1911754d710622aedc15afff16d5ed8fb5645681aee7"
+}

@@ -78,7 +78,7 @@ The file has three jobs. `review` runs on a pull request. `history` and then `pa
 
 The full history is for churn: how many first-parent commits touched each file in the 90 days up to the inspected commit. Nothing else in an inspection needs earlier commits.
 
-`analyze` exits with 0 when the inspection is complete, 2 when it is partial, for example when a file can't be parsed, and 1 when it can't run; [Exit codes](cli.md#exit-codes) lists every command's codes. A missing or failing `go` or `python3` doesn't make it partial: that language's files count as not analysed, and the report's Profile and `repometry plugins` say why. The job saves a partial inspection, marked as partial, and its log says what is missing. Any other failure fails the run, and nothing is saved.
+`analyze` exits with 0 when the inspection is complete, 2 when it is partial, for example when a file can't be parsed, and 1 when it can't run; [Exit codes](cli.md#exit-codes) lists every command's codes. Go and Python files need no tool on the runner, because the built-in parser reads them. A file the parser rejects makes the inspection partial, and the report lists a diagnostic for it. The job saves a partial inspection, marked as partial, and its log says what is missing. Any other failure fails the run, and nothing is saved.
 
 ### The queue and the catch-up
 

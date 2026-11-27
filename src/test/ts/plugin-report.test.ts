@@ -49,6 +49,17 @@ const input = { excludedOutput: null, snapshot: { subject: { kind: 'commit', id:
   files: [{ path: 'a.js', bytes: new TextEncoder().encode('// TODO\nexport const a = 1;') }],
   inventory: [{ path: 'a.js', lines: 2 }, { path: 'README.md', lines: 4 }] } };
 
+test('an operation can contribute more rows than the JavaScript argument limit', async () => {
+  const count = 140_000;
+  const operation = { ...fixture.operations[0]!, execute: () =>
+    Array.from({ length: count }, (_, value) => ({ definition: metric.id, target: 'file', path: 'a.js', value })) };
+  const report = await analyzeSnapshot(input, [{ ...fixture, operations: [operation] }]);
+  const measured = report.measurements.filter(row => row.definition === metric.id);
+  assert.deepEqual(report.diagnostics, []);
+  assert.equal(measured.length, count);
+  assert.equal(measured.at(-1)?.value, count - 1);
+});
+
 test('inspect routes files claimed by a registered plugin and saves its results', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'repometry-registered-plugin-'));
   t.after(() => rm(directory, { force: true, recursive: true }));

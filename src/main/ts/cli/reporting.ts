@@ -21,7 +21,7 @@ export const reporterIds = Object.keys(reporters);
 type Config = Awaited<ReturnType<typeof readConfig>>;
 
 function reportLanguages({ plugins, parsers }: Config) {
-  return plugins.length || parsers ? languageRegistry(plugins, true, parsers) : defaultLanguages;
+  return plugins.length || parsers ? languageRegistry(plugins, parsers) : defaultLanguages;
 }
 
 export async function outputReports(root: string, store: Store, input: Invocation, config: Config) {

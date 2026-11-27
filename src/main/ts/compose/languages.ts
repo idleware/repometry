@@ -6,11 +6,9 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { ProvidedLanguage } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
-import { nativeLanguagePlugins } from './native-language-plugins.js';
-import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { describeProvider, selectedSyntax, selectParsers } from './parser-order.js';
-import type { ParserOrder } from './parser-order.js';
-import { restrictStructureMeasures } from './structure-measures.js';
+import type { ParserOrder, ParserPlugin } from './parser-order.js';
+import { languageMeasures, restrictStructureMeasures, structureImplementation } from './structure-measures.js';
 import { builtInPluginIds, builtInPlugins } from './built-ins.js';
 
 export interface LanguageProvider {
@@ -19,15 +17,15 @@ export interface LanguageProvider {
   readonly key: string;
   readonly batch: boolean;
   readonly language: (path: string) => string | undefined;
+  readonly implementationFor: (present: ReadonlySet<string>) => string | undefined;
 }
 
-export const defaultLanguages = languageRegistry([], false);
+export const defaultLanguages = languageRegistry([]);
 export type LanguageRegistry = ReturnType<typeof languageRegistry>;
 
-export function languageRegistry(plugins: readonly Plugin[], includeNative = true, parsers?: ParserOrder, label = 'parsers') {
-  const native = includeNative ? nativeLanguagePlugins() : [];
+export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrder, label = 'parsers') {
   const builtIns = builtInPlugins.filter(plugin => !plugins.includes(plugin));
-  const registered: readonly NativeLanguagePlugin[] = [...builtIns, ...plugins, ...native];
+  const registered: readonly ParserPlugin[] = [...builtIns, ...plugins];
   if (plugins.length) validateRegistrations(plugins, registered);
   const { selection, competing } = selectParsers(registered, parsers, label);
   const byProvider = new Map<string, ProvidedLanguage[]>();
@@ -41,14 +39,12 @@ export function languageRegistry(plugins: readonly Plugin[], includeNative = tru
   const globs = [...new Set(claims.flatMap(entry => entry.globs ?? []))];
   const catalog = entries.filter(({ provider }) => provider).flatMap(({ declared }) =>
     declared.map(({ id, label, color }) => ({ id, label, ...(color === undefined ? {} : { color }) })));
-  const syntaxById = selectedSyntax(selection, competing);
-  const unavailable = native.filter(({ unavailableReason }) => unavailableReason !== undefined);
-  const ordered = [...builtIns, ...native.filter(plugin => !unavailable.includes(plugin)), ...plugins, ...unavailable];
-  const bound: readonly NativeLanguagePlugin[] = ordered.map(plugin => bindings.get(plugin) ?? plugin);
+  const syntaxById = selectedSyntax(selection);
+  const bound: readonly ParserPlugin[] = registered.map(plugin => bindings.get(plugin) ?? plugin);
   return { select: (path: string) => match(path)?.provider, isSource: (path: string) => match(path) !== undefined,
     id: (path: string) => match(path)?.identify(path) ?? fileTypeId(path), extensions, globs, catalog,
-    providers: active, native, plugins: bound,
-    describe: (plugin: NativeLanguagePlugin) => describeProvider(plugin, byProvider, competing),
+    providers: active, plugins: bound,
+    describe: (plugin: ParserPlugin) => describeProvider(plugin, byProvider, competing),
     syntax: (id: string) => syntaxById.get(id), skipped };
 
   function skipped(path: string): boolean {
@@ -75,7 +71,7 @@ function validateRegistrations(plugins: readonly Plugin[], registered: readonly 
   plan({ plugins: registered, select: [], inputs: new Map() });
 }
 
-function languageEntry(plugin: NativeLanguagePlugin, chosen: readonly ProvidedLanguage[], bindings: Map<Plugin, Plugin>) {
+function languageEntry(plugin: ParserPlugin, chosen: readonly ProvidedLanguage[], bindings: Map<Plugin, Plugin>) {
   const declared = (plugin.providesLanguages ?? []).filter(language => chosen.includes(language));
   const selected = !plugin.providesLanguages || declared.length > 0;
   const available = plugin.unavailableReason === undefined;
@@ -109,9 +105,11 @@ function parserOperation(plugin: Plugin): Operation {
 
 function bindParser(plugin: Plugin, operation: Operation, declared: readonly ProvidedLanguage[],
   language: LanguageProvider['language']): LanguageProvider {
-  const bound = restrictStructureMeasures(operation, declared, language);
+  const measured = languageMeasures(declared);
+  const bound = restrictStructureMeasures(operation, measured, language);
   const executable = bound === operation ? plugin : { ...plugin, operations: plugin.operations.map(item => item === operation ? bound : item) };
-  return { plugin: executable, operation: bound, key: `${plugin.id}/${operation.id}`, batch: operation.scope === 'repository', language };
+  return { plugin: executable, operation: bound, key: `${plugin.id}/${operation.id}`, batch: operation.scope === 'repository', language,
+    implementationFor: present => structureImplementation(operation, new Map([...measured].filter(([id]) => present.has(id)))) };
 }
 
 export function claimMatcher(claims: FileClaims | undefined, identify = fileTypeId): (path: string) => boolean {

@@ -66,7 +66,7 @@ async function readInputs(request: DiffCoverageRequest, excludedPaths: readonly 
     gitText(root, ['--version']).then(text => text.trim()),
   ]);
   const base = await findMergeBase(root, requestedBase, head);
-  const { isSource, extensions, globs } = languageRegistry(request.plugins ?? [], true, request.parsers);
+  const { isSource, extensions, globs } = languageRegistry(request.plugins ?? [], request.parsers);
   const snapshot = await readGitCommit(root, head, { excludes, isSource });
   const [lcov, changes] = await Promise.all([
     readInspectionCoverage(request, { root, snapshot }),

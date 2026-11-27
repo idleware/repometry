@@ -4,11 +4,21 @@ import type { CodeStructure, StructureMeasure } from '../core/model/code-structu
 import type { ProvidedLanguage } from '../core/model/language.js';
 import { digest } from '../core/model/snapshot.js';
 
-export function restrictStructureMeasures(operation: Operation, declared: readonly ProvidedLanguage[],
+type LanguageMeasures = ReadonlyMap<string, readonly StructureMeasure[]>;
+
+export function languageMeasures(declared: readonly ProvidedLanguage[]): LanguageMeasures {
+  return new Map(declared.flatMap(entry => entry.measures === undefined ? [] : [[entry.id, entry.measures] as const]));
+}
+
+export function structureImplementation(operation: Operation, measured: LanguageMeasures): string | undefined {
+  return measured.size ? digest(JSON.stringify([operation.implementation ?? operation.execute.toString(), [...measured]]))
+    : operation.implementation;
+}
+
+export function restrictStructureMeasures(operation: Operation, measured: LanguageMeasures,
   language: (path: string) => string | undefined): Operation {
-  const measured = new Map(declared.flatMap(entry => entry.measures === undefined ? [] : [[entry.id, entry.measures] as const]));
   if (!measured.size) return operation;
-  const implementation = digest(JSON.stringify([operation.implementation ?? operation.execute.toString(), [...measured]]));
+  const implementation = structureImplementation(operation, measured);
   return { ...operation, implementation, async execute(inputs) {
     const value = await operation.execute(inputs);
     if (operation.scope === 'repository') return codeStructures.accepts(value) ? value.map(project) : value;

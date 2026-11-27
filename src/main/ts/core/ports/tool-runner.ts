@@ -1,5 +1,3 @@
-import type { StructureMeasure } from '../model/code-structure.js';
-import type { LanguageSyntax } from '../model/language.js';
 import type { SourceFile } from '../model/source.js';
 
 export interface ToolInvocation {
@@ -21,7 +19,3 @@ export interface ToolRunner {
   readonly implementation?: string;
   run(invocation: ToolInvocation): Promise<ToolResult>;
 }
-
-/** A language parser that runs as a host process: the binary, how to start it and what it measures. */
-export type HostLanguageDescriptor = Readonly<{ id: string; language: string; binary: string; args: readonly string[];
-  versionArgs: readonly string[]; script: string; measures: readonly StructureMeasure[]; syntax: LanguageSyntax }>;

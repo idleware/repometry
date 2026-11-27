@@ -6,17 +6,18 @@ import { normalizeFindingIgnore } from '../../../core/model/finding-ignore.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths, digest } from '../../../core/model/snapshot.js';
 
+import { ordered, presentLanguages, presentSelectors, stringList } from './profile-selectors.js';
 import type { InspectionContext } from '../wire/inspection-context-model.js';
 
 export function inspectionProfileDigest(report: Report): string | undefined {
-  const profile = readProfile(report.appliedConfig);
+  const profile = readProfile(report);
   return profile ? digest(JSON.stringify(profile.settings, (_key, value: unknown) => isRecord(value)
     ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => comparePaths(a, b))) : value)) : undefined;
 }
 
 export function inspectionContext(report: Report): InspectionContext | undefined {
   if (report.subject.kind !== 'commit') return undefined;
-  return { exclusions: readProfile(report.appliedConfig)?.exclusions ?? null, boundary: null,
+  return { exclusions: readProfile(report)?.exclusions ?? null, boundary: null,
     ...scannerContext(report), ...ignoreContext(report) };
 }
 
@@ -39,7 +40,7 @@ function scannerContext(report: Report): Pick<InspectionContext, 'security' | 's
   return security ? { scanners, security } : { scanners };
 }
 
-function readProfile(config: Report['appliedConfig']) {
+function readProfile({ appliedConfig: config, pluginData }: Report) {
   const source = config.source;
   if (!isRecord(source)) return null;
   // The original JS/TS profile recorded directory exclusions before path rules existed.
@@ -56,30 +57,30 @@ function readProfile(config: Report['appliedConfig']) {
   }
   const { churnWindow, securityScanners, ...settings } = config;
   const toolchain = historicalPluginTools(settings.plugins);
+  const present = config.profile === 'repository/v4' ? presentLanguages(pluginData?.inventory) : undefined;
   const plugins = Array.isArray(toolchain) ? toolchain.map(plugin => {
     if (!isRecord(plugin)) return plugin;
     const { providesLanguages, ...entry } = plugin;
+    if (present && typeof entry.id === 'string' && Array.isArray(providesLanguages)
+      && Array.isArray(entry.kinds) && entry.kinds.every(kind => kind === 'language')) {
+      delete entry.claims;
+      entry.providesLanguages = ordered([...present.get(entry.id) ?? []]);
+    }
     if (entry.id === legacySyntaxPlugin && isDeepStrictEqual(entry.settings, config.parser)) delete entry.settings;
     return entry;
   }) : toolchain;
   // The policy is stable across commits; its matched paths describe this snapshot alone.
   const { generatedExcluded, ...sourceSettings } = source;
+  const selectors = present ? presentSelectors(toolchain, present)
+    : { extensions: extensions ? ordered(extensions) : source.extensions };
   return {
     exclusions: { paths: [...new Set([...(stringList(source.defaultExclusions) ?? []), ...paths, ...(stringList(generatedExcluded) ?? [])])], directories },
     settings: { ...settings, ...(plugins === undefined ? {} : { plugins }), coverage,
       findingImports: findingImportMethods(config.findingImports), source: { ...sourceSettings,
-      extensions: extensions ? ordered(extensions) : source.extensions,
+      ...selectors,
       excludedPaths: ordered(paths), excludedDirectories: ordered(directories),
     } },
   };
-}
-
-function stringList(value: unknown): readonly string[] | null {
-  return Array.isArray(value) && value.every((item: unknown) => typeof item === 'string') ? value : null;
-}
-
-function ordered(values: readonly string[]): readonly string[] {
-  return [...new Set(values)].sort(comparePaths);
 }
 
 export const legacySyntaxPlugin = 'babel-syntax';

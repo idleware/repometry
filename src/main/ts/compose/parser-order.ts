@@ -1,14 +1,16 @@
 import { isRecord } from '../core/engine/plugin.js';
 import type { Plugin } from '../core/engine/plugin.js';
-import type { ProvidedLanguage } from '../core/model/language.js';
-import { hostLanguages } from './built-ins.js';
-import type { NativeLanguagePlugin } from './native-language-plugins.js';
+import type { LanguageSyntax, ProvidedLanguage } from '../core/model/language.js';
+
+export interface ParserPlugin extends Plugin {
+  readonly unavailableReason?: string;
+}
 
 export type ParserOrder = Readonly<Record<string, readonly string[]>>;
 
 const languageId = /^[a-z][a-z0-9-]*$/;
 
-type Candidate = { readonly plugin: NativeLanguagePlugin; readonly language: ProvidedLanguage };
+type Candidate = { readonly plugin: ParserPlugin; readonly language: ProvidedLanguage };
 
 export function readParserOrder(value: unknown, label = 'parsers'): ParserOrder | undefined {
   if (value === undefined) return undefined;
@@ -23,7 +25,7 @@ export function readParserOrder(value: unknown, label = 'parsers'): ParserOrder 
   return value as ParserOrder;
 }
 
-export function selectParsers(plugins: readonly NativeLanguagePlugin[], order: ParserOrder | undefined, label: string) {
+export function selectParsers(plugins: readonly ParserPlugin[], order: ParserOrder | undefined, label: string) {
   const providers = languageCandidates(plugins);
   const known = new Set(plugins.map(({ id }) => id));
   const competing = new Set([...providers.values()].filter(candidates => candidates.length > 1).flatMap(
@@ -50,18 +52,15 @@ export function inspectionClaims({ claims, providesLanguages }: Plugin): Plugin[
   return claims ?? (providesLanguages && claimsForLanguages(providesLanguages));
 }
 
-export function selectedSyntax(selection: ReadonlyMap<string, Candidate>, competing: ReadonlySet<string>) {
-  const syntax = new Map(hostLanguages.map(({ language, syntax }) => [language, syntax]));
-  for (const [id, { plugin, language }] of selection) {
-    if (language.syntax !== undefined) syntax.set(id, language.syntax);
-    else if (competing.has(plugin.id)) syntax.delete(id);
-  }
+export function selectedSyntax(selection: ReadonlyMap<string, Candidate>) {
+  const syntax = new Map<string, LanguageSyntax>();
+  for (const [id, { language }] of selection) if (language.syntax !== undefined) syntax.set(id, language.syntax);
   return syntax;
 }
 
 /** Uncontested declarations keep their existing report bytes. Contested parsers record their effective scope. */
-export function describeProvider(plugin: NativeLanguagePlugin, assignments: ReadonlyMap<string, readonly ProvidedLanguage[]>,
-  competing: ReadonlySet<string>): NativeLanguagePlugin {
+export function describeProvider(plugin: ParserPlugin, assignments: ReadonlyMap<string, readonly ProvidedLanguage[]>,
+  competing: ReadonlySet<string>): ParserPlugin {
   if (!competing.has(plugin.id)) return plugin;
   const chosen = assignments.get(plugin.id);
   const providesLanguages = plugin.providesLanguages?.filter(language => chosen?.includes(language));
@@ -80,7 +79,7 @@ function claimsForLanguages(languages: readonly ProvidedLanguage[]) {
   };
 }
 
-function languageCandidates(plugins: readonly NativeLanguagePlugin[]): Map<string, Candidate[]> {
+function languageCandidates(plugins: readonly ParserPlugin[]): Map<string, Candidate[]> {
   const providers = new Map<string, Candidate[]>();
   for (const plugin of plugins.filter(candidate => candidate.kinds.includes('language'))) {
     const languages = plugin.providesLanguages ?? [];
@@ -94,8 +93,9 @@ function languageCandidates(plugins: readonly NativeLanguagePlugin[]): Map<strin
 }
 
 function matchParser(options: readonly Candidate[], known: ReadonlySet<string>, name: string, id: string, path: string): Candidate {
-  if (!known.has(name)) throw new Error(path + ' names unknown plugin ' + name);
   const candidate = options.find(({ plugin }) => plugin.id === name);
-  if (!candidate) throw new Error(path + ' names plugin ' + name + ', which does not provide ' + id);
-  return candidate;
+  if (candidate) return candidate;
+  const available = '; ' + id + ' is provided by ' + options.map(({ plugin }) => plugin.id).join(', ');
+  const problem = known.has(name) ? ' names plugin ' + name + ', which does not provide ' + id : ' names unknown plugin ' + name;
+  throw new Error(path + problem + available);
 }

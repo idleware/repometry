@@ -32,6 +32,7 @@ export type ParsedFile = Readonly<{ path: string; structure: CodeStructure; pars
 /** The plan of a file the first provider parses and nothing claims, recorded before any file so the records keep their order. */
 export function defaultFilePlan(sources: AnalysisSources): readonly PlannedOperation[] {
   const [provider] = sources.languages.providers;
+  if (!provider || !sources.sources.some(source => source.provider === provider)) return [];
   // Language plugins claim the files they parse, so only the first provider's plugin and those without claims are left.
   const unclaimed = ({ claims, providesLanguages, id }: Plugin) => (!claims && !providesLanguages) || id === provider?.plugin.id;
   return filePlan(provider, sources.steps.files.inspections.filter(({ parsed, plugin }) => parsed && unclaimed(plugin)),

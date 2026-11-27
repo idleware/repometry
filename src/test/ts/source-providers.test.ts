@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { get } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { validateSummary } from '../../main/ts/report/json/validation/summary-validation.js';
@@ -90,4 +91,15 @@ test('the blob cache reuses a Git object until the cache is cleared', async t =>
   await clearCaches(root);
   assert.deepEqual(await cachedBlob(root, oid, load), bytes);
   assert.equal(loads, 2);
+});
+
+test('cache clear removes leftover Go parsers and source blobs', async t => {
+  const cache = await mkdtemp(join(tmpdir(), 'repometry-clear-cache-'));
+  t.after(() => rm(cache, { recursive: true, force: true }));
+  const names = ['sources', 'go-parsers-v1'];
+  await Promise.all(names.map(name => mkdir(join(cache, name))));
+  const result = execFileSync(process.execPath, [resolve('target/main/ts/cli/main.js'), 'cache', 'clear'],
+    { env: { ...process.env, REPOMETRY_CACHE_DIR: cache }, encoding: 'utf8' });
+  assert.deepEqual(JSON.parse(result).cleared, names);
+  await Promise.all(names.map(name => assert.rejects(access(join(cache, name)), { code: 'ENOENT' })));
 });

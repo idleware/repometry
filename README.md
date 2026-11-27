@@ -22,6 +22,8 @@ Git can serve as a project’s single source of truth for code, tests, docs, and
 
 Node.js >=24
 
+Go and Python files need no extra tools. Generating Go or Python coverage uses your project's own test tools.
+
 ## Install
 
 ```sh

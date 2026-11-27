@@ -18,7 +18,7 @@ export function parseConfig(value: unknown) {
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
   const plugins = readProcessPlugins(value.plugins);
   const parsers = readParserOrder(value.parsers, 'Config parsers');
-  if (plugins.length || parsers !== undefined) languageRegistry(plugins, true, parsers, 'Config parsers');
+  if (plugins.length || parsers !== undefined) languageRegistry(plugins, parsers, 'Config parsers');
   return { ...profile, plugins, parsers, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
     sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
     components: parseComponents(value.components),

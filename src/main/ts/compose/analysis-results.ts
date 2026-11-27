@@ -12,6 +12,7 @@ export class AnalysisResults {
   readonly findings: Finding[] = [];
   readonly diagnostics: Diagnostic[];
   readonly parsed = new Set<string>();
+  readonly ran = new Set<string>();
   readonly ruleSkips: NonNullable<Report['ruleSkips']>[number][] = [];
   readonly unmeasured = new Map<string, readonly StructureMeasure[]>();
   readonly inspected = new Set<string>();
@@ -49,6 +50,7 @@ export class AnalysisResults {
   }
 
   record(task: PlannedOperation, outcome: Outcome, path?: string, paths?: readonly string[]): void {
+    if (outcome.state !== 'blocked') this.ran.add(task.key);
     if (outcome.state !== 'completed') {
       this.diagnostics.push({ operation: task.key, state: outcome.state, message: outcome.reason,
         ...(path === undefined ? {} : { path }) });
@@ -58,8 +60,8 @@ export class AnalysisResults {
       const stored = this.products.record(task, outcome.product, path);
       this.recordInspection(task, outcome.diagnostics ?? [], path, paths);
       if (stored) {
-        this.measurements.push(...stored.measurements);
-        this.findings.push(...stored.findings);
+        for (const measurement of stored.measurements) this.measurements.push(measurement);
+        for (const finding of stored.findings) this.findings.push(finding);
       }
     } catch (error) {
       this.diagnostics.push({ operation: task.key, state: 'failed', path, message: error instanceof Error ? error.message : String(error) });

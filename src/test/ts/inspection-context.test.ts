@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeSnapshot } from './helpers/analysis.js';
-import { inspectionContext } from '../../main/ts/report/json/projections/inspection-context.js';
+import { inspectionContext, inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
 import { siteSummary } from '../../main/ts/report/html/site/export-site.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import type { RepositorySummary } from '../../main/ts/report/json/wire/summary-model.js';
@@ -10,6 +10,14 @@ import type { Report } from '../../main/ts/report/json/validation/report.js';
 
 const source = { extensions: ['.js', '.ts'], excludedDirectories: ['.git', 'node_modules'], excludedOutput: null };
 const profile = { profile: 'js-ts/v1', source, coverage: null };
+
+test('repository/v3 uses the original profile digest with the full source selectors', () => {
+  const original = report('a', { profile: 'repository/v3',
+    source: { extensions: ['.ts', '.go', '.js'], globs: ['src/*'], excludedDirectories: ['.git'], excludedPaths: [] },
+    plugins: [{ id: 'go-ast', kinds: ['language'], tools: { go: '1.24.1' } },
+      { id: 'babel-syntax', kinds: ['language'], tools: { '@babel/parser': '7.29.15' } }], coverage: null });
+  assert.equal(inspectionProfileDigest(original), '1b5bfd6589a7f5b8b405e73a263583876f4208b47400d873ff202dec85169c66');
+});
 
 test('local history identifies profile boundaries and reads exclusions in legacy reports', () => {
   const original = report('a', profile);

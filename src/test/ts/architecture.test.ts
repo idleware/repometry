@@ -9,7 +9,7 @@ import { analysisPhases, diffCoveragePhases } from '../../main/ts/compose/phases
 import { structureMeasures } from '../../main/ts/core/model/code-structure.js';
 import { fileTypes } from '../../main/ts/core/model/file-types.js';
 import { findingCategories } from '../../main/ts/core/model/finding.js';
-import { builtInPlugins, hostLanguages } from '../../main/ts/plugins/built-in.js';
+import { builtInPlugins } from '../../main/ts/plugins/built-in.js';
 import summarySchema from '../../main/resources/report/json/repository-summary-v1.schema.json' with { type: 'json' };
 
 const source = resolve('src/main/ts');
@@ -121,7 +121,7 @@ test('module imports match their declared boundaries and runtime imports are acy
 });
 
 // Core and compose name no plugin: ids come from the composition root, never from a list kept here.
-const pluginIds = new Set([...builtInPlugins, ...hostLanguages].map(({ id }) => id));
+const pluginIds = new Set(builtInPlugins.map(({ id }) => id));
 const compositionRoot = { from: 'compose/built-ins.ts', to: 'plugins/built-in.ts' };
 
 // Core's own words that happen to equal a plugin id. Each is allowed everywhere in core and compose, for its reason.
@@ -217,7 +217,7 @@ const mustReport: readonly (readonly [file: string, snippet: string])[] = [
   ['index.ts', "import type { Plugin } from './plugins/built-in.js';"],
   ['compose/languages.ts', "const script = new URL('../plugins/language-js/syntax.js', import.meta.url);"],
   ['core/engine/execute.ts', "const module = import.meta.resolve('../../plugins/coverage/coverage.js');"],
-  ['core/model/language.ts', "interface Seen { readonly 'go-ast': number }"],
+  ['core/model/language.ts', "interface Seen { readonly 'tree-sitter': number }"],
 ];
 
 const mustPass: readonly (readonly [file: string, snippet: string])[] = [
@@ -230,11 +230,10 @@ const mustPass: readonly (readonly [file: string, snippet: string])[] = [
   ['compose/sources.ts', "const words = ['localhost', 'structured', 'github-actions', 'my-maintainability'];"],
   ['cli/main.ts', "import { structure } from '../plugins/structure/structure.js'; const id = 'maintainability';"],
   ['report/json/projections/inspection-context.ts', "export const legacySyntaxPlugin = 'babel-syntax';"],
-  ['compose/built-ins.ts', "import { builtInPlugins, hostLanguages } from '../plugins/built-in.js';"],
+  ['compose/built-ins.ts', "import { builtInPlugins } from '../plugins/built-in.js';"],
   ['core/model/coverage-input.ts', "export const lcovInput = { id: 'repometry.lcov-input/v1' };"],
   ['compose/analysis-files.ts', "import { plan } from '../core/engine/plan.js'; import { extname } from 'node:path';"],
   ['plugin.ts', "export { pluginApi } from './core/engine/plugin.js'; const name = 'maintainability';"],
-  ['compose/native-language-plugins.ts', "const script = new URL('../../resources/go/parser.go', import.meta.url);"],
   ['compose/phases.ts', 'const key = `${plugin.id}/${operation.id}`;'],
 ];
 

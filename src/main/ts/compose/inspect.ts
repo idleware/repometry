@@ -44,7 +44,7 @@ export async function inspectWithOptions(request: InspectRequest,
   { history, deferSummary = false, recordChurn = true }:
     { history?: HistoryCache; deferSummary?: boolean; recordChurn?: boolean } = {}): Promise<Report> {
   const { findingInputs = [], plugins = [], operationCache } = request;
-  const languages = languageRegistry(plugins, true, request.parsers);
+  const languages = languageRegistry(plugins, request.parsers);
   const claims = inspectionFileMatcher(languages);
   const { isSource } = languages;
   const ports: InspectionPorts = {

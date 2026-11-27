@@ -10,10 +10,9 @@ export function cacheRoot(env: NodeJS.ProcessEnv = process.env, system = process
   return join(home, '.cache', 'repometry');
 }
 
-export const goParserCacheDirectory = 'go-parsers-v1';
-
 export async function clearCaches(root: string): Promise<readonly string[]> {
-  const directories = ['sources', goParserCacheDirectory];
+  // Also clean the parser cache used by older Repometry versions.
+  const directories = ['sources', 'go-parsers-v1'];
   await Promise.all(directories.map(directory => rm(join(root, directory), { recursive: true, force: true })));
   return directories;
 }

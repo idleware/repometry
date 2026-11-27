@@ -11,7 +11,8 @@ import catalogSchema from '../../main/resources/report/json/metric-catalog-v1.sc
 import reportJsonSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
 import { analyzeSnapshot } from './helpers/analysis.js';
 import { defaultLanguages, languageRegistry } from '../../main/ts/compose/languages.js';
-import { hostLanguages } from '../../main/ts/plugins/built-in.js';
+import { goSyntax } from '../../main/ts/plugins/language-treesitter/languages/go-syntax.js';
+import { pythonSyntax } from '../../main/ts/plugins/language-treesitter/languages/python-syntax.js';
 import { pluginApi, codeStructure, sourceFile } from '../../main/ts/plugin.js';
 import type { LanguageSyntax, Plugin } from '../../main/ts/plugin.js';
 import { isLanguageSyntax } from '../../main/ts/core/model/language.js';
@@ -59,8 +60,8 @@ test('rendering old reports attaches built-in syntax and falls back by language 
     ].map(file => ({ ...file, lines: 1, analysed: true })) },
   };
   const expected = new Map([['javascript', jsSyntax], ['typescript', jsSyntax],
-    ...hostLanguages.map(({ language, syntax }) => [language, syntax] as const)]);
-  const lookup = languageRegistry([provider('go', '.go')], false);
+    ['go', goSyntax], ['python', pythonSyntax]]);
+  const lookup = languageRegistry([provider('fixture', '.fixture')]);
   for (const languages of [defaultLanguages, lookup]) {
     const entries = inspectionAsset(report, { languages }).inspection.metrics.languages!;
     assert.equal(entries.length, expected.size);
@@ -88,7 +89,7 @@ test('registered syntax goes to the inspection asset, validates on the wire, and
   const original = await store.read(report.subject);
   const plain = inspectionAsset(original, { languages: defaultLanguages });
   assert.equal(plain.inspection.metrics.languages?.[0]?.syntax, undefined);
-  const asset = inspectionAsset(original, { languages: languageRegistry([fixture], false) });
+  const asset = inspectionAsset(original, { languages: languageRegistry([fixture]) });
   assert.deepEqual(asset.inspection.metrics.languages?.find(entry => entry.id === 'fixture')?.syntax, fixtureSyntax);
   const validator = new Ajv2020({ schemas: [catalogSchema, reportJsonSchema, metricsSchema] });
   const metrics = validator.getSchema(metricsSchema.$id)!;

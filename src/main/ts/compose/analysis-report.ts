@@ -1,5 +1,5 @@
-import { structureMeasures } from '../core/model/code-structure.js';
-import type { NativeLanguagePlugin } from './native-language-plugins.js';
+import { codeStructure, codeStructures, structureMeasures } from '../core/model/code-structure.js';
+import type { ParserPlugin } from './parser-order.js';
 import { definitions } from '../core/model/measurement.js';
 import { debtModel } from '../core/model/quality-summary.js';
 import { reportSchema } from '../core/model/report.js';
@@ -12,8 +12,9 @@ import type { AnalysisInput } from '../core/usecases/inspect.js';
 import type { AnalysisResults } from './analysis-results.js';
 import type { AnalysisSources } from './phases.js';
 import { fileTypeId } from '../core/model/file-types.js';
+import { builtInGrammarTools } from './built-ins.js';
 
-export const analysisProfile = 'repository/v3';
+export const analysisProfile = 'repository/v4';
 
 const measurementDefinitions = {
   [definitions.lines]: 'Physical lines including blank lines and comments. A final line terminator does not add a line.',
@@ -50,27 +51,64 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
 }
 
 function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], coverage }: AnalysisInput,
-  { languages, plugins }: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
+  sources: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
+  const { languages, plugins, providersByPath } = sources;
   const securityScanners = results.securityScanners(plugins);
   const active = new Set(plugins.map(plugin => plugin.id));
-  const provenance = languages.plugins.filter(plugin => active.has(plugin.id) || plugin.kinds.includes('language'));
+  const parsed = languagesForPaths(results.parsed, providersByPath);
+  const provenance = languages.plugins.flatMap(plugin => {
+    if (!plugin.kinds.includes('language')) return active.has(plugin.id) ? [pluginProvenance(plugin)] : [];
+    const used = parsed.get(plugin.id);
+    const ranOther = plugin.operations.some(({ id, output }) => output.id !== codeStructure.id && output.id !== codeStructures.id
+      && results.ran.has(plugin.id + '/' + id));
+    if (!used && !ranOther) return [];
+    const entry = languages.describe(plugin);
+    const grammarTools = builtInGrammarTools.get(plugin.id);
+    return [pluginProvenance(grammarTools ? { ...entry, tools: grammarTools(plugin, used ?? new Set()) } : entry)];
+  });
+  const defaultParser = languages.providers[0]?.plugin;
   return {
     profile: analysisProfile, mode: snapshot.subject.kind,
     source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
-    parser: languages.providers[0]?.plugin.settings,
+    parser: defaultParser && parsed.has(defaultParser.id) ? defaultParser.settings : undefined,
     maintainability: { structuralRules, duplication: duplicationSettings, debtModel, remediation: 'nonoverlapping-complexity/v1' },
     coverage: coverage === undefined ? null : { inputDigest: digest(coverage.text), pathBase: coverage.sourceRoot,
       merge: 'any-hit', hitCounts: 'sum',
       lines: [...results.unmeasured.values()].some(measures => measures.includes('codeLines')) ? 'code-when-classified' : 'code-only' },
     ...(securityScanners.length ? { securityScanners } : {}),
-    plugins: provenance.map(plugin => pluginProvenance(languages.describe(plugin))),
-    operations: results.operationRecords(),
+    plugins: provenance,
+    operations: inspectionOperations(sources, results.operationRecords()),
   };
 }
 
-function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason }: NativeLanguagePlugin) {
+function inspectionOperations({ languages, providersByPath }: AnalysisSources, operations: ReturnType<AnalysisResults['operationRecords']>) {
+  const present = languagesForPaths(providersByPath.keys(), providersByPath);
+  const parsers = new Map(languages.providers.map(provider => [provider.key, provider]));
+  return operations.map(row => {
+    const parser = parsers.get(row.key);
+    if (!parser) return row;
+    const { implementation: _all, ...operation } = row;
+    const implementation = parser.implementationFor(present.get(parser.plugin.id) ?? new Set());
+    return implementation === undefined ? operation : { ...operation, implementation };
+  });
+}
+
+function languagesForPaths(paths: Iterable<string>, providersByPath: AnalysisSources['providersByPath']) {
+  const parsed = new Map<string, Set<string>>();
+  for (const path of paths) {
+    const provider = providersByPath.get(path);
+    if (!provider) continue;
+    const { id } = provider.plugin;
+    const used = parsed.get(id) ?? new Set<string>();
+    used.add(provider.language(path) ?? fileTypeId(path));
+    parsed.set(id, used);
+  }
+  return parsed;
+}
+
+function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason }: ParserPlugin) {
   return { id, version, api, tools: tools ?? {}, kinds,
     ...(claims === undefined ? {} : { claims }), ...(settings === undefined ? {} : { settings }),
     ...(providesLanguages === undefined ? {} : { providesLanguages: providesLanguages.map(({ syntax, ...language }) => language) }), ...(unavailableReason === undefined ? {} : { unavailableReason }) };

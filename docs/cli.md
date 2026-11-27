@@ -64,7 +64,7 @@ The `parsers` key of `repometry.config.json` chooses the plugin that parses a la
 - A language that one plugin provides needs no entry.
 - A language that several plugins provide needs an entry. Without one, the run stops with an error that names the plugins.
 - Only the listed plugins are candidates. The first one that is available parses the language for the whole run.
-- A later plugin parses the language only when the one before reports that its tool is missing. Only the packaged Go and Python parsers report this.
+- A later plugin parses the language only when the one before reports that its tool is missing. The built-in parsers need no tool and are always available. Only a plugin that reports a missing tool passes the language on.
 - A parser that fails on a file is not replaced by the next one.
 - When no listed plugin is available, the files stay in scope, unparsed, and the report records the reason.
 - The chosen plugin's definition of the language applies: its extensions, globs, label, colour, syntax and measures.
@@ -75,13 +75,19 @@ To keep the built-in JavaScript parser when `my-parser` also provides JavaScript
 { "parsers": { "javascript": ["babel-syntax"], "typescript": ["babel-syntax"] } }
 ```
 
-To prefer the packaged Go parser and use `my-parser` when `go` is not installed, list both in that order:
+To keep the built-in Go parser when `my-parser` also provides Go, list `tree-sitter`:
 
 ```json
-{ "parsers": { "go": ["go-ast", "my-parser"] } }
+{ "parsers": { "go": ["tree-sitter"] } }
 ```
 
-`repometry plugins` and the applied configuration in the report show each language under the one plugin that parses it. A plugin that parses none of its languages stays in the list with its availability, such as `go not found on PATH`, and without those languages.
+To prefer `my-parser` and use the built-in parser when `my-parser` reports its tool missing, list both in that order:
+
+```json
+{ "parsers": { "go": ["my-parser", "tree-sitter"] } }
+```
+
+`repometry plugins` and the applied configuration in the report show each language under the one plugin that parses it. A plugin that parses none of its languages stays in the list with its availability, such as a missing tool, and without those languages.
 
 The `inspect`, review and diff coverage requests of the library take the same optional `parsers` field. Their messages start with `parsers`, without the word `Config`.
 
@@ -91,8 +97,8 @@ The `inspect`, review and diff coverage requests of the library take the same op
 | `Config parsers/<language> must use a language ID` | The key is not a language ID: lowercase letters, digits and `-`, starting with a letter. |
 | `Config parsers/<language> must be a nonempty list of unique plugin IDs` | The value is not a list, is empty, repeats an ID, or holds something other than a string. |
 | `Config parsers/<language> names an unknown language` | No plugin provides this language. |
-| `Config parsers/<language>/<n> names unknown plugin <id>` | The list holds an ID that is not a plugin. `<n>` counts from 0. |
-| `Config parsers/<language>/<n> names plugin <id>, which does not provide <language>` | The plugin exists but does not provide the language. |
+| `Config parsers/<language>/<n> names unknown plugin <id>; <language> is provided by <a>, <b>` | The list holds an ID that is not a plugin. `<n>` counts from 0. The text after `;` names the plugins that provide the language, such as `Config parsers/go/0 names unknown plugin go-ast; go is provided by tree-sitter`. |
+| `Config parsers/<language>/<n> names plugin <id>, which does not provide <language>; <language> is provided by <a>, <b>` | The plugin exists but does not provide the language. The text after `;` names the plugins that do. |
 | `Config parsers/<language> is required to choose among <a>, <b>` | Several plugins provide the language and `parsers` has no entry for it. |
 | `Multiple language providers claim <path>: <a>, <b>` | Two chosen parsers claim one file under different languages. Narrow the extensions or globs of one plugin. |
 
