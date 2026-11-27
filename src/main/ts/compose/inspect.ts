@@ -20,6 +20,7 @@ import { analyzeSnapshot, inspectionFileMatcher } from './analyze-snapshot.js';
 import { attachChurn } from './attach-churn.js';
 import type { HistoryCache } from './history-cache.js';
 import { languageRegistry } from './languages.js';
+import type { ParserOrder } from './parser-order.js';
 
 export interface InspectRequest extends CoverageInputs {
   readonly directory: string;
@@ -31,6 +32,7 @@ export interface InspectRequest extends CoverageInputs {
   readonly ignore?: readonly FindingIgnoreRule[];
   /** Trusted in-process plugins. */
   readonly plugins?: readonly Plugin[];
+  readonly parsers?: ParserOrder;
   readonly operationCache?: OperationCacheOptions;
 }
 
@@ -42,12 +44,12 @@ export async function inspectWithOptions(request: InspectRequest,
   { history, deferSummary = false, recordChurn = true }:
     { history?: HistoryCache; deferSummary?: boolean; recordChurn?: boolean } = {}): Promise<Report> {
   const { findingInputs = [], plugins = [], operationCache } = request;
-  const languages = languageRegistry(plugins);
-  const claims = inspectionFileMatcher(plugins, languages);
+  const languages = languageRegistry(plugins, true, request.parsers);
+  const claims = inspectionFileMatcher(languages);
   const { isSource } = languages;
   const ports: InspectionPorts = {
     readSource: excludes => readSource(request, { excludes, isSource, claims, history: history?.blobs }, deferSummary),
-    analyze: input => analyzeSnapshot(input, plugins, operationCache, history),
+    analyze: input => analyzeSnapshot(input, languages, operationCache, history),
     ...(hasCoverageInputs(request) ? { readCoverage: source => readInspectionCoverage(request, source) } : {}),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),

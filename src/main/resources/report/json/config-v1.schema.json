@@ -45,7 +45,16 @@
     "minCoverage": { "type": "number", "minimum": 0, "maximum": 100 },
     "minLines": { "type": "integer", "minimum": 0 },
     "maxNewIssues": { "type": "integer", "minimum": 0 },
-    "plugins": { "$ref": "urn:repometry:schema:process-plugins:1" }
+    "plugins": { "$ref": "urn:repometry:schema:process-plugins:1" },
+    "parsers": {
+      "description": "Parser plugin IDs in availability order for each language ID.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": {
+        "type": "array", "minItems": 1, "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    }
   },
   "additionalProperties": false,
   "$defs": {

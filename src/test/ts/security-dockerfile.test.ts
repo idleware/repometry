@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { manifestProducts } from '../../main/ts/core/engine/manifest.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract } from '../../main/ts/core/engine/plugin.js';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { workingSnapshot } from '../../main/ts/core/model/snapshot.js';
 import { mapCoverage } from '../../main/ts/plugins/coverage/coverage.js';

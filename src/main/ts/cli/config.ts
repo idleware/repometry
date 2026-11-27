@@ -5,16 +5,21 @@ import { normalizeProfile } from '../core/profile/profile.js';
 import type { Component } from '../report/json/wire/component-model.js';
 import type { Invocation } from './arguments.js';
 import { readProcessPlugins } from '../compose/process-plugins.js';
+import { languageRegistry } from '../compose/languages.js';
+import { readParserOrder } from '../compose/parser-order.js';
 import { invocationDirectory } from './store.js';
 
 const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
-  'minCoverage', 'minLines', 'maxNewIssues', 'plugins', 'components']);
+  'minCoverage', 'minLines', 'maxNewIssues', 'plugins', 'components', 'parsers']);
 
 export function parseConfig(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
   string(value.$schema, '$schema');
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
-  return { ...profile, plugins: readProcessPlugins(value.plugins), imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
+  const plugins = readProcessPlugins(value.plugins);
+  const parsers = readParserOrder(value.parsers, 'Config parsers');
+  if (plugins.length || parsers !== undefined) languageRegistry(plugins, true, parsers, 'Config parsers');
+  return { ...profile, plugins, parsers, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
     sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
     components: parseComponents(value.components),
     minCoverage: number(value.minCoverage, 'minCoverage', 100), minLines: number(value.minLines, 'minLines'),

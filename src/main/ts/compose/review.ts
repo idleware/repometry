@@ -16,6 +16,7 @@ import type { SourceLines } from '../core/usecases/review-effect.js';
 import { measureChangedLines } from './diff-coverage.js';
 import { HistoryCache } from './history-cache.js';
 import { inspectWithOptions } from './inspect.js';
+import type { ParserOrder } from './parser-order.js';
 
 export { projectReview, reviewExitCode, reviewReason } from '../core/usecases/review.js';
 
@@ -27,6 +28,7 @@ export interface ReviewRequest extends ReviewOptions, CoverageInputs {
   readonly exclude?: readonly string[];
   readonly ignore?: readonly FindingIgnoreRule[];
   readonly plugins?: readonly Plugin[];
+  readonly parsers?: ParserOrder;
   /** The settings that shaped both inspections, which keeps the second one's reuse of unchanged files honest. */
   readonly settings?: unknown;
   /** The settings file's repository path; a change to it is noted. */
@@ -38,7 +40,7 @@ export interface ReviewRequest extends ReviewOptions, CoverageInputs {
  * on the lines it changed. The repository's own store is neither read nor written.
  */
 export async function review(request: ReviewRequest): Promise<PullReview> {
-  const { directory, lcov, goCover, cobertura, exclude, ignore, plugins } = request;
+  const { directory, lcov, goCover, cobertura, exclude, ignore, plugins, parsers } = request;
   const inputs = { lcov, goCover, cobertura };
   const withCoverage = hasCoverageInputs(inputs);
   checkOptions(request, withCoverage);
@@ -51,13 +53,13 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
   const output = await mkdtemp(join(tmpdir(), 'repometry-review-'));
   try {
     const history = new HistoryCache(request.settings);
-    const inspectCommit = (id: string, coverage: boolean) => inspectWithOptions({ directory, output, source: { revision: id }, exclude, ignore, plugins,
+    const inspectCommit = (id: string, coverage: boolean) => inspectWithOptions({ directory, output, source: { revision: id }, exclude, ignore, plugins, parsers,
       ...coverage ? inputs : {} }, { history, deferSummary: true, recordChurn: false });
     const base = await inspectCommit(mergeBase, false);
     const headReport = await inspectCommit(head, true);
     const changes = await readLineChanges(directory, mergeBase, head);
     const coverage = withCoverage
-      ? await measureChangedLines({ directory, base: mergeBase, revision: head, ...inputs, exclude, plugins }) : null;
+      ? await measureChangedLines({ directory, base: mergeBase, revision: head, ...inputs, exclude, plugins, parsers }) : null;
     const sources = { base: await sourceLines(directory, mergeBase, changes, 'previous'), head: await sourceLines(directory, head, changes, 'path') };
     const settingsChanged = request.settingsPath !== undefined
       && changes.files.some(file => file.path === request.settingsPath || file.previous === request.settingsPath);

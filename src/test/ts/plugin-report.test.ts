@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract, MetricDescriptor, Plugin } from '../../main/ts/core/engine/plugin.js';

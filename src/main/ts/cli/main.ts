@@ -87,7 +87,7 @@ const commands: Readonly<Record<string, Command>> = {
     async run(input) {
       const { root } = await repositoryContext(input);
       const config = await readConfig(root, input);
-      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: effectivePlugins(config.plugins),
+      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: effectivePlugins(config.plugins, config.parsers),
         importers: importerIds, reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
     },
   },
@@ -143,8 +143,9 @@ function runAnalysis(input: Invocation): Promise<number> {
 async function analyze(input: Invocation): Promise<number> {
   const { directory, root, store } = await context(input);
   const output = writableStore(store);
-  if (input.flag('working-tree') && input.args.length) throw new Error('Choose a revision or --working-tree');
-  if (input.flag('working-tree') && input.flag('skip-saved')) throw new Error('--skip-saved applies to commits, not --working-tree');
+  const workingTree = input.flag('working-tree');
+  if (workingTree && input.args.length) throw new Error('Choose a revision or --working-tree');
+  if (workingTree && input.flag('skip-saved')) throw new Error('--skip-saved applies to commits, not --working-tree');
   const config = await readConfig(root, input);
   const revision = input.args[0] ?? 'HEAD';
   const imports = input.many('import');
@@ -154,8 +155,8 @@ async function analyze(input: Invocation): Promise<number> {
   const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
-    : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-      ...coverage, exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins: config.plugins,
+    : await inspect({ directory, output, source: workingTree ? { workingTree: true } : { revision },
+      ...coverage, exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins: config.plugins, parsers: config.parsers,
       findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined });
   print({ schema: 'urn:repometry:schema:analysis-result:1', ...inspectionSummary(report), ...(skipped ? { skipped: true } : {}),
     store: output });
@@ -209,7 +210,7 @@ async function review(input: Invocation): Promise<number> {
   const settingsPath = configFile(root, input);
   const { plugins, ...settings } = config;
   const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', ...coverage,
-    exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, settings,
+    exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, parsers: config.parsers, settings,
     settingsPath: settingsPath === undefined ? undefined : relative(root, settingsPath).split(sep).join('/'),
     number: count(input.text('pull'), '--pull', 1) ?? (github ? await gitHubPullRequest() : undefined),
     minimumPercent: config.minCoverage, minimumLines: config.minLines, maxNewIssues: config.maxNewIssues });

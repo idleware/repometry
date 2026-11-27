@@ -31,7 +31,9 @@ npx repometry analyze
 npx repometry report html
 ```
 
-A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin and language. An ID that a built-in plugin uses is an error; [Process plugin failures](plugins.md#process-plugin-failures) lists the messages. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
+A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin. An ID that a built-in plugin uses is an error; [Process plugin failures](plugins.md#process-plugin-failures) lists the messages. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
+
+A language ID may match one that another plugin provides, such as `go` or `javascript`. Then the config needs a `parsers` entry that chooses the parser; see [Parsers](cli.md#parsers).
 
 A language's optional `measures` array accepts `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, and `structuralRules`. Include only capabilities the parser supplies. A parser that counts functions and decisions declares `["functions", "cyclomaticComplexity"]` and returns `path`, `lines`, `functions`, and `cyclomaticFunctions`. Duplication requires `codeLines` and clone candidates. Structural rules consume `observations`. See [Language provider metrics](metrics.md) for unknown values and repository rollups.
 

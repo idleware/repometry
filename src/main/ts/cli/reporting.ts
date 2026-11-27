@@ -18,7 +18,13 @@ import type { Store } from './store.js';
 const reporters = { html: '.repometry/report/html', json: '.repometry/report/summary.json' } as const;
 export const reporterIds = Object.keys(reporters);
 
-export async function outputReports(root: string, store: Store, input: Invocation, config: Awaited<ReturnType<typeof readConfig>>) {
+type Config = Awaited<ReturnType<typeof readConfig>>;
+
+function reportLanguages({ plugins, parsers }: Config) {
+  return plugins.length || parsers ? languageRegistry(plugins, true, parsers) : defaultLanguages;
+}
+
+export async function outputReports(root: string, store: Store, input: Invocation, config: Config) {
   const typed = input.args.length > 0;
   const base = typed ? invocationDirectory(input) : root;
   const configured = config.reports.length ? config.reports : ['html'];
@@ -38,7 +44,7 @@ export async function outputReports(root: string, store: Store, input: Invocatio
   const sourceOption = input.text('sources') ?? config.sources;
   const sources = resolveSourceLocator(sourceOption, { remotes: await sourceRemotes(root), env: process.env });
   const pulls = store.path ? await listPullReviews(store.path) : [];
-  const options = { languages: config.plugins.length ? languageRegistry(config.plugins) : defaultLanguages, sources,
+  const options = { languages: reportLanguages(config), sources,
     components: config.components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
     title: input.text('title') ?? basename(root) };
   for (const request of requests) {
@@ -83,7 +89,7 @@ export async function viewTarget(input: Invocation, port: number) {
   if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error(`No saved inspections in ${store.path ?? storeOption}. Run repometry analyze first.`);
   const [pulls, config] = await Promise.all([store.path ? listPullReviews(store.path) : [], readConfig(root, input)]);
   const local = repository ? readLocalSources(repository) : undefined;
-  const server = await serveSite(store.reader, port, { languages: config.plugins.length ? languageRegistry(config.plugins) : defaultLanguages, title: input.text('title') ?? basename(root), components: config.components, pulls,
+  const server = await serveSite(store.reader, port, { languages: reportLanguages(config), title: input.text('title') ?? basename(root), components: config.components, pulls,
     branch: input.text('branch') ?? config.branch, readCommitMetadata: repository ? commitMetadataReader(repository) : undefined,
     sources: local ? resolveSourceLocator('local', { remotes: [], env: {} }) : undefined }, local);
   return { ...server, label: `${basename(root)} (live from ${store.path ?? storeOption})` };

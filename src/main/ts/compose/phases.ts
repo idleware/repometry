@@ -1,4 +1,3 @@
-import { plan } from '../core/engine/plan.js';
 import type { DataContract, Operation, Plugin } from '../core/engine/plugin.js';
 import { changesInput } from '../core/model/changes.js';
 import { cloneSources } from '../core/model/clone-source.js';
@@ -6,9 +5,10 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import { lcovInput } from '../core/model/coverage-input.js';
 import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
 import type { SourceFile, SourceSnapshot } from '../core/model/source.js';
-import { builtInPluginIds, builtInPlugins } from './built-ins.js';
-import { claimMatcher, languageRegistry } from './languages.js';
+import { builtInPluginIds } from './built-ins.js';
+import { claimMatcher } from './languages.js';
 import type { LanguageProvider, LanguageRegistry } from './languages.js';
+import { inspectionClaims } from './parser-order.js';
 
 /**
  * A phase of a run: the host inputs it offers by external port name, and what one of its tasks covers: one file, the files
@@ -111,7 +111,7 @@ function analysisSteps(plugins: readonly Plugin[], languages: LanguageRegistry, 
   // Those that read the code structure, directly or through the products of others, run on the parsed files their plugin claims.
   const readers = new Set(reached(files, [codeStructure.id], 'some'));
   const claims = new Map(plugins.map(plugin => [plugin.id, claimsOf(plugin, languages)]));
-  const step = (operations: readonly ActiveOperation[], candidates = operations): Step => ({ candidates: candidatesOf(candidates),
+  const step = (operations: readonly ActiveOperation[]): Step => ({ candidates: candidatesOf(operations),
     inspections: operations.filter(({ operation }) => operation.role === 'inspection').map(active => ({ ...active, parsed: readers.has(active),
       matches: (path: string, isParsed: boolean) => (!readers.has(active) || isParsed) && claims.get(active.plugin.id)!(path) })) });
   const parsers = repositoryParsers(plugins, languages);
@@ -120,7 +120,7 @@ function analysisSteps(plugins: readonly Plugin[], languages: LanguageRegistry, 
     plugins: plugins.filter(plugin => active.has(plugin)),
     repositorySyntax: [...parsers].map(([plugin, provider]) => ({ provider, ...step(repository.filter(operation => operation.plugin === plugin)) })),
     files: step(files),
-    repository: step(repository.filter(({ plugin }) => !parsers.has(plugin)), repository),
+    repository: step(repository.filter(({ plugin }) => !parsers.has(plugin))),
     afterFiles: step(afterFiles),
     claims: (plugin: Plugin, path: string) => claims.get(plugin.id)!(path),
   };
@@ -132,10 +132,10 @@ function repositoryParsers(plugins: readonly Plugin[], languages: LanguageRegist
     .map(provider => [plugin, provider] as const)));
 }
 
-/** The files a plugin claims: a language plugin those it parses, any other the files its claims match, or every file without claims. */
+/** A chosen parser inspects its parsed files. Other inspections use their plugin's claims. */
 function claimsOf(plugin: Plugin, languages: LanguageRegistry): (path: string) => boolean {
   return languages.providers.some(provider => provider.plugin === plugin)
-    ? path => languages.select(path)?.plugin === plugin : claimMatcher(plugin.claims, languages.id);
+    ? path => languages.select(path)?.plugin === plugin : claimMatcher(inspectionClaims(plugin), languages.id);
 }
 
 /** The plugins restricted to the given operations, in their order, for the planner to choose from. */
@@ -153,35 +153,21 @@ export function phaseInputs({ offers }: Phase, omit?: DataContract): ReadonlyMap
 export type SelectedSource = Readonly<{ file: SourceFile; provider: LanguageProvider | undefined }>;
 
 /** Whether a file is claimed by an inspection that runs on claimed files rather than on every parsed one. */
-export function inspectionFileMatcher(additional: readonly Plugin[], languages: LanguageRegistry): (path: string) => boolean {
-  const { files, repository } = analysisSteps(runPlugins(additional, languages), languages, false);
+export function inspectionFileMatcher(languages: LanguageRegistry): (path: string) => boolean {
+  const { files, repository } = analysisSteps(languages.plugins, languages, false);
   const claimed = [...files.inspections, ...repository.inspections].filter(({ parsed }) => !parsed);
   return path => claimed.some(({ matches }) => matches(path, false));
 }
 
 /** The files of a snapshot with their language providers, and the steps that analyse them. */
-export function selectAnalysisSources(snapshot: SourceSnapshot, additional: readonly Plugin[], withCoverage: boolean) {
-  const languages = languageRegistry(additional);
+export function selectAnalysisSources(snapshot: SourceSnapshot, withCoverage: boolean, languages: LanguageRegistry) {
   const sources: SelectedSource[] = snapshot.files.map(file => ({ file, provider: languages.select(file.path) }));
   const providersByPath = new Map(sources.flatMap(({ file, provider }) => provider ? [[file.path, provider] as const] : []));
   const unavailableFiles = new Set(sources.filter(({ file, provider }) => !provider && languages.skipped(file.path))
     .map(({ file }) => file.path));
   const sourceFiles = sources.flatMap(({ file, provider }) => provider ? [file] : []);
-  const steps = analysisSteps(runPlugins(additional, languages), languages, withCoverage);
+  const steps = analysisSteps(languages.plugins, languages, withCoverage);
   return { languages, sources, sourceFiles, unavailableFiles, providersByPath, steps, plugins: steps.plugins };
 }
 
 export type AnalysisSources = ReturnType<typeof selectAnalysisSources>;
-
-/** The built-ins in root order, then the enabled host languages, then the additional plugins, each bound to its language. */
-function runPlugins(additional: readonly Plugin[], languages: LanguageRegistry): Plugin[] {
-  if (additional.some(plugin => builtInPluginIds.has(plugin.id) && !builtInPlugins.includes(plugin))) {
-    throw new Error('An additional plugin uses a built-in plugin ID');
-  }
-  const bound = new Map(languages.providers.map(({ plugin }) => [plugin.id, plugin]));
-  const native = languages.native.flatMap(({ id }) => bound.get(id) ?? []);
-  const plugins = [...builtInPlugins.filter(plugin => !additional.includes(plugin)), ...native, ...additional]
-    .map(plugin => bound.get(plugin.id) ?? plugin);
-  if (additional.length) plan({ plugins, select: [], inputs: new Map() });
-  return plugins;
-}

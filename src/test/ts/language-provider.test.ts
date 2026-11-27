@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
 import { processPlugin } from '../../main/ts/api/process/plugin.js';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { execute } from '../../main/ts/core/engine/execute.js';
 import { plan } from '../../main/ts/core/engine/plan.js';

@@ -1,6 +1,6 @@
 # Commands and settings
 
-This page covers the rules that settings follow, the `projects` command, the `components` key, exit codes and the environment variables that the [README](../README.md#usage) leaves out. [Reading inspections](store.md#reading-inspections) describes `history` and `show`.
+This page covers the rules that settings follow, the `projects` command, the `components` and `parsers` keys, exit codes and the environment variables that the [README](../README.md#usage) leaves out. [Reading inspections](store.md#reading-inspections) describes `history` and `show`.
 
 ## Analysis settings
 
@@ -56,6 +56,45 @@ The key is an array, and each entry follows these rules:
 A config that breaks a rule fails the command with an error. `--no-config` skips the key.
 
 Components apply when `report` or `view` runs, so changing them needs no new analysis. On the Metrics page, group by Components to see a row for each component and a row for the files none holds. The query also takes a component as a filter. With no components defined, the page says so.
+
+## Parsers
+
+The `parsers` key of `repometry.config.json` chooses the plugin that parses a language when several plugins provide it. It maps a language ID to an ordered list of plugin IDs.
+
+- A language that one plugin provides needs no entry.
+- A language that several plugins provide needs an entry. Without one, the run stops with an error that names the plugins.
+- Only the listed plugins are candidates. The first one that is available parses the language for the whole run.
+- A later plugin parses the language only when the one before reports that its tool is missing. Only the packaged Go and Python parsers report this.
+- A parser that fails on a file is not replaced by the next one.
+- When no listed plugin is available, the files stay in scope, unparsed, and the report records the reason.
+- The chosen plugin's definition of the language applies: its extensions, globs, label, colour, syntax and measures.
+
+To keep the built-in JavaScript parser when `my-parser` also provides JavaScript and TypeScript, list `babel-syntax` for both languages:
+
+```json
+{ "parsers": { "javascript": ["babel-syntax"], "typescript": ["babel-syntax"] } }
+```
+
+To prefer the packaged Go parser and use `my-parser` when `go` is not installed, list both in that order:
+
+```json
+{ "parsers": { "go": ["go-ast", "my-parser"] } }
+```
+
+`repometry plugins` and the applied configuration in the report show each language under the one plugin that parses it. A plugin that parses none of its languages stays in the list with its availability, such as `go not found on PATH`, and without those languages.
+
+The `inspect`, review and diff coverage requests of the library take the same optional `parsers` field. Their messages start with `parsers`, without the word `Config`.
+
+| Message | Meaning |
+| --- | --- |
+| `Config parsers must map language IDs to lists of plugin IDs` | `parsers` is not an object. |
+| `Config parsers/<language> must use a language ID` | The key is not a language ID: lowercase letters, digits and `-`, starting with a letter. |
+| `Config parsers/<language> must be a nonempty list of unique plugin IDs` | The value is not a list, is empty, repeats an ID, or holds something other than a string. |
+| `Config parsers/<language> names an unknown language` | No plugin provides this language. |
+| `Config parsers/<language>/<n> names unknown plugin <id>` | The list holds an ID that is not a plugin. `<n>` counts from 0. |
+| `Config parsers/<language>/<n> names plugin <id>, which does not provide <language>` | The plugin exists but does not provide the language. |
+| `Config parsers/<language> is required to choose among <a>, <b>` | Several plugins provide the language and `parsers` has no entry for it. |
+| `Multiple language providers claim <path>: <a>, <b>` | Two chosen parsers claim one file under different languages. Narrow the extensions or globs of one plugin. |
 
 ## Exit codes
 

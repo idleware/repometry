@@ -16,6 +16,7 @@ import { gitText, physicalGitRoot, readGitCommit, resolveGitCommit } from '../ap
 import { readInspectionCoverage } from './inspection-coverage.js';
 import type { CoverageInputs } from '../api/import/lcov-files.js';
 import { defaultLanguages, languageRegistry } from './languages.js';
+import type { ParserOrder } from './parser-order.js';
 
 export { diffCoverageSchema } from '../core/usecases/diff-coverage.js';
 export type { DiffCoverageReport } from '../core/usecases/diff-coverage.js';
@@ -27,6 +28,7 @@ export interface DiffCoverageRequest extends CoverageInputs {
   readonly exclude?: readonly string[];
   readonly minimumPercent?: number;
   readonly plugins?: readonly Plugin[];
+  readonly parsers?: ParserOrder;
 }
 
 const { changedLines } = selectOperations(builtInPlugins, diffCoveragePhases, new Set(defaultLanguages.providers.map(({ key }) => key)));
@@ -64,7 +66,7 @@ async function readInputs(request: DiffCoverageRequest, excludedPaths: readonly 
     gitText(root, ['--version']).then(text => text.trim()),
   ]);
   const base = await findMergeBase(root, requestedBase, head);
-  const { isSource, extensions, globs } = languageRegistry(request.plugins ?? []);
+  const { isSource, extensions, globs } = languageRegistry(request.plugins ?? [], true, request.parsers);
   const snapshot = await readGitCommit(root, head, { excludes, isSource });
   const [lcov, changes] = await Promise.all([
     readInspectionCoverage(request, { root, snapshot }),

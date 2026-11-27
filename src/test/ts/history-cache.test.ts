@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { HistoryCache } from '../../main/ts/compose/history-cache.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { Plugin } from '../../main/ts/core/engine/plugin.js';

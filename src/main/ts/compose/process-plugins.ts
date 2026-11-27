@@ -9,7 +9,6 @@ import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import type { ProvidedLanguage } from '../core/model/language.js';
 import type { JsonValue } from '../core/model/plugin-data.js';
 import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
-import { languageRegistry } from './languages.js';
 import { builtInPluginIds } from './built-ins.js';
 
 type Selectors = Pick<FileClaims, 'extensions' | 'globs'>;
@@ -43,7 +42,6 @@ export function readProcessPlugins(value: unknown): readonly Plugin[] {
     ids.add(definition.id);
     return configuredPlugin(definition, index);
   });
-  languageRegistry(plugins, false);
   return plugins;
 }
 

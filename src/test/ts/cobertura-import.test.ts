@@ -8,7 +8,7 @@ import type { TestContext } from 'node:test';
 import { coberturaToLcov } from '../../main/ts/api/import/cobertura.js';
 import { readCoverageFiles } from '../../main/ts/api/import/lcov-files.js';
 import { readInputs } from '../../main/ts/cli/imports.js';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { lcovLines } from '../../main/ts/core/model/line-coverage.js';
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import type { Report } from '../../main/ts/core/model/report.js';

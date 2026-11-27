@@ -22,7 +22,7 @@ export function rangeInspector(inspection: RangeInspection, config: ReturnType<t
   const history = new HistoryCache(profile);
   const { directory, output, exclude } = inspection;
   return (revision: string) => inspectWithOptions({ directory, output, source: { revision }, exclude,
-    ignore: config.ignore, plugins }, { history, deferSummary: true });
+    ignore: config.ignore, plugins, parsers: config.parsers }, { history, deferSummary: true });
 }
 
 export async function inspectCommits(commits: readonly string[], inspectCommit: (id: string) => Promise<Report>,

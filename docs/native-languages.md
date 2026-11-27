@@ -4,7 +4,7 @@ Repometry includes Go and Python parsers that use the local `go` and `python3` e
 
 A missing tool leaves its files in the report as unanalysed. Repometry completes the inspection with the available tools. The report records the language's availability and tool version in the applied profile, so a later change in availability or version is visible in Trends.
 
-A [configured language plugin](process-plugins.md) takes precedence over these parsers for the files it claims. A configured language with the ID `go` or `python` replaces the packaged parser for that language. [Write a plugin](plugins.md#languages) lists the rules for language providers.
+A [configured language plugin](process-plugins.md) that provides `go` or `python` does not replace the packaged parser by itself. Both providers compete for the language, so the config needs a `parsers` line that chooses between them, or lists them in order of preference. [Parsers](cli.md#parsers) gives the rule. [Write a plugin](plugins.md#languages) lists the rules for language providers.
 
 ## Measurements
 

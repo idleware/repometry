@@ -9,7 +9,7 @@ import metricsSchema from '../../main/resources/report/json/file-metrics-v1.sche
 import inspectionSchema from '../../main/resources/report/json/viewer-inspection-v1.schema.json' with { type: 'json' };
 import catalogSchema from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
 import reportJsonSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { defaultLanguages, languageRegistry } from '../../main/ts/compose/languages.js';
 import { hostLanguages } from '../../main/ts/plugins/built-in.js';
 import { pluginApi, codeStructure, sourceFile } from '../../main/ts/plugin.js';

@@ -122,14 +122,14 @@ Each entry in `providesLanguages` has these fields:
 
 | Field | Meaning |
 | --- | --- |
-| `id` | Lowercase letters, digits and `-`, starting with a letter. Unique across all languages. |
+| `id` | Lowercase letters, digits and `-`, starting with a letter. Unique within the plugin. Another plugin may provide the same language. |
 | `label` | The display name. |
 | `color` | Optional, six hexadecimal digits with `#`. |
 | `extensions`, `globs` | At least one. They select the files of the language. |
 | `measures` | Optional. A subset of `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, `structuralRules`. `duplication` needs `codeLines`. Repometry removes the other optional fields from the structures of this language before any operation reads them. |
 | `syntax` | Optional data for the report viewer: `lineComments`, `blockComments`, `strings`, `stringPrefixes`, `keywords`, `regexAfter`. The [syntax table](process-plugins.md) gives the meaning of each. |
 
-One provider handles each file. Two providers that claim one file are an error. The report stores the language catalog once and records the provider operation for each source path. It also lists each distinct operation binding that ran in its applied configuration (`operations`): the key, the binding of each input, `implementation` and, for a repository operation, `scope`.
+One provider handles each file. Two chosen providers that claim one file are an error. Several plugins may provide one language, for example `go`. The user's `parsers` setting chooses which of them parses it, so a plugin does not need to avoid IDs that other plugins use; [Parsers](cli.md#parsers) describes the rule. The report stores the language catalog once and records the provider operation for each source path. It also lists each distinct operation binding that ran in its applied configuration (`operations`): the key, the binding of each input, `implementation` and, for a repository operation, `scope`.
 
 ## Host contracts
 
@@ -199,9 +199,9 @@ Repometry rejects an invalid plugin before the analysis starts. `<key>` stands f
 | `<key> reads <contracts>, which no phase of its runs offers together` | No step supplies all these inputs. Read fewer inputs, or split the work. |
 | `<key> reads <contracts>, which only operations that never run output` | The producers cannot run, for example in a cycle. Fix the producers first. |
 | `Language plugin <id> must claim files and provide code structure` | Add claims or `providesLanguages`, and one provider operation. |
-| `Duplicate provided language ID` | Two plugins provide one language `id`. |
 | `Language plugin <id> declares multiple languages for <path>` | The languages of one plugin overlap on a file. |
-| `Multiple language providers claim <path>: <a>, <b>` | Narrow the claims. |
+| `Multiple language providers claim <path>: <a>, <b>` | Two chosen providers of different languages claim one file. Narrow the claims. |
+| `Config parsers/<language> is required to choose among <a>, <b>` | Several plugins provide one language, and `parsers` has no entry for it. [Parsers](cli.md#parsers) lists the other `parsers` messages. |
 
 ### During the analysis
 

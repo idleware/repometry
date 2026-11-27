@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
+import { analyzeSnapshot } from './helpers/analysis.js';
 import { nativeLanguagePlugins } from '../../main/ts/compose/native-language-plugins.js';
 import { effectivePlugins } from '../../main/ts/compose/plugin-list.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';

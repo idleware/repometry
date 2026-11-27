@@ -54,7 +54,8 @@ export function historyProfile(input: AnalysisInput, sources: AnalysisSources, o
   return JSON.stringify([process.version, analysisProfile, input.excludedPaths, input.excludedOutput,
     sourceDirectoriesExcluded, defaultSourceExclusions, generatedSourcePolicy, structuralRules, duplicationSettings, debtModel,
     operationConfiguration, sources.plugins.map(pluginIdentity),
-    sources.languages.native.filter(plugin => plugin.unavailableReason !== undefined).map(pluginIdentity)]);
+    sources.languages.plugins.filter(plugin => plugin.unavailableReason !== undefined).map(pluginIdentity),
+    sources.languages.providers.map(({ plugin }) => sources.languages.describe(plugin).providesLanguages?.map(({ id }) => id))]);
 }
 
 function pluginIdentity({ operations, ...manifest }: Plugin) {
