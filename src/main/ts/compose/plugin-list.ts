@@ -21,6 +21,7 @@ export function effectivePlugins(additional: readonly Plugin[]) {
 }
 
 function describePlugin({ id, version, kinds, claims, providesLanguages, unavailableReason }: NativeLanguagePlugin) {
-  return { id, version, kinds, ...(claims ? { claims } : {}), ...(providesLanguages ? { providesLanguages } : {}),
+  return { id, version, kinds, ...(claims ? { claims } : {}),
+    ...(providesLanguages ? { providesLanguages: providesLanguages.map(({ syntax, ...language }) => language) } : {}),
     ...(unavailableReason ? { unavailableReason } : {}) };
 }

@@ -3,7 +3,7 @@
 import { element } from './viewer-dom.js';
 import { bridgeStates, hitLabel } from './viewer-line-coverage.js';
 import type { LineReading, LineState, SourceLayer } from './viewer-line-coverage.js';
-import { languageIdOf } from './viewer-languages.js';
+import { syntaxOf } from './viewer-languages.js';
 import { highlighter, runNodes, tokenizer } from './viewer-tokenizer.js';
 import type { Run } from './viewer-tokenizer.js';
 
@@ -76,7 +76,7 @@ function noteBox(note: SourceNote): HTMLElement {
 export function renderSource(container: HTMLElement, text: string, options: SourceOptions): (line: number) => void {
   const lines = sourceLines(text);
   // Tokenized up front, in order, since a comment's state carries from line to line.
-  const tokenize = tokenizer(languageIdOf(options.path));
+  const tokenize = tokenizer(syntaxOf(options.path));
   const tokens = lines.map(line => tokenize(line));
   const states = new Map([...options.coverage ?? []].map(([line, reading]) => [line, reading.state]));
   const bridged = bridgeStates(states);

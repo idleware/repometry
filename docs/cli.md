@@ -11,6 +11,19 @@ This page covers the rules that settings follow, the `projects` command, the `co
 - A path typed on the command line resolves against the folder the command runs in, or against `--repo DIR` (`-C DIR`) on a command that takes it. This covers `--import`, `--store`, `--config` and the path in `report FORMAT=PATH`. A path in `repometry.config.json` resolves against the repository root, wherever the command runs. This covers the paths in `imports` and `reports`.
 - A command takes `--repo` and `--store` only when it uses them. `analyze`, `show`, `history`, `report` and `store check` take both. `review` and `plugins` take `--repo`. `view` takes `--store`, and its `TARGET` says where to look. `projects` and `cache` take neither. Any other command rejects the option as unknown.
 
+`--import FORMAT=PATH` and the `imports` key take these formats. Repeat `--import` for each file. `--import-root DIR` resolves the paths in scanner reports and does not apply to coverage.
+
+| Format | File |
+| --- | --- |
+| `lcov` | LCOV coverage. |
+| `go-cover` | Go coverprofile from `go test -coverprofile`. |
+| `cobertura` | Cobertura XML coverage, such as `coverage.xml`. See [Importing coverage](native-languages.md#importing-coverage). |
+| `sarif` | SARIF lint findings. |
+| `sarif-security` | SARIF security findings. |
+| `sarif-secrets` | SARIF secret findings. |
+| `eslint` | ESLint JSON output. |
+| `osv` | OSV-Scanner JSON output. |
+
 ## Projects index
 
 `repometry projects DIR` builds an index page for a folder of exported reports and writes it into `DIR`. Without `DIR` it uses the current folder. Each subfolder that holds an `index.html` and a valid `summary.json`, as `repometry report html=DIR/NAME` writes them, becomes an entry.

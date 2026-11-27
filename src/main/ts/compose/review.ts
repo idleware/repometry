@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { findMergeBase } from '../api/git/changes.js';
 import { GitBlobReader, resolveGitCommit } from '../api/git/git.js';
 import { readLineChanges } from '../api/git/line-changes.js';
-import type { LcovFiles } from '../api/import/lcov-files.js';
+import { hasCoverageInputs } from '../api/import/lcov-files.js';
+import type { CoverageInputs } from '../api/import/lcov-files.js';
 import type { Plugin } from '../core/engine/plugin.js';
 import type { LineChanges } from '../core/model/changes.js';
 import type { FindingIgnoreRule } from '../core/model/ignore-rule.js';
@@ -18,13 +19,11 @@ import { inspectWithOptions } from './inspect.js';
 
 export { projectReview, reviewExitCode, reviewReason } from '../core/usecases/review.js';
 
-export interface ReviewRequest extends ReviewOptions {
+export interface ReviewRequest extends ReviewOptions, CoverageInputs {
   /** The repository root. */
   readonly directory: string;
   readonly base: string;
   readonly revision?: string;
-  readonly lcov?: LcovFiles;
-  readonly goCover?: LcovFiles;
   readonly exclude?: readonly string[];
   readonly ignore?: readonly FindingIgnoreRule[];
   readonly plugins?: readonly Plugin[];
@@ -39,8 +38,10 @@ export interface ReviewRequest extends ReviewOptions {
  * on the lines it changed. The repository's own store is neither read nor written.
  */
 export async function review(request: ReviewRequest): Promise<PullReview> {
-  const { directory, lcov, goCover, exclude, ignore, plugins } = request;
-  checkOptions(request, lcov !== undefined || goCover !== undefined);
+  const { directory, lcov, goCover, cobertura, exclude, ignore, plugins } = request;
+  const inputs = { lcov, goCover, cobertura };
+  const withCoverage = hasCoverageInputs(inputs);
+  checkOptions(request, withCoverage);
   const [head, requested] = await Promise.all([resolveGitCommit(directory, request.revision ?? 'HEAD'),
     resolveGitCommit(directory, request.base).catch((error: unknown) => {
       throw new Error(`${error instanceof Error ? error.message : String(error)}. A review needs the base's history: fetch it, `
@@ -51,12 +52,12 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
   try {
     const history = new HistoryCache(request.settings);
     const inspectCommit = (id: string, coverage: boolean) => inspectWithOptions({ directory, output, source: { revision: id }, exclude, ignore, plugins,
-      ...coverage ? { lcov, goCover } : {} }, { history, deferSummary: true, recordChurn: false });
+      ...coverage ? inputs : {} }, { history, deferSummary: true, recordChurn: false });
     const base = await inspectCommit(mergeBase, false);
     const headReport = await inspectCommit(head, true);
     const changes = await readLineChanges(directory, mergeBase, head);
-    const coverage = lcov === undefined && goCover === undefined ? null
-      : await measureChangedLines({ directory, base: mergeBase, revision: head, lcov, goCover, exclude, plugins });
+    const coverage = withCoverage
+      ? await measureChangedLines({ directory, base: mergeBase, revision: head, ...inputs, exclude, plugins }) : null;
     const sources = { base: await sourceLines(directory, mergeBase, changes, 'previous'), head: await sourceLines(directory, head, changes, 'path') };
     const settingsChanged = request.settingsPath !== undefined
       && changes.files.some(file => file.path === request.settingsPath || file.previous === request.settingsPath);

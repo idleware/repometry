@@ -9,7 +9,7 @@ export { LocalOperationCache } from './report/json/store/operation-cache.js';
 export type { OperationCache, OperationCacheOptions } from './core/engine/operation-cache.js';
 export { codeStructure, codeStructures } from './core/model/code-structure.js';
 export type { CodeStructure, FunctionComplexity, StructureMeasure, StructuralCheck, StructuralObservation } from './core/model/code-structure.js';
-export type { LanguageDisplay, ProvidedLanguage } from './core/model/language.js';
+export type { LanguageDisplay, LanguageSyntax, ProvidedLanguage } from './core/model/language.js';
 export type { Candidate, CloneSource } from './core/model/clone-source.js';
 export { sourceFile, sourceFiles } from './core/model/snapshot.js';
 export type { InventoryFile, SourceFile, SourceSnapshot } from './core/model/source.js';

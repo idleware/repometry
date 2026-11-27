@@ -50,7 +50,7 @@ export function projectReview(options: ReviewOptions, inputs: ReviewInputs): Pul
 export function checkOptions({ number, maxNewIssues = 0, minimumPercent }: ReviewOptions, coverage: boolean): void {
   if (number !== undefined && (!Number.isSafeInteger(number) || number < 1)) throw new Error('Pull request number must be a positive integer');
   if (!Number.isSafeInteger(maxNewIssues) || maxNewIssues < 0) throw new Error('Maximum new issues must be a non-negative integer');
-  if (minimumPercent !== undefined && !coverage) throw new Error('Minimum changed-line coverage requires --import lcov=PATH or go-cover=PATH');
+  if (minimumPercent !== undefined && !coverage) throw new Error('Minimum changed-line coverage requires --import lcov=PATH, go-cover=PATH or cobertura=PATH');
 }
 
 /** The verdict and its reason, in one line. */

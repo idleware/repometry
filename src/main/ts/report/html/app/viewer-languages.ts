@@ -1,14 +1,18 @@
 // What language a file is in, and the colour it is drawn in, as the inspection names them; lockfiles and the files no
 // plugin read stand apart.
-import type { FileMetricsReport } from '../../json/wire/file-metrics-model.js';
+import type { FileMetricsReport, LanguageSyntax } from '../../json/wire/file-metrics-model.js';
 
 type FileEntry = FileMetricsReport['files'][number];
 type Language = NonNullable<FileMetricsReport['languages']>[number];
 
-/** The inspection's languages, which its files point to by index, the colour of each by its name, and each file's id. */
+/**
+ * The inspection's languages, which its files point to by index, the colour of each by its name, each file's id, and
+ * the syntax each language declares by its id.
+ */
 let languages: readonly Language[] = [];
 let colors = new Map<string, string>();
 let ids = new Map<string, string>();
+let syntaxes = new Map<string, LanguageSyntax>();
 
 function nameOf(language: Language): string {
   return language.label ?? language.id;
@@ -20,11 +24,18 @@ export function useLanguages(metrics: Pick<FileMetricsReport, 'languages' | 'fil
   colors = new Map(languages.flatMap(language => language.color ? [[nameOf(language), language.color] as const] : []));
   ids = new Map(metrics.files.flatMap(file => file.language === undefined || !languages[file.language] ? []
     : [[file.path, languages[file.language]!.id] as const]));
+  syntaxes = new Map(languages.flatMap(language => language.syntax ? [[language.id, language.syntax] as const] : []));
 }
 
 /** The id of a file's language, as the inspection gives it: what decides how its source is read. */
 export function languageIdOf(path: string): string | undefined {
   return ids.get(path);
+}
+
+/** How a file's language is coloured, as its plugin declares it; none for a language that declares no syntax. */
+export function syntaxOf(path: string): LanguageSyntax | undefined {
+  const id = ids.get(path);
+  return id === undefined ? undefined : syntaxes.get(id);
 }
 
 /**

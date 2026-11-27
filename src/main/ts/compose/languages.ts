@@ -2,10 +2,10 @@ import { extname } from 'node:path';
 import type { FileClaims, Operation, Plugin } from '../core/engine/plugin.js';
 import { fileTypeId } from '../core/model/file-types.js';
 import { codeStructure, codeStructures } from '../core/model/code-structure.js';
-import type { LanguageDisplay } from '../core/model/language.js';
+import type { LanguageDisplay, LanguageSyntax } from '../core/model/language.js';
 import { isExcludedDirectory } from '../core/model/snapshot.js';
 import { exclusionMatcher } from '../core/profile/exclusions.js';
-import { nativeLanguagePlugins } from './native-language-plugins.js';
+import { nativeLanguagePlugins, nativeLanguageSyntax } from './native-language-plugins.js';
 import type { NativeLanguagePlugin } from './native-language-plugins.js';
 import { restrictStructureMeasures } from './structure-measures.js';
 import { babelProvider } from '../plugins/language-js/babel-provider.js';
@@ -24,6 +24,7 @@ export function languageRegistry(plugins: readonly Plugin[], includeNative = tru
   select(path: string): LanguageProvider | undefined;
   isSource(path: string): boolean;
   id(path: string): string;
+  syntax(id: string): LanguageSyntax | undefined;
   readonly extensions: readonly string[];
   readonly globs: readonly string[];
   readonly catalog: readonly LanguageDisplay[];
@@ -67,12 +68,13 @@ export function languageRegistry(plugins: readonly Plugin[], includeNative = tru
   const extensions = [...new Set(claims.flatMap(entry => entry.extensions ?? []))];
   const globs = [...new Set(claims.flatMap(entry => entry.globs ?? []))];
   const providers = entries.map(({ provider }) => provider);
-  const catalog = providers.flatMap(({ plugin }) => (plugin.providesLanguages ?? []).map(({ id, label, color }) => ({
-    id, label, ...(color === undefined ? {} : { color }),
-  })));
+  const declared = providers.flatMap(({ plugin }) => plugin.providesLanguages ?? []);
+  const catalog = declared.map(({ id, label, color }) => ({ id, label, ...(color === undefined ? {} : { color }) }));
+  const syntaxById = new Map(nativeLanguageSyntax);
+  for (const { id, syntax } of declared) if (syntax !== undefined) syntaxById.set(id, syntax);
   if (new Set(catalog.map(({ id }) => id)).size !== catalog.length) throw new Error('Duplicate provided language ID');
   return { select, isSource: path => select(path) !== undefined || skipped(path), id: path => select(path)?.language(path) ?? fileTypeId(path), extensions, globs,
-    catalog, providers, native, skipped };
+    catalog, providers, native, skipped, syntax: id => syntaxById.get(id) };
 
   function skipped(path: string): boolean {
     return skippedClaims.some(matches => matches(path)) && !path.split('/').slice(0, -1).some(isExcludedDirectory);

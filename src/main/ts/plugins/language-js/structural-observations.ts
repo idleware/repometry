@@ -77,7 +77,7 @@ export function structuralObservations(ast: Node, names: ReadonlyMap<Node, Funct
         }
         continue;
       }
-      visit(child, frame, depth + Number(block || node.type === 'TryStatement'), node);
+      visit(child, frame, depth + Number(block), node);
     }
   }
 

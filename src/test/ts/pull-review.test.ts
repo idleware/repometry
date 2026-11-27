@@ -86,7 +86,7 @@ test('changed-line coverage below the minimum fails from 20 measured lines', () 
 
 test('a coverage minimum without coverage throws', () => {
   assert.throws(() => projectReview({ minimumPercent: 80 }, inputs([], [])),
-    { message: 'Minimum changed-line coverage requires --import lcov=PATH or go-cover=PATH' });
+    { message: 'Minimum changed-line coverage requires --import lcov=PATH, go-cover=PATH or cobertura=PATH' });
 });
 
 test('an operation failing on the head only leaves the review unmeasured', () => {

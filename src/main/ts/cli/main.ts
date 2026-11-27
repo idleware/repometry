@@ -4,7 +4,7 @@ import { relative, resolve, sep } from 'node:path';
 import { firstParentRange, gitRoot, resolveGitCommit } from '../api/git/git.js';
 import { gitReportObjects } from '../api/git/git-reader.js';
 import { cacheRoot, clearCaches } from '../api/cache/root.js';
-import { gitHubPullRequest, writeGitHubResult, writeGitHubReview } from '../api/gh/github.js';
+import { gitHubPullRequest, writeGitHubReview } from '../api/gh/github.js';
 import { defaultLanguages } from '../compose/languages.js';
 import { attachFindings, inspect } from '../compose/inspect.js';
 import { review as reviewChange, reviewExitCode, reviewReason } from '../compose/review.js';
@@ -45,8 +45,7 @@ const commands: Readonly<Record<string, Command>> = {
       'skip-saved': flag('Keep commits that already have a saved inspection.'),
       concurrency: option('N', 'Maximum local analysis workers for a range. Defaults to the available cores.'),
       import: importOption,
-      exclude: excludeOption, 'import-root': option('DIR', 'Resolve scanner locations relative to this directory.'),
-      ci: ciOption },
+      exclude: excludeOption, 'import-root': option('DIR', 'Resolve scanner locations relative to this directory.') },
     run: runAnalysis,
   },
   show: {
@@ -146,20 +145,18 @@ async function analyze(input: Invocation): Promise<number> {
   const output = writableStore(store);
   if (input.flag('working-tree') && input.args.length) throw new Error('Choose a revision or --working-tree');
   if (input.flag('working-tree') && input.flag('skip-saved')) throw new Error('--skip-saved applies to commits, not --working-tree');
-  const github = useGitHub(input);
   const config = await readConfig(root, input);
   const revision = input.args[0] ?? 'HEAD';
   const imports = input.many('import');
-  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
+  const { findings, ...coverage } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   const importRoot = input.text('import-root');
   if (importRoot && findings.length === 0) throw new Error('--import-root requires a scanner report');
   const savedId = input.flag('skip-saved') ? await resolveGitCommit(root, revision) : undefined;
   const skipped = savedId !== undefined && await isSaved(output, savedId);
   const report = skipped ? await store.reader.read({ kind: 'commit', id: savedId })
     : await inspect({ directory, output, source: input.flag('working-tree') ? { workingTree: true } : { revision },
-      lcov, goCover, exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins: config.plugins,
+      ...coverage, exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins: config.plugins,
       findingInputs: findings, findingRoot: importRoot ? resolve(directory, importRoot) : undefined });
-  if (github) await writeGitHubResult(report);
   print({ schema: 'urn:repometry:schema:analysis-result:1', ...inspectionSummary(report), ...(skipped ? { skipped: true } : {}),
     store: output });
   return report.status === 'partial' ? 2 : 0;
@@ -171,7 +168,6 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (input.flag('working-tree')) throw new Error('Choose a range or --working-tree');
   if (input.many('import').length) throw new Error('--import describes one checkout and cannot be used with a range');
   if (input.text('import-root')) throw new Error('--import-root requires a scanner report');
-  if (useGitHub(input)) throw new Error('--ci github needs a single revision');
   const concurrency = count(input.text('concurrency'), '--concurrency', 1);
   const configValue = await readConfigValue(root, input);
   const config = parseConfig(configValue);
@@ -207,12 +203,12 @@ async function review(input: Invocation): Promise<number> {
   const github = useGitHub(input);
   const config = await readConfig(root, input);
   const imports = input.many('import');
-  const { lcov, goCover, findings } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
+  const { findings, ...coverage } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   if (findings.length && imports.length) throw new Error('review compares both sides of a change; scanner imports apply to full inspections only');
   if (findings.length) process.stderr.write('Scanner imports from the config are skipped: review compares both sides of a change.\n');
   const settingsPath = configFile(root, input);
   const { plugins, ...settings } = config;
-  const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', lcov, goCover,
+  const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', ...coverage,
     exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, settings,
     settingsPath: settingsPath === undefined ? undefined : relative(root, settingsPath).split(sep).join('/'),
     number: count(input.text('pull'), '--pull', 1) ?? (github ? await gitHubPullRequest() : undefined),

@@ -33,6 +33,13 @@ npx repometry analyze --import go-cover=coverage.out
 coverage run -m pytest
 coverage lcov -o coverage.lcov
 npx repometry analyze --import lcov=coverage.lcov
+
+coverage xml -o coverage.xml
+npx repometry analyze --import cobertura=coverage.xml
 ```
 
 The Go importer accepts `set`, `count` and `atomic` profiles. It maps module-qualified paths using the modules in the inspected revision. Each nonempty block contributes hits to its source lines. When blocks overlap a line, the importer takes the greatest hit count in that profile. Repeat `--import` to combine profiles. Go's format reports block counts. Python LCOV can contribute line, branch and function measurements when the generating tool provides them.
+
+The Cobertura importer reads the XML that coverage.py, c8, Istanbul, coverlet, PHPUnit and other tools write. It maps each class `filename` to a repository file. An absolute filename is the only candidate. A relative one is tried under each `<source>` in the file and under the repository root. When exactly one candidate is a file of the inspected revision, the importer uses it. When two or more are, the import fails with `Ambiguous Cobertura source`. When none is, the file is reported as a coverage gap, `LCOV source is outside the inspected file set`. `--import-root` does not apply. In the `imports` key of `repometry.config.json`, use the same `cobertura=PATH` form with a path relative to the repository root.
+
+Line hits come from each class's `<lines>`. Branches come from the `condition-coverage` counts on those lines. Functions come from `<methods>`, with a method's first line as its declaration. coverage.py writes no methods, so its Cobertura file gives no function coverage; its LCOV file does.

@@ -104,6 +104,23 @@ test('editing the settings adds a note', async t => {
     ['This change edits Repometry settings, which can hide issues from this check.']);
 });
 
+test('review measures the same changed lines from Cobertura and LCOV', async t => {
+  const root = await project(t, { 'src/run.js': 'export const first = 1;\n' });
+  await change(root, { 'src/run.js': 'export const first = 1;\nexport const second = 2;\nexport const third = 3;\n' });
+  await writeFile(join(root, 'coverage.info'), 'SF:src/run.js\nDA:1,1\nDA:2,1\nDA:3,0\nend_of_record');
+  await writeFile(join(root, 'coverage.xml'), '<coverage><packages><package><classes><class filename="src/run.js"><lines>'
+    + '<line number="1" hits="1"/><line number="2" hits="1"/><line number="3" hits="0"/>'
+    + '</lines></class></classes></package></packages></coverage>');
+  const lcov = review(root, ['main', '--import', 'lcov=coverage.info']);
+  const cobertura = review(root, ['main', '--import', 'cobertura=coverage.xml']);
+  assert.equal(lcov.status, 0, lcov.stderr);
+  assert.equal(cobertura.status, 0, cobertura.stderr);
+  const expected = JSON.parse(lcov.stdout).coverage;
+  const reported = JSON.parse(cobertura.stdout).coverage;
+  assert.deepEqual({ covered: expected.covered, total: expected.total }, { covered: 1, total: 2 });
+  assert.deepEqual(reported, expected);
+});
+
 test('review leaves the store alone and needs no saved inspection', async t => {
   const root = await project(t, { 'src/run.js': branchy('run', 3) });
   await change(root, { 'src/run.js': branchy('run', 4) });
@@ -150,10 +167,10 @@ test('under --ci github the pull request number comes from the event', async t =
   await change(root, { 'src/run.js': branchy('run', 4) });
   const files = await mkdtemp(join(tmpdir(), 'repometry-github-'));
   t.after(() => rm(files, { recursive: true, force: true }));
-  const [event, outputs, summary] = ['event.json', 'outputs', 'summary'].map(name => join(files, name));
+  const [event, summary] = ['event.json', 'summary'].map(name => join(files, name));
   await writeFile(event!, JSON.stringify({ pull_request: { number: 42 } }));
   const result = review(root, ['main', '--ci', 'github'],
-    { GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: outputs, GITHUB_STEP_SUMMARY: summary, GITHUB_WORKSPACE: root });
+    { GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: undefined, GITHUB_STEP_SUMMARY: summary, GITHUB_WORKSPACE: root });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.review?.number, 42);
 });

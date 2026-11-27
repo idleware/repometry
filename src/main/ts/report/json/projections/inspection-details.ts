@@ -26,7 +26,12 @@ export function inspectionAsset(report: Report, options?: InspectionOptions): In
 }
 
 export function inspectionDetails(report: Report, { components = [], languages }: InspectionOptions = {}): InspectionDetails {
-  const metrics = fileMetrics(report, languages);
+  const files = fileMetrics(report, languages);
+  const display = files.languages?.map(item => {
+    const syntax = languages?.syntax?.(item.id);
+    return syntax === undefined ? item : { ...item, syntax };
+  });
+  const metrics = display === undefined ? files : { ...files, languages: display };
   const lineCoverage = report.pluginData?.products[lcovLines.id]?.[0]?.value;
   const profile = profileSettings(report.appliedConfig);
   const ruleCatalog = report.pluginData?.rules.flatMap(({ plugin, rules }) => rules.map(rule => ({

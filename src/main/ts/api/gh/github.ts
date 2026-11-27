@@ -3,18 +3,6 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { isRecord } from '../../core/engine/plugin.js';
 import { annotationLimit } from '../../core/model/pull-review.js';
 import type { PullReview } from '../../core/model/pull-review.js';
-import type { Report } from '../../core/model/report.js';
-
-export async function writeGitHubResult(report: Report): Promise<void> {
-  const { output, summary } = githubFiles();
-  await appendFile(output, `subject=${report.subject.id}\nstatus=${report.status}\n`);
-  await appendFile(summary, [
-    '## Repometry', '',
-    `**${report.status}** · \`${report.subject.id}\``, '',
-    `Parsed ${report.scope.parsed} of ${report.scope.files} files.`,
-    `Measurements: ${report.measurements.length}. Diagnostics: ${report.diagnostics.length}.`, '', '',
-  ].join('\n'));
-}
 
 /** The number of the pull request whose event started this GitHub Actions run, if any. */
 export async function gitHubPullRequest(): Promise<number | undefined> {
@@ -27,10 +15,8 @@ export async function gitHubPullRequest(): Promise<number | undefined> {
 }
 
 export async function writeGitHubReview(review: PullReview, markdown: string, repository: string): Promise<void> {
-  const { output, summary } = githubFiles();
-  const count = (effect: string) => review.issues.filter(issue => issue.effect === effect).length;
-  await appendFile(output, [`verdict=${review.verdict}`, ...['new', 'worsened', 'improved', 'touched'].map(effect => `${effect}=${count(effect)}`),
-    `changed-coverage=${review.coverage.percent ?? ''}`, ''].join('\n'));
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary) throw new Error('GitHub reporting requires GITHUB_STEP_SUMMARY');
   await appendFile(summary, markdown);
   const annotate = await annotator(repository);
   review.issues.filter(issue => issue.effect === 'new' || issue.effect === 'worsened').slice(0, annotationLimit)
@@ -61,11 +47,4 @@ function data(value: string): string {
 
 function property(value: string): string {
   return data(value).replaceAll(':', '%3A').replaceAll(',', '%2C');
-}
-
-function githubFiles(): { output: string; summary: string } {
-  const output = process.env.GITHUB_OUTPUT;
-  const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!output || !summary) throw new Error('GitHub reporting requires GITHUB_OUTPUT and GITHUB_STEP_SUMMARY');
-  return { output, summary };
 }

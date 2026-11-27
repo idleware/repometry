@@ -12,11 +12,71 @@ Providers always report `path` and `lines`. A language can declare `measures` to
 
 The built-in JS and TS profile retains its algorithm definitions. Built-in metric IDs describe the measurement independently of the parser. When reading v2 reports and summaries, the six earlier `-babel` IDs resolve to the same metrics. A provider that measures a metric differently needs a distinct measurement definition before its results can be compared with this history.
 
+## Technical debt
+
+Repometry estimates technical debt as the minutes needed to fix the code smells it finds. The limits and costs are the same for every language, and no setting changes them. Each language counts the rule inputs its own way. [Go and Python analysis](native-languages.md#maintainability) describes those two.
+
+A structural rule fires when its value is above the limit. Its finding costs a fixed number of minutes for each unit above the limit. Nested functions are measured on their own and don't add to the function that contains them.
+
+| Rule | Value | Limit | Minutes per unit above the limit |
+| --- | --- | --- | --- |
+| `function-parameters` | Declared parameters of a function | 5 | 10 |
+| `return-statements` | `return` statements in a function | 6 | 10 |
+| `boolean-logic` | Logical operators in one expression | 4 | 10 |
+| `nested-control-flow` | Deepest control-flow nesting in a function, or in the code outside functions | 4 | 20 |
+| `function-complexity` | Cognitive complexity of a function | 15 | 10 |
+| `file-complexity` | Cognitive complexity of a file | 50 | 5 |
+
+A file's cognitive complexity includes its functions. So `file-complexity` charges only what the `function-complexity` findings haven't: its units above 50, minus the units by which the file's functions exceed 15 in total, and never less than zero. When nothing is left, the finding stays in the report with zero minutes.
+
+A `try` statement adds no nesting level and no complexity: its block and its `finally` block stay at the depth of the statement. A `catch` clause, or `except` in Python, is a nesting level and adds one plus its depth to cognitive complexity. A `try` with a `catch` at the top of a function therefore has a control-flow depth of 1 and adds 1 to the function's complexity.
+
+The duplication rules `identical-code` and `similar-code` compare repeated syntax subtrees of at least 50 nodes and 12 code lines. Occurrences match when their similar fingerprints match, which ignores names and literals. The finding is `identical-code` when their exact fingerprints match too, and `similar-code` otherwise. Larger subtrees are matched first, and an occurrence that overlaps one already matched is dropped. A group needs two occurrences left. The first occurrence, by path and then position, costs nothing. Each other occurrence costs 2 minutes per code line. The finding sits in the first occurrence's file with its whole cost, and lists the other occurrences in `related`.
+
+Every rule finding has the level `medium`, and the level doesn't change the cost. Each finding records `value`, its `effortMinutes`, and for structural rules the `limit`. A file's effort is the sum of its findings' minutes, and the repository's effort is the sum over its files. Only findings of the `structure` and `duplication` categories count, which are the findings of the rules above. Imported lint findings and security findings, of the categories `security`, `dependency`, `secret` and `infrastructure`, add no effort. Findings that an `ignore` rule in `repometry.config.json` matches move to `ignoredFindings` and add no effort either.
+
+## Debt ratio and grades
+
+The debt ratio divides the effort by an estimate of the time to write the code:
+
+```text
+debt ratio       = effort minutes / development cost
+development cost = 2.4 × (code lines / 1000) ^ 1.05 × 9600 minutes
+```
+
+This is the basic COCOMO estimate for organic projects, 2.4 × KLOC^1.05 person-months, at 9,600 minutes (160 hours) per person-month. The report names it `basic-cocomo-organic`. Code lines are the `repometry.code-lines/v1` measurement: nonblank lines without comment-only lines and the interpreter directive. Without code lines there is no ratio.
+
+The effort and the code lines cover the same files: every source file a language claims, test files included. Repometry leaves out the `.git`, `.repometry`, `node_modules` and `target` folders, the paths matching `**/.yarn`, `**/.pnp.{js,cjs,loader.mjs}`, `**/vendor`, `**/third_party`, `**/*.min.{js,cjs,mjs}` and `**/*{.,-}bundle.{js,cjs,mjs}`, and the paths in `exclude`. It also leaves out generated files: a file that ends with a source map comment, or a file of at least 1,024 bytes whose nonblank lines average more than 300 characters. When some files have no rule inputs, both use the measured subset described above.
+
+The maintainability grade follows from the ratio. The security grade follows from the worst finding of the categories `security`, `dependency`, `secret` and `infrastructure`.
+
+| Grade | Maintainability: debt ratio | Security: worst finding |
+| --- | --- | --- |
+| A | below 5% | no finding |
+| B | 5% to below 10% | `low` or `unknown` |
+| C | 10% to below 20% | `medium` |
+| D | 20% to below 50% | `high` |
+| F | 50% or more | |
+
+Findings have the levels `low`, `medium`, `high` and `unknown`, so the security grade runs from A to D. An inspection has a security grade only when a security scanner plugin ran or the configuration imports findings of one of those categories. A commit's summary row records `smells`, `effortMinutes`, `debtRatio` and `grade` under `quality.maintainability`.
+
+For example, a function with 7 parameters and a cognitive complexity of 22 sits in a file with a cognitive complexity of 60:
+
+| Finding | Value | Limit | Units charged | Minutes |
+| --- | --- | --- | --- | --- |
+| `function-parameters` | 7 | 5 | 2 | 2 × 10 = 20 |
+| `function-complexity` | 22 | 15 | 7 | 7 × 10 = 70 |
+| `file-complexity` | 60 | 50 | 10 − 7 = 3 | 3 × 5 = 15 |
+
+The file's effort is 105 minutes. The repository has 2,000 code lines and one more finding: a block of 20 code lines in three places, which costs 2 copies × 20 lines × 2 minutes = 80 minutes. The effort is 185 minutes. The development cost is 2.4 × 2^1.05 × 9600 ≈ 47,705 minutes, so the debt ratio is 185 / 47,705 ≈ 0.39% and the grade is A. Grade B would start at 2,386 minutes of effort.
+
+A report records the limits, costs and debt model it used under `appliedConfig.maintainability`, and each finding keeps its `effortMinutes`. Repometry computes a saved report's ratio with the debt model that report records, and reads the summary row's `debtRatio` and `grade` back as saved. A saved report keeps the numbers of the version that made it.
+
 ## Coverage counts
 
-Each file in `repometry.lcov-lines/v1` can include `functionCalls`, a list of `[declarationLine, calls]` pairs ordered by line. The importer pairs LCOV declarations and calls by name and occurrence within each record and sums matching call counts. Multiple declarations can share a line. A zero represents a recorded count of zero.
+Each file in `repometry.lcov-lines/v1` can include `functionCalls`, a list of `[declarationLine, calls]` pairs ordered by line. The importer reads LCOV records. It converts Go blocks and Cobertura classes and methods to the same records first. It pairs function declarations and calls by name and occurrence within each record and sums matching call counts. Multiple declarations can share a line. A zero represents a recorded count of zero.
 
-The importer filters LCOV records by the provider's code-line classification when available. Otherwise it counts the valid lines reported by LCOV for the analysed file. `functionBodies` carries the provider's body ranges. A source gutter can display `functionCalls` on declaration lines and show raw line hit numbers inside body ranges. At module level, the raw hit count can represent module loads.
+The importer filters these records by the provider's code-line classification when available. Otherwise it counts the valid lines the records report for the analysed file. `functionBodies` carries the provider's body ranges. A source gutter can display `functionCalls` on declaration lines and show raw line hit numbers inside body ranges. At module level, the raw hit count can represent module loads.
 
 ## Declaring metrics and products
 
@@ -26,7 +86,7 @@ Pass trusted in-process plugins as `plugins` in the `inspect` request. The defau
 
 Language plugins define the source file set through their claims. Each file uses its matching provider for structure and maintainability measurements. Overlapping language-provider claims produce an error naming the file and providers. The report records each distinct operation binding it used.
 
-Use `providesLanguages` to declare a language's ID, display label, optional six-digit hexadecimal color, and file extensions or globs. These declarations select source files. Reports store the language catalog once and record the selected provider operation for each source path.
+Use `providesLanguages` to declare a language's ID, display label, optional six-digit hexadecimal color, and file extensions or globs. These declarations select source files. Reports store the language catalog once and record the selected provider operation for each source path. The viewer colours each language's source from its declared `syntax`.
 
 Pass the same language plugins to `inspect` and `measureDiffCoverage` so they select the same source paths.
 

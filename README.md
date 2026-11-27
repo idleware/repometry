@@ -40,7 +40,7 @@ Run these commands in your repository. Without an install, start each with `npx`
 | --- | --- |
 | `repometry analyze` | Analyze HEAD and save its inspection under `.repometry/`. |
 | `repometry analyze HEAD~50..HEAD --skip-saved` | Build history for the last 50 commits, oldest first, skipping saved inspections. A long range uses every core; `--concurrency N` sets a limit. |
-| `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. |
+| `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. [Commands and settings](docs/cli.md#analysis-settings) lists the formats, such as `cobertura` for `coverage.xml`. |
 | `repometry view` | Open the report locally on a free port. Use `--port 3030` to choose a port. |
 | `repometry report html` | Export a static report to `.repometry/report/html`. Use `repometry report html=DIR` for another folder. |
 | `repometry review origin/main --import lcov=coverage/lcov.info` | Report the issues a change adds or worsens on the lines it changes, and their coverage. |

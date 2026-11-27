@@ -238,3 +238,25 @@ test('the structure contract accepts anchors and rejects empty ones', () => {
   assert.equal(codeStructure.accepts(facts('run')), true);
   assert.equal(codeStructure.accepts(facts('')), false);
 });
+
+test('JS try adds no nesting level; only catch is a decision that nests its body', () => {
+  const source = [
+    'function caught() { try { a(); } catch (error) { b(); } }',
+    'function checkedTry() { try { if (p) a(); } catch (error) { b(); } }',
+    'function checkedCatch() { try { a(); } catch (error) { if (p) b(); } }',
+    'function finalized() { try { if (p) a(); } finally { if (q) b(); } }',
+    'function nestedTry() { try { try { a(); } catch (error) { b(); } } catch (error) { c(); } }',
+    '',
+  ].join('\n');
+  const operation = babelProvider.operations[0]!;
+  const facts = operation.execute({ read: () => ({ path: 'try.js', bytes: Buffer.from(source) }) } as never) as CodeStructure;
+  const observed = facts.observations ?? [];
+  const depth = (name: string) => observed.find(row => row.rule === 'nested-control-flow' && row.anchor === name)?.value;
+  assert.deepEqual(facts.cognitiveFunctions?.map(row => [row.name, row.value, depth(row.name!)]), [
+    ['caught', 1, 1],
+    ['checkedTry', 2, 1],
+    ['checkedCatch', 3, 2],
+    ['finalized', 2, 1],
+    ['nestedTry', 2, 1],
+  ]);
+});

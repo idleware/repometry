@@ -16,7 +16,8 @@
       "items": {
         "type": "object",
         "required": ["id", "analysed"],
-        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string", "pattern": "^#[a-fA-F0-9]{6}$" }, "analysed": { "type": "boolean" } },
+        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string", "pattern": "^#[a-fA-F0-9]{6}$" }, "analysed": { "type": "boolean" },
+          "syntax": { "$ref": "#/$defs/syntax" } },
         "additionalProperties": false
       }
     },
@@ -50,6 +51,27 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "syntax": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lineComments": { "type": "array", "items": { "$ref": "#/$defs/syntax/$defs/marker" } },
+        "blockComments": { "type": "array", "items": { "type": "array", "minItems": 2, "maxItems": 2,
+          "items": { "$ref": "#/$defs/syntax/$defs/marker" } } },
+        "strings": { "type": "array", "items": {
+          "type": "object", "required": ["quote"], "additionalProperties": false,
+          "properties": { "quote": { "$ref": "#/$defs/syntax/$defs/marker" },
+            "multiline": { "type": "boolean" }, "raw": { "type": "boolean" } }
+        } },
+        "stringPrefixes": { "type": "array", "items": { "$ref": "#/$defs/syntax/$defs/word" } },
+        "keywords": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/syntax/$defs/word" } },
+        "regexAfter": { "type": "array", "items": { "$ref": "#/$defs/syntax/$defs/word" } }
+      },
+      "$defs": {
+        "marker": { "type": "string", "minLength": 1, "maxLength": 8, "pattern": "^\\S+$" },
+        "word": { "type": "string", "pattern": "^[A-Za-z_$][\\w$]*$" }
+      }
+    },
     "count": { "$ref": "urn:repometry:schema:report:2#/$defs/count" },
     "optionalCount": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
     "observations": {

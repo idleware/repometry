@@ -1,6 +1,9 @@
+import type { LanguageSyntax } from '../../../core/model/language.js';
 import type { Report } from '../../../core/model/report.js';
 import type { ChurnWindow } from '../../../core/model/churn.js';
 import type { MetricDescriptor, MetricValues } from './summary-model.js';
+
+export type { LanguageSyntax } from '../../../core/model/language.js';
 
 export const fileMetricsSchema = 'urn:repometry:schema:file-metrics:1';
 
@@ -67,7 +70,8 @@ export interface FileMetricsReport {
   readonly directories: readonly DirectoryMetrics[];
   readonly unassignedDiagnostics: number;
   readonly catalog?: readonly MetricDescriptor[];
-  readonly languages?: readonly { readonly id: string; readonly label?: string; readonly color?: string; readonly analysed: boolean }[];
+  readonly languages?: readonly { readonly id: string; readonly label?: string; readonly color?: string;
+    readonly analysed: boolean; readonly syntax?: LanguageSyntax }[];
   readonly churnWindow?: ChurnWindow & { readonly lookbackDays: number; readonly maxCommits: number };
   readonly hotspots: {
     readonly complexity: readonly string[];

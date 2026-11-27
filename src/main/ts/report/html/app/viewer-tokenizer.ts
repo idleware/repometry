@@ -1,41 +1,64 @@
-// Light highlighting for JavaScript and TypeScript: a scanner, not a parser, that colours comments, strings, regular
-// expressions, numbers and keywords. A file is read by its language as the inspection names it; any other language comes
-// back as plain text, never in another language's colours.
+// Light highlighting from a language's syntax data: a scanner, not a parser, that colours comments, strings, regular
+// expressions, numbers and keywords as the inspection's language declares them. A language that declares no syntax
+// comes back as plain text, never in another language's colours.
+import type { LanguageSyntax } from '../../json/wire/file-metrics-model.js';
 import { element } from './viewer-dom.js';
-import { languageIdOf } from './viewer-languages.js';
+import { syntaxOf } from './viewer-languages.js';
 
 export type TokenKind = '' | 'c' | 's' | 'n' | 'k';
 export type Run = [TokenKind, string];
 
-const keywords = new Set(('abstract as async await break case catch class const continue debugger declare default delete do else enum export '
-  + 'extends false finally for from function get if implements import in instanceof interface let new null of package private protected '
-  + 'public readonly return satisfies set static super switch this throw true try type typeof undefined var void while with yield').split(' '));
+/** A comment or string form: its start and end markers, the end empty for a comment that runs to the line's end. */
+interface Form {
+  readonly start: string;
+  readonly end: string;
+  readonly kind: 'c' | 's';
+  readonly multiline: boolean;
+  readonly raw: boolean;
+}
 
-/** The languages this scanner was written for. */
-const scanned: ReadonlySet<string | undefined> = new Set(['javascript', 'typescript']);
+const form = (kind: Form['kind'], start: string, end: string, multiline = false, raw = false): Form =>
+  ({ kind, start, end, multiline, raw });
 
-/** Words after which a slash opens a regular expression rather than divides. */
-const beforeRegex = new Set('return typeof instanceof in of new delete void throw case do else yield await'.split(' '));
+/** The syntax data in the shape the scanner reads: forms longest marker first, words as sets. */
+function grammarOf({ lineComments = [], blockComments = [], strings = [], stringPrefixes = [], keywords, regexAfter }: LanguageSyntax) {
+  const forms = [
+    ...lineComments.map(start => form('c', start, '', false, true)),
+    ...blockComments.map(([start, end]) => form('c', start, end, true, true)),
+    ...strings.map(({ quote, multiline, raw }) => form('s', quote, quote, multiline, raw)),
+  ];
+  return {
+    // Longest marker first; the sort is stable, so on equal length a comment, listed first, wins.
+    forms: forms.sort((a, b) => b.start.length - a.start.length),
+    keywords: new Set(keywords),
+    prefixes: new Set(stringPrefixes.map(prefix => prefix.toLowerCase())),
+    regexAfter: regexAfter && new Set(regexAfter),
+  };
+}
 
-/** What carries from one line to the next: a block comment or a template literal still open, and what a slash means. */
+type Grammar = ReturnType<typeof grammarOf>;
+
+/** What carries from one line to the next: a form still open, and what a slash means. */
 interface ScanState {
-  open: '' | 'comment' | 'template';
+  open: Form | undefined;
   regexAllowed: boolean;
 }
 
-/** One line being scanned: where the scan stands, and where its runs go. */
+/** One line being scanned: where the scan stands, by which grammar, and where its runs go. */
 interface Cursor {
   readonly line: string;
+  readonly grammar: Grammar;
   at: number;
   readonly state: ScanState;
   push(kind: TokenKind, value: string): void;
 }
 
-/** Past an escape: the index after the closing quote, or the line's end when it stays open. */
-function closeQuote(line: string, from: number, quote: string): [number, boolean] {
+/** Where a form ends from `from` on: the index after its end marker, or the line's end when it stays open. */
+function closeAt(line: string, from: number, open: Form): [number, boolean] {
+  if (!open.end) return [line.length, true];
   let at = from;
-  while (at < line.length && line[at] !== quote) at += line[at] === '\\' ? 2 : 1;
-  return at < line.length ? [at + 1, true] : [line.length, false];
+  while (at < line.length && !line.startsWith(open.end, at)) at += !open.raw && line[at] === '\\' ? 2 : 1;
+  return at < line.length ? [at + open.end.length, true] : [line.length, false];
 }
 
 /** Takes the run up to `stop` as one token. */
@@ -44,18 +67,24 @@ function take(cursor: Cursor, kind: TokenKind, stop: number): void {
   cursor.at = stop;
 }
 
-function insideComment(cursor: Cursor): void {
-  const end = cursor.line.indexOf('*/', cursor.at);
-  take(cursor, 'c', end < 0 ? cursor.line.length : end + 2);
-  if (end >= 0) cursor.state.open = '';
+function close(state: ScanState, closed: Form): void {
+  state.open = undefined;
+  if (closed.kind === 's') state.regexAllowed = false;
 }
 
-function insideTemplate(cursor: Cursor): void {
-  const [stop, closed] = closeQuote(cursor.line, cursor.at, '`');
-  take(cursor, 's', stop);
-  if (!closed) return;
-  cursor.state.open = '';
-  cursor.state.regexAllowed = false;
+/** Inside a form that an earlier line or run left open: up to its end, or the whole line. */
+function inside(cursor: Cursor, open: Form): void {
+  const [stop, closed] = closeAt(cursor.line, cursor.at, open);
+  take(cursor, open.kind, stop);
+  if (closed) close(cursor.state, open);
+}
+
+/** Opens a form after `prefix` characters: a multi-line one as its start marker, left open; another to its end. */
+function begin(cursor: Cursor, opened: Form, prefix: number): void {
+  const body = cursor.at + prefix + opened.start.length;
+  take(cursor, opened.kind, opened.multiline ? body : closeAt(cursor.line, body, opened)[0]);
+  if (opened.multiline) cursor.state.open = opened;
+  else close(cursor.state, opened);
 }
 
 /**
@@ -86,32 +115,14 @@ const char = (cursor: Cursor, offset = 0) => cursor.line[cursor.at + offset];
 
 /** Where a token can start, tried in order; each takes what it recognises and says whether it did. */
 const starts: readonly ((cursor: Cursor) => boolean)[] = [
-  function lineComment(cursor) {
-    if (char(cursor) !== '/' || char(cursor, 1) !== '/') return false;
-    take(cursor, 'c', cursor.line.length);
-    return true;
-  },
-  function blockComment(cursor) {
-    if (char(cursor) !== '/' || char(cursor, 1) !== '*') return false;
-    take(cursor, 'c', cursor.at + 2);
-    cursor.state.open = 'comment';
-    return true;
-  },
-  function template(cursor) {
-    if (char(cursor) !== '`') return false;
-    take(cursor, 's', cursor.at + 1);
-    cursor.state.open = 'template';
-    return true;
-  },
-  function quoted(cursor) {
-    const quote = char(cursor)!;
-    if (quote !== '"' && quote !== "'") return false;
-    take(cursor, 's', closeQuote(cursor.line, cursor.at + 1, quote)[0]);
-    cursor.state.regexAllowed = false;
+  function marked(cursor) {
+    const found = cursor.grammar.forms.find(candidate => cursor.line.startsWith(candidate.start, cursor.at));
+    if (!found) return false;
+    begin(cursor, found, 0);
     return true;
   },
   function regex(cursor) {
-    if (char(cursor) !== '/' || !cursor.state.regexAllowed) return false;
+    if (char(cursor) !== '/' || !cursor.grammar.regexAfter || !cursor.state.regexAllowed) return false;
     const end = regexEnd(cursor.line, cursor.at);
     if (end < 0) return false;
     take(cursor, 's', end);
@@ -121,12 +132,20 @@ const starts: readonly ((cursor: Cursor) => boolean)[] = [
   function word(cursor) {
     const found = /^[A-Za-z_$][\w$]*/.exec(cursor.line.slice(cursor.at))?.[0];
     if (!found) return false;
-    take(cursor, keywords.has(found) ? 'k' : '', cursor.at + found.length);
-    cursor.state.regexAllowed = beforeRegex.has(found);
+    const { grammar } = cursor;
+    // A declared string prefix right before a quote belongs to the string.
+    const quoted = grammar.prefixes.has(found.toLowerCase())
+      && grammar.forms.find(candidate => candidate.kind === 's' && cursor.line.startsWith(candidate.start, cursor.at + found.length));
+    if (quoted) {
+      begin(cursor, quoted, found.length);
+      return true;
+    }
+    take(cursor, grammar.keywords.has(found) ? 'k' : '', cursor.at + found.length);
+    cursor.state.regexAllowed = !!grammar.regexAfter?.has(found);
     return true;
   },
   function number(cursor) {
-    const found = /^(?:0x[\da-f_]+n?|\d[\d_]*(?:\.\d[\d_]*)?(?:e[+-]?\d+)?n?)/i.exec(cursor.line.slice(cursor.at))?.[0];
+    const found = /^\.?\d(?:[eEpP][+-]\d|\.\d|\w)*/.exec(cursor.line.slice(cursor.at))?.[0];
     if (!found) return false;
     take(cursor, 'n', cursor.at + found.length);
     cursor.state.regexAllowed = false;
@@ -164,20 +183,20 @@ function runs() {
 }
 
 /**
- * Splits lines of JavaScript or TypeScript into coloured runs: comments, strings, regular expressions, numbers and
- * keywords. It honours escapes and character classes, and it tells a regular expression from a division by what comes
- * before the slash. State carries across lines, so a block comment or a template literal stays coloured to its end.
- * Other languages come back as plain text.
+ * Splits lines into coloured runs by a language's syntax data: comments, strings, regular expressions, numbers and
+ * keywords. It honours escapes and character classes, and where the data asks for regular expressions it tells one from
+ * a division by what comes before the slash. State carries across lines, so a block comment or a multi-line string
+ * stays coloured to its end. Without syntax a line comes back as plain text.
  */
-export function tokenizer(language: string | undefined): (line: string) => Run[] {
-  if (!scanned.has(language)) return line => [['', line]];
-  const state: ScanState = { open: '', regexAllowed: true };
+export function tokenizer(syntax: LanguageSyntax | undefined): (line: string) => Run[] {
+  if (!syntax) return line => [['', line]];
+  const grammar = grammarOf(syntax);
+  const state: ScanState = { open: undefined, regexAllowed: true };
   return line => {
     const collected = runs();
-    const cursor: Cursor = { line, at: 0, state, push: collected.push };
+    const cursor: Cursor = { line, grammar, at: 0, state, push: collected.push };
     while (cursor.at < line.length) {
-      if (state.open === 'comment') insideComment(cursor);
-      else if (state.open === 'template') insideTemplate(cursor);
+      if (state.open) inside(cursor, state.open);
       else starts.find(start => start(cursor));
     }
     return collected.done();
@@ -189,8 +208,8 @@ export function runNodes(lineRuns: readonly Run[]): Node[] {
   return lineRuns.map(([kind, value]) => kind ? element('span', `tok-${kind}`, value) : document.createTextNode(value));
 }
 
-/** Highlights a file's lines, or a snippet of them, by the file's language. */
+/** Highlights a file's lines, or a snippet of them, by the syntax of the file's language. */
 export function highlighter(path: string): (line: string) => Node[] {
-  const tokenize = tokenizer(languageIdOf(path));
+  const tokenize = tokenizer(syntaxOf(path));
   return line => runNodes(tokenize(line));
 }

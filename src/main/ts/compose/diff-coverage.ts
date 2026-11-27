@@ -10,18 +10,16 @@ import { changesInput, diffCoverage, diffCoverageResult } from '../plugins/cover
 import { diffMethod, findMergeBase, readChanges } from '../api/git/changes.js';
 import { gitText, physicalGitRoot, readGitCommit, resolveGitCommit } from '../api/git/git.js';
 import { readInspectionCoverage } from './inspection-coverage.js';
-import type { LcovFiles } from '../api/import/lcov-files.js';
+import type { CoverageInputs } from '../api/import/lcov-files.js';
 import { languageRegistry } from './languages.js';
 
 export { diffCoverageSchema } from '../core/usecases/diff-coverage.js';
 export type { DiffCoverageReport } from '../core/usecases/diff-coverage.js';
 
-export interface DiffCoverageRequest {
+export interface DiffCoverageRequest extends CoverageInputs {
   readonly directory: string;
   readonly revision: string;
   readonly base: string;
-  readonly lcov?: LcovFiles;
-  readonly goCover?: LcovFiles;
   readonly exclude?: readonly string[];
   readonly minimumPercent?: number;
   readonly plugins?: readonly Plugin[];

@@ -16,6 +16,7 @@ import reportV2 from '../../main/resources/report/json/report-v2.schema.json' wi
 import { definitions } from '../../main/ts/core/model/measurement.js';
 import { qualitySummary } from '../../main/ts/core/model/quality-summary.js';
 import { defaultSourceExclusions, generatedSourcePolicy } from '../../main/ts/core/profile/exclusions.js';
+import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { reportSchema } from '../../main/ts/report/json/validation/report.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
@@ -273,7 +274,7 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.deepEqual(detail.context?.exclusions?.paths, ['private-path/**']);
   const { files, languages } = detail.inspection.metrics;
   const display = (path: string) => languages?.[files.find(file => file.path === path)!.language!];
-  assert.deepEqual(display('private-filename.ts'), { id: 'typescript', label: 'TypeScript', color: '#3178c6', analysed: true });
+  assert.deepEqual(display('private-filename.ts'), { id: 'typescript', label: 'TypeScript', color: '#3178c6', analysed: true, syntax: jsSyntax });
   assert.deepEqual(display('examples/Dockerfile.dev.test'), { id: 'dockerfile', label: 'Dockerfile', color: '#4f9a94', analysed: true });
   assert.deepEqual(display('readme.md'), { id: 'markdown', label: 'Markdown', color: '#768390', analysed: true });
   assert.deepEqual(display('deps/foo.qqx'), { id: 'qqx', label: 'QQX', analysed: true });
@@ -342,6 +343,7 @@ test('the command registry handles scoped help, suggestions, version and plugin 
   assert.match(invoke(directory, ['--version']).stdout.trim(), /^\d+\.\d+\.\d+/);
   const listing = JSON.parse(invoke(directory, ['-C', directory, 'plugins']).stdout);
   assert.ok(listing.importers.includes('sarif-secrets'));
+  assert.ok(listing.importers.includes('cobertura'));
   assert.ok(listing.plugins.some((plugin: { id: string; kinds: string[] }) => plugin.id === 'github' && plugin.kinds.includes('source')));
 });
 

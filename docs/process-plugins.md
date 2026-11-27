@@ -15,7 +15,10 @@ Add a language plugin to `repometry.config.json`. Replace the example image ID w
       "scope": "repository",
       "tools": { "node": "26.13.0" },
       "providesLanguages": [
-        { "id": "fixture", "label": "Fixture", "color": "#123456", "extensions": [".fixture"] }
+        {
+          "id": "fixture", "label": "Fixture", "color": "#123456", "extensions": [".fixture"],
+          "syntax": { "lineComments": ["#"], "strings": [{ "quote": "\"" }], "keywords": ["let", "end"] }
+        }
       ]
     }
   ]
@@ -31,6 +34,19 @@ npx repometry report html
 A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin and language. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
 
 A language's optional `measures` array accepts `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, and `structuralRules`. Include only capabilities the parser supplies. A parser that counts functions and decisions declares `["functions", "cyclomaticComplexity"]` and returns `path`, `lines`, `functions`, and `cyclomaticFunctions`. Duplication requires `codeLines` and clone candidates. Structural rules consume `observations`. See [Language provider metrics](metrics.md) for unknown values and repository rollups.
+
+A language's optional `syntax` tells the report viewer how to colour its source. It is data for a scanner, not a grammar, and every field is optional. Repometry attaches it when it renders a report and does not save it in the store. A language without `syntax` is shown as plain text. The data cannot express string interpolation or nested comments.
+
+| Field | Value |
+| --- | --- |
+| `lineComments` | Markers that start a comment running to the end of the line, such as `//` or `#`. |
+| `blockComments` | Pairs of start and end markers, such as `["/*", "*/"]`. A block comment can span lines. |
+| `strings` | String forms. Each has a `quote` and optional `multiline` and `raw` booleans. A string ends at the quote that opened it. A backslash escapes the next character unless the form is `raw`. A form that is not `multiline` ends at the end of the line. |
+| `stringPrefixes` | Letters that can stand right before a quote and belong to the string, such as `r`, `b`, or `rb`. Compared without case. |
+| `keywords` | Words shown as keywords, including literals such as `true`. At most 512. Compared with case. |
+| `regexAfter` | Words after which a slash opens a regular-expression literal. Without it a slash is plain. |
+
+A marker or quote is a string of 1 to 8 characters with no whitespace. A word starts with a letter, `_`, or `$`, and continues with letters, digits, `_`, or `$`.
 
 Set `"fileIndependent": true` for a repository parser if each file produces the same results and diagnostics when other files are omitted. During a local revision range, Repometry can send only changed files to a provider with a transient structure output and no repository inspection operations. Keep the default `false` for parsers that rely on other files or repository-wide context.
 

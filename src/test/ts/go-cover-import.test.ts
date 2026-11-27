@@ -14,7 +14,7 @@ test('reads repeatable Go coverprofile imports alongside LCOV and finding inputs
   const root = process.cwd();
   const input = readInputs(root, ['go-cover=one.out', 'lcov=report.info', 'go-cover=two.out', 'eslint=eslint.json']);
   assert.deepEqual(input, { lcov: [join(root, 'report.info')], goCover: [join(root, 'one.out'), join(root, 'two.out')],
-    findings: [{ format: 'eslint', category: 'lint', file: join(root, 'eslint.json') }] });
+    cobertura: undefined, findings: [{ format: 'eslint', category: 'lint', file: join(root, 'eslint.json') }] });
 });
 
 test('projects Go profile blocks into existing LCOV hit aggregation', async t => {

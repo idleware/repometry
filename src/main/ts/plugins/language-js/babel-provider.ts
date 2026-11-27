@@ -14,6 +14,7 @@ import { functionFacts } from './function-facts.js';
 import { qualifiedNames } from './qualified-names.js';
 import { structuralObservations } from './structural-observations.js';
 import { jsTsExtensions } from './extensions.js';
+import { jsSyntax } from './syntax.js';
 
 const require = createRequire(import.meta.url);
 export const parserDefaults = { sourceType: 'unambiguous', errorRecovery: false, attachComment: false } as const;
@@ -22,11 +23,11 @@ export const babelTypes = { '@babel/types': require('@babel/types/package.json')
 
 export const babelProvider: Plugin = {
   id: 'babel-syntax',
-  version: '1.0.0',
+  version: '1.1.0',
   api: pluginApi,
   kinds: ['language'],
   claims: { extensions: jsTsExtensions, languages: ['javascript', 'typescript'] },
-  providesLanguages: [javascriptType, typescriptType],
+  providesLanguages: [{ ...javascriptType, syntax: jsSyntax }, { ...typescriptType, syntax: jsSyntax }],
   settings: parserDefaults,
   produces: [{ contract: codeStructure.id, persistence: 'transient' }],
   tools: { '@babel/parser': require('@babel/parser/package.json').version as string, ...babelTypes },

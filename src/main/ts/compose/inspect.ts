@@ -3,8 +3,9 @@ import { gitTreeFiles } from '../api/git/git.js';
 import type { GitSelection } from '../api/git/git.js';
 import { readInspectionSource } from '../api/git/inspection-source.js';
 import { importFindings } from '../api/import/finding-import.js';
+import { hasCoverageInputs } from '../api/import/lcov-files.js';
 import { readInspectionCoverage } from './inspection-coverage.js';
-import type { LcovFiles } from '../api/import/lcov-files.js';
+import type { CoverageInputs } from '../api/import/lcov-files.js';
 import type { OperationCacheOptions } from '../core/engine/operation-cache.js';
 import type { Plugin } from '../core/engine/plugin.js';
 import type { FindingIgnoreRule } from '../core/model/finding-ignore.js';
@@ -20,12 +21,10 @@ import { attachChurn } from './attach-churn.js';
 import type { HistoryCache } from './history-cache.js';
 import { languageRegistry } from './languages.js';
 
-export interface InspectRequest {
+export interface InspectRequest extends CoverageInputs {
   readonly directory: string;
   readonly output: string;
   readonly source: { readonly workingTree: true } | { readonly revision: string };
-  readonly lcov?: LcovFiles;
-  readonly goCover?: LcovFiles;
   readonly exclude?: readonly string[];
   readonly findingInputs?: readonly FindingInput[];
   readonly findingRoot?: string;
@@ -42,14 +41,14 @@ export function inspect(request: InspectRequest): Promise<Report> {
 export async function inspectWithOptions(request: InspectRequest,
   { history, deferSummary = false, recordChurn = true }:
     { history?: HistoryCache; deferSummary?: boolean; recordChurn?: boolean } = {}): Promise<Report> {
-  const { lcov, goCover, findingInputs = [], plugins = [], operationCache } = request;
+  const { findingInputs = [], plugins = [], operationCache } = request;
   const languages = languageRegistry(plugins);
   const claims = inspectionFileMatcher(plugins, languages);
   const { isSource } = languages;
   const ports: InspectionPorts = {
     readSource: excludes => readSource(request, { excludes, isSource, claims, history: history?.blobs }, deferSummary),
     analyze: input => analyzeSnapshot(input, plugins, operationCache, history),
-    ...(lcov === undefined && goCover === undefined ? {} : { readCoverage: source => readInspectionCoverage({ lcov, goCover }, source) }),
+    ...(hasCoverageInputs(request) ? { readCoverage: source => readInspectionCoverage(request, source) } : {}),
     ...(findingInputs.length === 0 ? {} : { importFindings: (report, root, excludes) =>
       attachFindings(report, findingInputs, root, request.findingRoot === undefined ? root : resolve(request.findingRoot), excludes) }),
     recordChurn: recordChurn ? (report, root, paths) => attachChurn(report, root, paths.filter(isSource)) : undefined,

@@ -72,7 +72,7 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
 function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason }: NativeLanguagePlugin) {
   return { id, version, api, tools: tools ?? {}, kinds,
     ...(claims === undefined ? {} : { claims }), ...(settings === undefined ? {} : { settings }),
-    ...(providesLanguages === undefined ? {} : { providesLanguages }), ...(unavailableReason === undefined ? {} : { unavailableReason }) };
+    ...(providesLanguages === undefined ? {} : { providesLanguages: providesLanguages.map(({ syntax, ...language }) => language) }), ...(unavailableReason === undefined ? {} : { unavailableReason }) };
 }
 
 function inspectionStatus(hasSources: boolean, results: AnalysisResults): Report['status'] {

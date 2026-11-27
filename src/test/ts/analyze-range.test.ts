@@ -44,7 +44,6 @@ test('a range rejects options that describe one checkout, and an empty range suc
   const rejected: [string[], RegExp][] = [
     [['--working-tree'], /Choose a range or --working-tree/],
     [['--import', 'lcov=coverage/lcov.info'], /--import describes one checkout/],
-    [['--ci', 'github'], /--ci github needs a single revision/],
     [['--concurrency', '0'], /--concurrency must be an integer/],
   ];
   for (const [options, message] of rejected) {
@@ -68,6 +67,15 @@ test('help for analyze shows the range form and --skip-saved', () => {
   assert.match(help.stdout, /^Usage: repometry analyze \[REVISION \| BASE\.\.\[HEAD\]\]/);
   assert.match(help.stdout, /--skip-saved/);
   assert.match(help.stdout, /--concurrency/);
+});
+
+test('analyze rejects the removed CI option and does not advertise it', () => {
+  const result = invoke(['analyze', '--ci', 'github']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /--ci is not an option of analyze/);
+  const help = invoke(['help', 'analyze']);
+  assert.equal(help.status, 0, help.stderr);
+  assert.doesNotMatch(help.stdout, /--ci\b/);
 });
 
 test('typed paths resolve against the current directory and defaults against the repository root', async t => {

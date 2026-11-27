@@ -19,7 +19,7 @@ npx repometry view --store git:origin/repometry
 
 1. Copy [`repometry.yaml`](../.github/workflows/repometry.yaml) to `.github/workflows/` in your project, and change what is specific to Repometry's own build:
    - Run a release instead of the build: replace `node target/main/ts/cli/main.js` with `npx --yes repometry@0.11.0`, and remove the `npm ci` steps. Repometry needs Node.js 24 or later.
-   - The `build` artifact holds Repometry's build and coverage. Download the artifact with your coverage instead, and change the `--import` paths to match. For Go and Python coverage, see [Go and Python analysis](native-languages.md#importing-coverage).
+   - The `build` artifact holds Repometry's build and coverage. Download the artifact with your coverage instead, and change the `--import` paths to match. For Go coverage, Python coverage or a Cobertura XML file from any tool, see [Importing coverage](native-languages.md#importing-coverage).
    - The Git author comes from repository variables. Set `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` in your repository, or write the values in the file.
 2. In your CI workflow, upload the coverage from the job that runs your tests, and call the file after it, as below.
 3. In your repository's settings, under Pages, set the source to GitHub Actions.

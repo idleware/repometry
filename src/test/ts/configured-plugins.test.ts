@@ -81,6 +81,20 @@ async function configuration(t: TestContext, plugin: unknown) {
   return { directory, run: (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: directory, encoding: 'utf8' }) };
 }
 
+test('configured syntax loads and validates but is not included in the plugins listing', async t => {
+  const syntax = { lineComments: [';'], strings: [{ quote: '~' }], keywords: ['zap'] };
+  const definition = { ...fixture, providesLanguages: [{ ...fixture.providesLanguages[0]!, syntax }] };
+  assert.deepEqual(readProcessPlugins([definition])[0]?.providesLanguages?.[0]?.syntax, syntax);
+  const invalid = { ...definition, providesLanguages: [{ ...fixture.providesLanguages[0]!, syntax: { lineComments: [''] } }] };
+  assert.throws(() => readProcessPlugins([invalid]), /Config plugins\/0\/providesLanguages\/0\/syntax\/lineComments\/0/);
+  const { run } = await configuration(t, definition);
+  const output = run('plugins');
+  assert.equal(output.status, 0, output.stderr);
+  assert.ok(entries(output.stdout).some(plugin => plugin.id === 'fixture'));
+  assert.ok(entries(output.stdout).every(plugin =>
+    plugin.providesLanguages?.every(language => !Object.hasOwn(language, 'syntax')) ?? true));
+});
+
 test('plugins lists configured languages and effective file claims before running any tools', async t => {
   const { run } = await configuration(t, fixture);
   const configured = run('plugins');

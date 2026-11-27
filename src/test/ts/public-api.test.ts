@@ -21,7 +21,7 @@ const entries = {
     types: [
       'Candidate', 'CloneSource', 'CodeStructure', 'DataContract', 'DockerToolLimits', 'FileClaims', 'Finding',
       'FindingLocation', 'FindingResult', 'FunctionComplexity', 'InputBinding', 'InspectionInputs',
-      'InventoryFile', 'LanguageDisplay', 'Measurement', 'MetricDescriptor', 'MetricScope', 'Operation',
+      'InventoryFile', 'LanguageDisplay', 'LanguageSyntax', 'Measurement', 'MetricDescriptor', 'MetricScope', 'Operation',
       'OperationCache', 'OperationCacheOptions', 'Outcome', 'PlanRequest', 'PlannedOperation', 'Plugin',
       'PluginConfigSchema', 'PluginKind', 'ProcessOperation', 'ProcessPluginManifest', 'Product',
       'ProductDeclaration', 'ProvidedLanguage', 'RuleDescriptor', 'SourceContext', 'SourceFile', 'SourcePlugin',

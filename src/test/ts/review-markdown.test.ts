@@ -115,7 +115,7 @@ test('GitHub output annotates new and worsened issues and uncovered ranges, at m
       uncovered: [{ path: 'src/a.ts', first: 3, last: 5 }], gate: { minimumPercent: 80, minimumLines: 20, status: 'failed' } } });
   const written: string[] = [];
   const write = process.stderr.write.bind(process.stderr);
-  const environment = { GITHUB_OUTPUT: join(dir, 'outputs'), GITHUB_STEP_SUMMARY: join(dir, 'summary'), GITHUB_WORKSPACE: dir };
+  const environment = { GITHUB_STEP_SUMMARY: join(dir, 'summary'), GITHUB_WORKSPACE: dir };
   const saved = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
   Object.assign(process.env, environment);
   process.stderr.write = ((chunk: string) => written.push(String(chunk)) > 0) as typeof process.stderr.write;
@@ -133,7 +133,6 @@ test('GitHub output annotates new and worsened issues and uncovered ranges, at m
   assert.ok(lines.includes('::error file=src/code%2Cwith%25%3Ax.ts,line=1,endLine=1,title=Repometry%3A new issue::fn0 issue'), lines[0]);
   assert.deepEqual(lines.filter(line => line.startsWith('::warning ')),
     ['::warning file=src/a.ts,line=3,endLine=5,title=Repometry%3A not covered::Changed lines 3–5 are not covered']);
-  assert.match(await readFile(join(dir, 'outputs'), 'utf8'), /^verdict=failed$\n^new=15$\n^worsened=0$\n^improved=0$\n^touched=1$\n^changed-coverage=33\.33$/m);
   assert.match(await readFile(join(dir, 'summary'), 'utf8'), /^Annotated on the diff: 10 of 15\.$/m);
 });
 
