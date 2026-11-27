@@ -1,6 +1,6 @@
 # Configure a process language plugin
 
-Build the parser into a local Docker image. Use the full image ID from `docker image inspect --format '{{.Id}}' IMAGE` or a repository digest already present on the machine.
+[Write a plugin](plugins.md) gives the rules for all plugins, including the errors. Build the parser into a local Docker image. Use the full image ID from `docker image inspect --format '{{.Id}}' IMAGE` or a repository digest already present on the machine.
 
 Add a language plugin to `repometry.config.json`. Replace the example image ID with yours.
 
@@ -31,7 +31,7 @@ npx repometry analyze
 npx repometry report html
 ```
 
-A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin and language. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
+A single-language plugin can put its `extensions` and `globs` in `claims` instead of under the language. A plugin with multiple languages specifies the selectors under each language. Top-level selectors that a plugin also lists must match the combined selectors of its languages. Assign a unique ID to each plugin and language. An ID that a built-in plugin uses is an error; [Process plugin failures](plugins.md#process-plugin-failures) lists the messages. [Process plugin configuration schema](../src/main/resources/config/process-plugins-v1.schema.json).
 
 A language's optional `measures` array accepts `functions`, `cyclomaticComplexity`, `cognitiveComplexity`, `classes`, `commentLines`, `codeLines`, `duplication`, and `structuralRules`. Include only capabilities the parser supplies. A parser that counts functions and decisions declares `["functions", "cyclomaticComplexity"]` and returns `path`, `lines`, `functions`, and `cyclomaticFunctions`. Duplication requires `codeLines` and clone candidates. Structural rules consume `observations`. See [Language provider metrics](metrics.md) for unknown values and repository rollups.
 
@@ -50,7 +50,7 @@ A marker or quote is a string of 1 to 8 characters with no whitespace. A word st
 
 Set `"fileIndependent": true` for a repository parser if each file produces the same results and diagnostics when other files are omitted. During a local revision range, Repometry can send only changed files to a provider with a transient structure output and no repository inspection operations. Keep the default `false` for parsers that rely on other files or repository-wide context.
 
-Optional `limits` fields are `timeoutMs`, `maxOutputBytes`, `memoryBytes`, and `pidsLimit`. Defaults are 30 seconds, 8 MiB of output, 512 MiB of memory, and 128 processes. The runner uses a read-only snapshot and disables networking. Configured plugins run with local analysis.
+Optional `limits` fields are `timeoutMs`, `maxOutputBytes`, `memoryBytes`, and `pidsLimit`. Defaults are 30 seconds, 8 MiB of output, 512 MiB of memory, and 128 processes. The runner uses a read-only snapshot and disables networking. Configured plugins run with local analysis. [Process plugin failures](plugins.md#process-plugin-failures) describes the sandbox, the exit codes and the limits.
 
 ## Input and output
 
@@ -61,7 +61,7 @@ The process reads one JSON request from stdin using protocol `repometry.plugin-p
 
 A reference carries a repository-relative `path` and its SHA-256 hash. Read the file at that path relative to the process working directory.
 
-Write exactly one JSON Lines record to stdout with `kind: "product"`, the contract ID, and `value`. Optional records with `kind: "diagnostic"` carry a message and a severity of `info`, `warning`, or `error`. A warning preserves valid results and marks the run partial. An error fails the operation.
+Write exactly one JSON Lines record to stdout with `kind: "product"`, the contract ID, and `value`. Optional records with `kind: "diagnostic"` carry a message and a severity of `info`, `warning`, or `error`. A warning preserves valid results and marks the run partial. An error fails the operation. A nonzero exit code, a timeout or a second product also fails it; see [Process plugin failures](plugins.md#process-plugin-failures).
 
 This is the repository-scoped `/tools/fixture.cjs` for the example. The fixture format has code on nonblank lines and has no functions, comments, or classes.
 

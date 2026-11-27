@@ -2,7 +2,7 @@ import { plan } from '../core/engine/plan.js';
 import type { DataContract, Operation, Plugin } from '../core/engine/plugin.js';
 import { changesInput } from '../core/model/changes.js';
 import { cloneSources } from '../core/model/clone-source.js';
-import { codeStructure } from '../core/model/code-structure.js';
+import { codeStructure, codeStructures } from '../core/model/code-structure.js';
 import { lcovInput } from '../core/model/coverage-input.js';
 import { sourceFile, sourceFiles } from '../core/model/snapshot.js';
 import type { SourceFile, SourceSnapshot } from '../core/model/source.js';
@@ -34,6 +34,8 @@ const diffCoverageRun: readonly Phase[] = Object.values(diffCoveragePhases);
 
 /** The closed list of host contracts: every contract some host run offers. */
 const hostContracts = new Set([...analysisRun, ...diffCoverageRun].flatMap(({ offers }) => Object.values(offers).map(({ id }) => id)));
+// Reserve both parse outputs. The host supplies per-file structure directly to phases.
+const languageOutputs = new Set([codeStructure.id, codeStructures.id]);
 
 export type ActiveOperation = Readonly<{ plugin: Plugin; operation: Operation; key: string }>;
 
@@ -47,9 +49,13 @@ export type ActiveOperation = Readonly<{ plugin: Plugin; operation: Operation; k
 export function selectOperations<Name extends string>(plugins: readonly Plugin[], phases: Readonly<Record<Name, Phase>>,
   parsers: ReadonlySet<string>) {
   const all = plugins.flatMap(plugin => plugin.operations.map(operation => ({ plugin, operation, key: `${plugin.id}/${operation.id}` })));
-  const supplier = all.find(({ key, operation }) => hostContracts.has(operation.output.id) && !parsers.has(key));
-  const only = supplier?.operation.output.id === codeStructure.id ? 'a language provider' : 'the host';
-  if (supplier) throw new Error(`${supplier.key} outputs ${supplier.operation.output.id}, which only ${only} supplies`);
+  const supplier = all.find(({ key, operation: { output } }) =>
+    (hostContracts.has(output.id) || languageOutputs.has(output.id)) && !parsers.has(key));
+  if (supplier) {
+    const { id } = supplier.operation.output;
+    const only = languageOutputs.has(id) ? 'a language provider' : 'the host';
+    throw new Error(`${supplier.key} outputs ${id}, which only ${only} supplies`);
+  }
   rejectUnsatisfiable(all);
   const selected = {} as Record<Name, ActiveOperation[]>;
   let waiting = all;

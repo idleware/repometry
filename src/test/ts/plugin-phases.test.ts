@@ -4,7 +4,7 @@ import { analyzeSnapshot } from '../../main/ts/compose/analyze-snapshot.js';
 import { pluginApi } from '../../main/ts/core/engine/plugin.js';
 import type { DataContract, Operation, Plugin } from '../../main/ts/core/engine/plugin.js';
 import { changesInput } from '../../main/ts/core/model/changes.js';
-import { codeStructure } from '../../main/ts/core/model/code-structure.js';
+import { codeStructure, codeStructures } from '../../main/ts/core/model/code-structure.js';
 import type { CodeStructure } from '../../main/ts/core/model/code-structure.js';
 import { lcovInput } from '../../main/ts/core/model/coverage-input.js';
 import { findingResult } from '../../main/ts/core/model/finding.js';
@@ -60,6 +60,14 @@ function deriver(claims: Partial<Plugin>): Plugin {
 
 const md = { claims: { extensions: ['.md'] } };
 const ts = { claims: { extensions: ['.ts'] } };
+
+const repositoryStructure = producer('x-batch', { files: sourceFiles }, codeStructures, {
+  ...md,
+  operations: [{
+    id: 'make', role: 'provider', scope: 'repository', inputs: { files: sourceFiles }, output: codeStructures,
+    execute: inputs => inputs.read('files', sourceFiles).map(({ path }) => ({ path, lines: 1, functions: 0 })),
+  }],
+});
 
 async function outcome(plugins: readonly Plugin[], withCoverage = false): Promise<string> {
   try {
@@ -140,6 +148,11 @@ const cases: readonly { readonly name: string; readonly plugins: readonly Plugin
     plugins: [deriver(md)], expected: 'error: x-d/make outputs repometry.code-structure/v1, which only a language provider supplies' },
   { name: 'derives code structure for its own check on parsed files: only a language provider supplies it',
     plugins: [deriver(ts)], expected: 'error: x-d/make outputs repometry.code-structure/v1, which only a language provider supplies' },
+  { name: 'only a language provider supplies repository code structure', plugins: [repositoryStructure],
+    expected: 'error: x-batch/make outputs repometry.code-structures/v1, which only a language provider supplies' },
+  { name: 'a registered language provider supplies repository code structure', plugins: [{ ...repositoryStructure, kinds: ['language'],
+    providesLanguages: [{ id: 'fixture-text', label: 'Fixture text', extensions: ['.md'] }] }],
+    expected: 'runs ["x-batch/make"] on []' },
   { name: 'reads code structure while two other plugins derive one: they are rejected', plugins: [
     producer('x-d1', { source: sourceFile }, codeStructure, ts), producer('x-d2', { source: sourceFile }, codeStructure, ts),
     inspector('x-c', { syntax: codeStructure }, ts)], expected: 'error: x-d1/make outputs repometry.code-structure/v1, which only a language provider supplies' },
