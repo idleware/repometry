@@ -13,11 +13,16 @@ const rowShape = validator.compile<CommitSummary>({ $ref: `${summarySchema}#/$de
 
 export function validateSummaryIndex(value: unknown): value is RepositorySummary {
   return validateSummary(value) && validCatalog(value.metrics, value.privateMetrics)
-    && value.commits.every(row => validCatalog(row.metrics, row.privateMetrics) && validPositions(row, value.metrics));
+    && value.commits.every(row => validRow(row, value.metrics));
 }
 
 export function validateSummaryRow(value: unknown): value is CommitSummary {
-  return rowShape(value) && validCatalog(value.metrics, value.privateMetrics) && validPositions(value);
+  return rowShape(value) && validRow(value);
+}
+
+function validRow(row: CommitSummary, fallback?: readonly MetricDescriptor[]): boolean {
+  return (row.recovered === undefined || row.recovered <= row.parsed)
+    && validCatalog(row.metrics, row.privateMetrics) && validPositions(row, fallback);
 }
 
 function validCatalog(catalog: readonly MetricDescriptor[] | undefined, privateMetrics: readonly string[] = []): boolean {

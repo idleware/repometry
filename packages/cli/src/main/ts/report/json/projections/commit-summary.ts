@@ -123,8 +123,9 @@ export function historyEntry(report: Report): PublicHistoryEntry {
   const endingAt = isRecord(window) && typeof window.endingAt === 'string' ? window.endingAt : '';
   const committedAt = Date.parse(report.committedAt ?? endingAt);
   const generatedAt = Date.parse(report.generatedAt);
+  const { files, parsed, recovered } = report.scope;
   return { sha: report.subject.id, generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : '',
     ...(Number.isFinite(committedAt) ? { committedAt: new Date(committedAt).toISOString() } : {}), status: report.status,
-    files: report.scope.files, parsed: report.scope.parsed, lines: measured(definitions.lines, lines),
+    files, parsed, ...(recovered ? { recovered } : {}), lines: measured(definitions.lines, lines),
     functions: measured(definitions.functions, functions), maxComplexity: measured(definitions.complexity, maxComplexity), lineCoverage };
 }

@@ -11,10 +11,11 @@ export function extractRecovered(path: string, tree: Tree, source: SourceLines, 
   const root = tree.rootNode;
   const damaged = damagedSyntax(root);
   const { scopes, omitted } = recoveredScopes(root, grammar, damaged);
-  if (scopes.length === 0) return undefined;
-  const facts = scanClones(path, tree, source, grammar, damaged);
-  const structure = new Structure(grammar, source, facts.codeLines).measureRecovered(scopes);
-  if (structure.functions === 0 && !structure.classes) return undefined;
+  const facts = scanClones(path, tree, source, grammar, scopes.length ? damaged : false);
+  const measured = scopes.length ? new Structure(grammar, source, facts.codeLines).measureRecovered(scopes) : undefined;
+  const structure = measured && (measured.functions || measured.classes)
+    ? { path, ...measured, ...facts }
+    : { path, lines: source.count, codeLines: facts.codeLines, commentLines: facts.commentLines };
   const { reason, offset } = firstSyntaxIssue(root, grammar);
-  return { structure: { path, ...structure, ...facts }, omitted, reason, location: source.location(offset, grammar.columns) };
+  return { structure, omitted, reason, location: source.location(offset, grammar.columns) };
 }

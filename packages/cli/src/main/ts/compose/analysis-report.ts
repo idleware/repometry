@@ -122,7 +122,7 @@ function pluginProvenance(plugin: ParserPlugin) {
 }
 
 function inspectionStatus(hasSources: boolean, results: AnalysisResults): Report['status'] {
-  if (results.diagnostics.length > results.recovered.size) return 'partial';
+  if (results.hasBlockingDiagnostics()) return 'partial';
   return !hasSources && !results.completedInspection ? 'not-applicable' : 'complete';
 }
 

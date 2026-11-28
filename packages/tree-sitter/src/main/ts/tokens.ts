@@ -6,7 +6,7 @@ import type { Grammar } from './language.js';
 import { lowerBound } from './source-lines.js';
 import type { SourceLines, Span } from './source-lines.js';
 
-export function scanClones(path: string, tree: Tree, source: SourceLines, grammar: Grammar, damaged?: (span: Span) => boolean) {
+export function scanClones(path: string, tree: Tree, source: SourceLines, grammar: Grammar, damaged?: false | ((span: Span) => boolean)) {
   const cursor = tree.walk();
   try {
     return new TokenScanner(cursor, source, grammar, damaged).scan(path);
@@ -49,8 +49,8 @@ class TokenScanner {
   private candidateEnd = 0;
 
   constructor(private readonly cursor: TreeCursor, private readonly source: SourceLines, private readonly grammar: Grammar,
-    private readonly damaged?: (span: Span) => boolean) {
-    this.collect = source.count >= limits.minCodeLines;
+    private readonly damaged?: false | ((span: Span) => boolean)) {
+    this.collect = damaged !== false && source.count >= limits.minCodeLines;
   }
 
   scan(path: string) {
@@ -87,7 +87,7 @@ class TokenScanner {
 
   private candidate(): void {
     const range = span(this.cursor);
-    if (this.damaged?.(range)) return;
+    if (this.damaged && this.damaged(range)) return;
     if (range.end - range.start < limits.minNodes) return;
     if (this.source.line(range.end - 1) - this.source.line(range.start) + 1 < limits.minCodeLines) return;
     // Only tokens inside ranges that could meet both minima can be part of a fingerprint.

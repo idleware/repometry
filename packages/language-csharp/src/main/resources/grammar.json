@@ -1,8 +1,7 @@
 {
   "package": "tree-sitter-c-sharp",
   "version": "0.24.0",
-  "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
-  "source": "https://github.com/tree-sitter/tree-sitter-c-sharp/releases/download/v0.24.0/tree-sitter-c_sharp.wasm",
   "license": "MIT",
+  "source": "https://github.com/tree-sitter/tree-sitter-c-sharp/releases/download/v0.24.0/tree-sitter-c_sharp.wasm",
   "sha256": "e137386fcdfc2562a058f8048c76ab77b0663a318cb62d8026cd4d2e94944231"
 }

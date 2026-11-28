@@ -44,12 +44,8 @@ export function treeSitter(grammar: Grammar): NativeManifest {
     tools: { [grammar.tool.package]: grammar.tool.version },
     create: () => ({
       produces: [{ contract: codeStructure.id, persistence: 'transient' }],
-      operations: [{ ...parse, implementation: parse.execute.toString(), async execute(inputs) {
-        const structure = await parse.execute(inputs) as CodeStructure;
-        const notice = structure[recoveredSyntax];
-        if (notice) inputs.emitDiagnostic?.(notice, structure.path);
-        return readStructure(structure);
-      } }],
+      operations: [{ ...parse, implementation: parse.execute.toString(),
+        execute: async inputs => readStructure(await parse.execute(inputs) as CodeStructure) }],
     }),
   };
 }
@@ -84,10 +80,9 @@ function extract(path: string, grammar: Grammar, source: SourceLines, tree: Tree
 }
 
 function recoverOrReject(path: string, grammar: Grammar, source: SourceLines, tree: Tree) {
-  const recovered = grammar.recoverDeclarations && extractRecovered(path, tree, source, grammar);
-  if (recovered) {
-    const { structure, omitted, reason, location } = recovered;
-    return { ...structure, [recoveredSyntax]: reason + ' at ' + location + '. Declarations omitted: ' + omitted + '.' };
+  if (grammar.recoverDeclarations) {
+    const { structure, ...details } = extractRecovered(path, tree, source, grammar);
+    return { ...structure, [recoveredSyntax]: details };
   }
   const { offset, reason } = firstSyntaxIssue(tree.rootNode, grammar);
   throw new SyntaxError(reason + ' at ' + source.location(offset, grammar.columns));

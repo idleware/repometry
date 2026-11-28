@@ -201,6 +201,10 @@
         "parsed": {
           "$ref": "#/$defs/count"
         },
+        "recovered": {
+          "type": "integer",
+          "minimum": 1
+        },
         "lines": {
           "$ref": "#/$defs/nullableCount"
         },

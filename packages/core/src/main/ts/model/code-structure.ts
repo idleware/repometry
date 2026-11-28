@@ -18,8 +18,14 @@ export const structureMeasures = ['functions', 'cyclomaticComplexity', 'cognitiv
 export type StructureMeasure = typeof structureMeasures[number];
 
 // The CLI and a separately installed parser can load different instances of this package.
-// An emitted diagnostic keeps the recovered result and its transient marker out of the disk cache.
+// The operation cache excludes symbol-keyed data, so the transient marker never lands on disk.
 export const recoveredSyntax = Symbol.for('repometry.internal.recovered-syntax');
+
+export interface RecoveryDetails {
+  readonly reason: string;
+  readonly location: string;
+  readonly omitted: number;
+}
 
 export interface FunctionComplexity {
   /** Functions without a name omit this field. Reports display them as (anonymous). */
@@ -40,7 +46,7 @@ export interface StructuralObservation {
 }
 
 export interface CodeStructure {
-  readonly [recoveredSyntax]?: string;
+  readonly [recoveredSyntax]?: RecoveryDetails;
   readonly path: string;
   readonly lines: number;
   readonly functions?: number;

@@ -14,6 +14,7 @@ export interface PublicHistoryEntry {
   readonly status: Report['status'];
   readonly files: number;
   readonly parsed: number;
+  readonly recovered?: number;
   readonly lines: number | null;
   readonly functions: number | null;
   readonly maxComplexity: number | null;

@@ -29,7 +29,8 @@ export function damagedSyntax(root: Node): (span: Span) => boolean {
   return ({ start, end }) => {
     const previous = lowerBound(starts, end) - 1;
     const point = missing[lowerBound(missing, start)];
-    return (ends[previous] ?? -1) > start || (point !== undefined && point <= end);
+    // An error can swallow a modifier immediately before the declaration.
+    return (ends[previous] ?? -1) >= start || (point !== undefined && point <= end);
   };
 }
 

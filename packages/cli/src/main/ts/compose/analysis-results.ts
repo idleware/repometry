@@ -1,5 +1,6 @@
 import type { Outcome } from '@repometry/core/internal/engine/execute.js';
 import type { PlannedOperation } from '@repometry/core/internal/engine/plan.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
 import { ReportProducts } from '@repometry/core/internal/engine/report-products.js';
 import type { Finding } from '@repometry/core/internal/model/finding.js';
@@ -15,7 +16,7 @@ export class AnalysisResults {
   readonly findings: Finding[] = [];
   readonly diagnostics: Diagnostic[];
   readonly parsed = new Set<string>();
-  readonly recovered = new Set<string>();
+  readonly recovered = new Map<string, Diagnostic>();
   readonly ran = new Set<string>();
   readonly ruleSkips: NonNullable<Report['ruleSkips']>[number][] = [];
   readonly unmeasured = new Map<string, readonly StructureMeasure[]>();
@@ -26,11 +27,15 @@ export class AnalysisResults {
   private readonly scanned = new Set<string>();
   private readonly scanOnly: ReadonlySet<string>;
   private readonly securityOperations: ReadonlyMap<string, string>;
+  private readonly recoveryOperations: ReadonlySet<string>;
   private readonly usedPlans = new Map<string, ReturnType<typeof operationProvenance>>();
 
   constructor(plugins: readonly Plugin[], oversized: readonly string[]) {
     this.products = new ReportProducts(plugins);
     this.diagnostics = oversized.map(oversizedClaim);
+    this.recoveryOperations = new Set(plugins.filter(plugin => plugin.languageProvenanceRequiresSource && plugin.kinds.includes('language')).flatMap(({ id, operations }) =>
+      operations.filter(operation => operation.role === 'provider' && operation.output.id === codeStructure.id)
+        .map(operation => id + '/' + operation.id)));
     this.scanOnly = new Set(plugins.filter(plugin => plugin.claims?.scanOnly).flatMap(({ id, operations }) =>
       operations.map(operation => `${id}/${operation.id}`)));
     this.securityOperations = new Map(plugins.filter(plugin => plugin.kinds.includes('security')).flatMap(plugin =>
@@ -62,8 +67,8 @@ export class AnalysisResults {
     }
     try {
       const stored = this.products.record(task, outcome.product, path);
-      const recovered = this.recordRecovery(task, outcome.product.value, path);
-      this.recordInspection(task, recovered ? [] : outcome.diagnostics ?? [], path, paths);
+      this.recordRecovery(task, outcome.product.value, path);
+      this.recordInspection(task, outcome.diagnostics ?? [], path, paths);
       if (stored) {
         for (const measurement of stored.measurements) this.measurements.push(measurement);
         for (const finding of stored.findings) this.findings.push(finding);
@@ -73,13 +78,21 @@ export class AnalysisResults {
     }
   }
 
-  private recordRecovery(task: PlannedOperation, value: unknown, path: string | undefined): boolean {
-    if (path === undefined || task.operation.output !== codeStructure) return false;
-    const message = (value as CodeStructure)[recoveredSyntax];
-    if (message === undefined) return false;
-    this.recovered.add(path);
-    this.diagnostics.push({ operation: recoveredSourceOperation, state: 'partial', path, message });
-    return true;
+  hasBlockingDiagnostics(): boolean {
+    return this.diagnostics.some(row => row.path === undefined || this.recovered.get(row.path) !== row);
+  }
+
+  private recordRecovery(task: PlannedOperation, value: unknown, path: string | undefined): void {
+    if (path === undefined || this.recovered.has(path) || !this.recoveryOperations.has(task.key)) return;
+    const facts = value as CodeStructure;
+    const details = recoveryDetails(facts[recoveredSyntax]);
+    if (details === undefined) return;
+    const message = details.reason + ' at ' + details.location + '. Declarations omitted: ' + details.omitted + '.';
+    const measured = (facts.functions ?? 0) + (facts.classes ?? 0);
+    const diagnostic: Diagnostic = { operation: recoveredSourceOperation, state: 'partial', path,
+      message: measured ? message : message + ' No declarations could be measured.' };
+    this.recovered.set(path, diagnostic);
+    this.diagnostics.push(diagnostic);
   }
 
   private recordInspection(task: PlannedOperation, messages: readonly { message: string; path?: string }[], path?: string,
@@ -93,6 +106,15 @@ export class AnalysisResults {
     if (path !== undefined) this.inspected.add(path);
     else for (const file of paths ?? []) this.inspected.add(file);
   }
+}
+
+function recoveryDetails(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const { reason, location, omitted } = value;
+  if (typeof reason !== 'string' || !reason.trim()
+    || typeof location !== 'string' || !/^line [1-9]\d*, column [1-9]\d*$/.test(location)
+    || typeof omitted !== 'number' || !Number.isSafeInteger(omitted) || omitted < 0) return undefined;
+  return { reason, location, omitted };
 }
 
 export function operationProvenance(task: PlannedOperation, syntaxProvider?: string) {

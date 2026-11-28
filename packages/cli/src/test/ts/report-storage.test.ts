@@ -5,12 +5,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { definitions } from '@repometry/core/internal/model/measurement.js';
+import { recoveredSourceOperation } from '@repometry/core/internal/model/report.js';
 import { GitReportReader } from '../../main/ts/api/git/git-reader.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { ObjectError, objectPath } from '../../main/ts/report/json/store/report-tree.js';
 import { checkStore } from '../../main/ts/report/json/store/store-check.js';
-import { reportSchema } from '../../main/ts/report/json/validation/report.js';
+import { readStoredReport, reportSchema } from '../../main/ts/report/json/validation/report.js';
+import { validateSummaryIndex, validateSummaryRow } from '../../main/ts/report/json/validation/summary-validation.js';
 import { packJson } from '../../main/ts/report/json/wire/compact-json.js';
 import type { Report } from '../../main/ts/report/json/validation/report.js';
 
@@ -86,6 +88,33 @@ test('stored reports keep file rows in shared objects and read back exactly', as
   assert.equal(await objectCount(output) - before, 2);
   assert.equal(JSON.stringify(await store.read(next.subject)), JSON.stringify(next));
   assert.deepEqual((await store.list()).map(item => item.subject.id).sort(), ['a'.repeat(40), 'b'.repeat(40)]);
+});
+
+test('recovered scope survives compact and stored reports and is available in commit summaries', async t => {
+  const output = await mkdtemp(join(tmpdir(), 'repometry-recovered-scope-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  const original: Report = {
+    ...report('a', '2026-01-01T00:00:00.000Z', 20),
+    scope: { files: 1, parsed: 1, recovered: 1 },
+    diagnostics: [{ operation: recoveredSourceOperation, state: 'partial', path: 'src/nested/component.ts',
+      message: 'Unexpected syntax at line 15. Declarations omitted: 1.' }],
+  };
+  const store = new LocalReportStore(output);
+  const compact = JSON.stringify(packJson(original));
+  assert.deepEqual(await readStoredReport(compact, original.subject, store.objects.source()), original);
+  await store.save(original);
+  const reopened = new LocalReportStore(output);
+  assert.equal(JSON.stringify(await reopened.read(original.subject)), JSON.stringify(original));
+  const row = commitSummary(original);
+  assert.equal(row.recovered, 1);
+  assert.deepEqual(await reopened.listSummaries(), [row]);
+  const index: unknown = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
+  assert.ok(validateSummaryIndex(index));
+  assert.equal(index.commits[0]?.recovered, 1);
+  assert.equal(validateSummaryRow({ ...row, recovered: 0 }), false);
+  assert.equal(validateSummaryRow({ ...row, recovered: 2 }), false);
+  assert.equal(validateSummaryIndex({ ...index, commits: [{ ...row, recovered: 2 }] }), false);
+  assert.equal(Object.hasOwn(commitSummary(report('b', '2026-01-01T00:00:00.000Z', 20)), 'recovered'), false);
 });
 
 test('stored reports reject an edit that moves rows between files', async t => {
