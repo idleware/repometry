@@ -4,6 +4,7 @@ import { Control } from './control.js';
 import { Flow, Traversal } from './flow.js';
 import type { Visit } from './flow.js';
 import type { Grammar } from './language.js';
+import type { RecoveredScope } from './recovery.js';
 import { lowerBound } from './source-lines.js';
 import type { SourceLines } from './source-lines.js';
 
@@ -29,7 +30,19 @@ export class Structure {
     this.finish(module, this.grammar.moduleDepthLabel);
     const position = this.grammar.reportFileRange ? { line: 1, endLine: this.lines.count } : {};
     this.observations.push({ rule: 'file-complexity', value: this.cognitive, label: 'File cognitive complexity', ...position });
+    return this.result();
+  }
 
+  measureRecovered(scopes: readonly RecoveredScope[]) {
+    for (const { node, parents } of scopes) {
+      this.names.push(...parents);
+      this.walk.runScope(node, task => this.visit(task));
+      this.names.length = 0;
+    }
+    return this.result();
+  }
+
+  private result() {
     const byPosition = (left: FunctionComplexity, right: FunctionComplexity) =>
       left.line! - right.line! || left.column! - right.column!;
     this.cyclomaticFunctions.sort(byPosition);

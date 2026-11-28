@@ -1,5 +1,13 @@
 [
   {
+    "language": "csharp",
+    "label": "C#",
+    "package": "@repometry/language-csharp",
+    "extensions": [
+      ".cs"
+    ]
+  },
+  {
     "language": "go",
     "label": "Go",
     "package": "@repometry/language-go",
@@ -32,6 +40,14 @@
     "extensions": [
       ".kt",
       ".kts"
+    ]
+  },
+  {
+    "language": "lua",
+    "label": "Lua",
+    "package": "@repometry/language-lua",
+    "extensions": [
+      ".lua"
     ]
   },
   {

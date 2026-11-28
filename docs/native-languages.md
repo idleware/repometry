@@ -18,7 +18,7 @@ A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin]
 | Kotlin | `kotlin` | `.kt`, `.kts` | `language-kotlin` | `@repometry/all` |
 | HCL | `hcl` | `.hcl`, `.tf`, `.tfvars` | `language-hcl` | `@repometry/all` |
 | Rust | | | | Not yet. The grammar rejects too many valid files. |
-| C# | `csharp` | `.cs` | | Not yet. The grammar rejects valid preprocessor code. The files stay in the inventory. |
+| C# | `csharp` | `.cs` | `language-csharp` | Separate install: `@repometry/language-csharp`. A file with code the grammar cannot read, mostly around preprocessor directives, keeps its lines and every function outside that code; the report counts such files. |
 | C, C++, Swift | | | | Not yet. |
 
 JavaScript and TypeScript ship in every package. A language in the package you run needs no setup; see [Packages](cli.md#packages). A file of a language without a plugin stays in the inventory as not analysed.

@@ -69,7 +69,7 @@ export function readReport(value: unknown): Report {
     const lines = value.pluginData.products[lcovLines.id];
     if (lines && !lcovLines.accepts(lines[0]?.value)) throw new Error('Invalid report: LCOV line ranges must be sorted and merged');
   }
-  if (value.scope.parsed > value.scope.files) throw new Error('Invalid report: parsed count exceeds source count');
+  validateScope(value.scope);
   if (value.findings?.some(finding => !isFinding(finding))) throw new Error('Invalid report: inconsistent finding location');
   const ignore = value.appliedConfig.findingIgnore;
   if (value.ignoredFindings?.some(({ finding, matchedRule }) => !isFinding(finding)
@@ -82,4 +82,9 @@ export function readReport(value: unknown): Report {
     }
   }
   return value;
+}
+
+function validateScope({ files, parsed, recovered = 0 }: Report['scope']): void {
+  if (parsed > files) throw new Error('Invalid report: parsed count exceeds source count');
+  if (recovered > parsed) throw new Error('Invalid report: recovered count exceeds parsed count');
 }

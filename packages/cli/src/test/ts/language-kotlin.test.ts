@@ -1,22 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { codeStructure } from '@repometry/core';
 import type { CodeStructure, StructuralObservation } from '@repometry/core';
 import plugin from '@repometry/language-kotlin';
+import { parseNative } from './helpers/parse-native.js';
 
-async function parse(source: string, path = 'Example.kt'): Promise<CodeStructure> {
-  const [operation] = plugin.create().operations;
-  assert.ok(operation);
-  const result = await operation.execute({
-    read: <T>(port: string) => {
-      assert.equal(port, 'file');
-      return { path, bytes: Buffer.from(source) } as T;
-    },
-    emitDiagnostic: assert.fail,
-  });
-  assert.ok(codeStructure.accepts(result));
-  return result;
-}
+const parse = (source: string, path = 'Example.kt') => parseNative(plugin, source, path);
 
 function observations(structure: CodeStructure, check: StructuralObservation['check']) {
   return structure.observations?.filter(item => item.check === check).map(({ anchor, line, endLine, value }) =>

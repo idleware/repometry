@@ -18,6 +18,8 @@
     "packages/language-php",
     "packages/language-kotlin",
     "packages/language-hcl",
+    "packages/language-csharp",
+    "packages/language-lua",
     "packages/cli",
     "packages/repometry",
     "packages/all"
@@ -25,7 +27,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run build && node scripts/generate-language-catalog.mjs --check && npm test --workspaces --if-present",
-    "coverage": "npm run build --workspaces && node scripts/generate-language-catalog.mjs --check && npm run build:test --workspaces --if-present && c8 --all --src packages/core/target/main/ts --src packages/tree-sitter/target/main/ts --src packages/language-go/target/main/ts --src packages/language-python/target/main/ts --src packages/language-java/target/main/ts --src packages/language-ruby/target/main/ts --src packages/language-php/target/main/ts --src packages/language-kotlin/target/main/ts --src packages/language-hcl/target/main/ts --src packages/cli/target/main/ts --src packages/repometry/target/main/ts --src packages/all/target/main/ts --src packages/core/target/verification/main/ts --src packages/cli/target/verification/main/ts --include 'packages/*/src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage npm exec --workspace packages/core --workspace packages/cli -- node --test 'target/verification/test/ts/*.test.js'"
+    "coverage": "npm run build --workspaces && node scripts/generate-language-catalog.mjs --check && npm run build:test --workspaces --if-present && c8 --all --src packages/core/target/main/ts --src packages/tree-sitter/target/main/ts --src packages/language-go/target/main/ts --src packages/language-python/target/main/ts --src packages/language-java/target/main/ts --src packages/language-ruby/target/main/ts --src packages/language-php/target/main/ts --src packages/language-kotlin/target/main/ts --src packages/language-hcl/target/main/ts --src packages/language-csharp/target/main/ts --src packages/language-lua/target/main/ts --src packages/cli/target/main/ts --src packages/repometry/target/main/ts --src packages/all/target/main/ts --src packages/core/target/verification/main/ts --src packages/cli/target/verification/main/ts --include 'packages/*/src/main/ts/**' --exclude-after-remap --reporter lcov --reporter text-summary --reports-dir target/coverage npm exec --workspace packages/core --workspace packages/cli -- node --test 'target/verification/test/ts/*.test.js'"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

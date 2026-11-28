@@ -1,5 +1,6 @@
 import type { DataContract } from './plugin.js';
 import { codeStructure as storedStructure, codeStructures as storedStructures } from '../model/code-structure.js';
+import type { recoveredSyntax } from '../model/code-structure.js';
 import type { CodeStructure as StoredStructure, StructuralObservation as StoredObservation } from '../model/code-structure.js';
 import { findingResult as storedFindings } from '../model/finding.js';
 import type { Finding as StoredFinding, FindingResult as StoredFindings } from '../model/finding.js';
@@ -8,7 +9,7 @@ import type { PluginCategory } from '../model/inspection-category.js';
 import { isRecord } from '../model/plugin-data.js';
 
 export type StructuralObservation = Omit<StoredObservation, 'rule'> & { readonly check: StoredObservation['rule'] };
-export type CodeStructure = Omit<StoredStructure, 'observations'> & { readonly observations?: readonly StructuralObservation[] };
+export type CodeStructure = Omit<StoredStructure, 'observations' | typeof recoveredSyntax> & { readonly observations?: readonly StructuralObservation[] };
 
 export type Finding = Omit<StoredFinding, 'tool' | 'rule' | 'category'> & { readonly plugin?: string; readonly check: string };
 export type FindingResult = Omit<StoredFindings, 'findings'> & { readonly findings: readonly Finding[] };

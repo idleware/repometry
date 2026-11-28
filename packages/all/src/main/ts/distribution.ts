@@ -8,6 +8,7 @@ import phpManifest, { php } from '@repometry/language-php';
 import rubyManifest, { ruby } from '@repometry/language-ruby';
 import kotlinManifest, { kotlin } from '@repometry/language-kotlin';
 import hclManifest, { hcl } from '@repometry/language-hcl';
+import luaManifest, { lua } from '@repometry/language-lua';
 
 const distribution: Distribution = {
   bundled: [
@@ -18,6 +19,7 @@ const distribution: Distribution = {
     bundleLanguage(rubyManifest, ruby.language, true),
     bundleLanguage(kotlinManifest, kotlin.language, true),
     bundleLanguage(hclManifest, hcl.language, true),
+    bundleLanguage(luaManifest, lua.language, true),
   ],
   moduleUrl: import.meta.url,
   packageUrl: new URL('../../../package.json', import.meta.url).href,

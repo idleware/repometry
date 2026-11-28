@@ -17,6 +17,10 @@ export const structureMeasures = ['functions', 'cyclomaticComplexity', 'cognitiv
 
 export type StructureMeasure = typeof structureMeasures[number];
 
+// The CLI and a separately installed parser can load different instances of this package.
+// An emitted diagnostic keeps the recovered result and its transient marker out of the disk cache.
+export const recoveredSyntax = Symbol.for('repometry.internal.recovered-syntax');
+
 export interface FunctionComplexity {
   /** Functions without a name omit this field. Reports display them as (anonymous). */
   readonly name?: string;
@@ -36,6 +40,7 @@ export interface StructuralObservation {
 }
 
 export interface CodeStructure {
+  readonly [recoveredSyntax]?: string;
   readonly path: string;
   readonly lines: number;
   readonly functions?: number;

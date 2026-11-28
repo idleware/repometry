@@ -43,7 +43,8 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
     appliedConfig: appliedConfiguration(input, sources, results, selectors),
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
-    scope: { files: fileCount, parsed: results.parsed.size },
+    scope: { files: fileCount, parsed: results.parsed.size,
+      ...(results.recovered.size ? { recovered: results.recovered.size } : {}) },
     status: inspectionStatus(fileCount > 0, results),
     measurements: results.measurements,
     diagnostics: results.diagnostics,
@@ -121,7 +122,7 @@ function pluginProvenance(plugin: ParserPlugin) {
 }
 
 function inspectionStatus(hasSources: boolean, results: AnalysisResults): Report['status'] {
-  if (results.diagnostics.length > 0) return 'partial';
+  if (results.diagnostics.length > results.recovered.size) return 'partial';
   return !hasSources && !results.completedInspection ? 'not-applicable' : 'complete';
 }
 

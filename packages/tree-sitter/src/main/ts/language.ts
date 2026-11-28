@@ -33,6 +33,8 @@ export interface NodeRule {
   readonly parameters?: (node: Node) => number | undefined;
   /** Alternate branch when the grammar does not expose an alternative field. */
   readonly alternative?: (node: Node) => Node | null;
+  /** Authored alternatives stored in one transparent conditional child. */
+  readonly alternativeBranches?: (child: Node) => readonly Node[] | undefined;
   /** Whether an alternative wrapper contributes its flat cognitive point. */
   readonly elseCognitive?: (node: Node) => boolean;
   /** A wrapper is transparent when its sole named child is a chained conditional. */
@@ -51,6 +53,9 @@ export interface Grammar {
   readonly name: (node: Node) => string | undefined;
   readonly countDeclarations?: (root: Node) => number;
   readonly rules: Readonly<Record<string, NodeRule>>;
+  /** A named field carrying syntax outside the executable source, such as a preprocessor condition. */
+  readonly ignoredFields?: Readonly<Record<string, string>>;
+  readonly recoverDeclarations?: true;
   readonly parens: ReadonlySet<string>;
   readonly comments: ReadonlySet<string>;
   readonly extras: ReadonlySet<string>;

@@ -47,11 +47,17 @@ export class Control {
   private conditional(node: Node, flow: Flow, depth: number, chained?: boolean): void {
     flow.block(node, depth, chained);
     const work: Work[] = [];
-    const alternate = this.walk.grammar.rules[node.type]?.alternative?.(node);
+    const rule = this.walk.grammar.rules[node.type];
+    const alternate = rule?.alternative?.(node);
     for (let index = 0; index < node.childCount; index++) {
       const child = node.child(index)!;
       const explicitAlternative = child.id === alternate?.id;
       if ((!child.isNamed && !explicitAlternative) || this.walk.ignored(child.type)) continue;
+      const branches = rule?.alternativeBranches?.(child);
+      if (branches) {
+        work.push(...branches.map(branch => this.alternative(branch, flow, depth)));
+        continue;
+      }
       const alternative = explicitAlternative || node.fieldNameForChild(index) === 'alternative';
       work.push(alternative ? this.alternative(child, flow, depth) : { node: child, flow, depth: depth + 1 });
     }

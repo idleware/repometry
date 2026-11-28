@@ -4,10 +4,12 @@ import type { Node, Parser, Tree } from 'web-tree-sitter';
 import { codeStructure, pluginManifestSchema } from '@repometry/core';
 import type { Operation, PluginManifest } from '@repometry/core';
 import { readStructure } from '@repometry/core/internal/engine/author-contracts.js';
+import { recoveredSyntax } from '@repometry/core/internal/model/code-structure.js';
 import type { CodeStructure, StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
 import type { SourceFile } from '@repometry/core/internal/model/source.js';
 import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
 import type { Grammar } from './language.js';
+import { extractRecovered } from './recovered-file.js';
 import { SourceLines } from './source-lines.js';
 import { Structure } from './structure.js';
 import { firstSyntaxIssue } from './syntax-issue.js';
@@ -42,8 +44,12 @@ export function treeSitter(grammar: Grammar): NativeManifest {
     tools: { [grammar.tool.package]: grammar.tool.version },
     create: () => ({
       produces: [{ contract: codeStructure.id, persistence: 'transient' }],
-      operations: [{ ...parse, implementation: parse.execute.toString(),
-        execute: async inputs => readStructure(await parse.execute(inputs) as CodeStructure) }],
+      operations: [{ ...parse, implementation: parse.execute.toString(), async execute(inputs) {
+        const structure = await parse.execute(inputs) as CodeStructure;
+        const notice = structure[recoveredSyntax];
+        if (notice) inputs.emitDiagnostic?.(notice, structure.path);
+        return readStructure(structure);
+      } }],
     }),
   };
 }
@@ -64,10 +70,7 @@ async function inspectFile({ path, bytes }: SourceFile, grammar: Grammar) {
 function extract(path: string, grammar: Grammar, source: SourceLines, tree: Tree | null) {
   if (!tree) throw new SyntaxError('No syntax tree at ' + source.location(0, grammar.columns));
   const root = tree.rootNode;
-  if (root.hasError) {
-    const { offset, reason } = firstSyntaxIssue(root, grammar);
-    throw new SyntaxError(reason + ' at ' + source.location(offset, grammar.columns));
-  }
+  if (root.hasError) return recoverOrReject(path, grammar, source, tree);
   const header = grammar.requireFirst && firstHeader(root, grammar);
   if (grammar.requireFirst && (!header || header.type !== grammar.requireFirst)) {
     throw new SyntaxError('Expected a ' + grammar.requireFirst.replaceAll('_', ' ') +
@@ -78,6 +81,16 @@ function extract(path: string, grammar: Grammar, source: SourceLines, tree: Tree
     ? new Structure(grammar, source, facts.codeLines).measure(root) : { lines: source.count };
   const declarations = grammar.countDeclarations?.(root);
   return { path, ...structure, ...facts, ...(declarations === undefined ? {} : { declarations }) };
+}
+
+function recoverOrReject(path: string, grammar: Grammar, source: SourceLines, tree: Tree) {
+  const recovered = grammar.recoverDeclarations && extractRecovered(path, tree, source, grammar);
+  if (recovered) {
+    const { structure, omitted, reason, location } = recovered;
+    return { ...structure, [recoveredSyntax]: reason + ' at ' + location + '. Declarations omitted: ' + omitted + '.' };
+  }
+  const { offset, reason } = firstSyntaxIssue(tree.rootNode, grammar);
+  throw new SyntaxError(reason + ' at ' + source.location(offset, grammar.columns));
 }
 
 function firstHeader(root: Node, grammar: Grammar): Node | null {

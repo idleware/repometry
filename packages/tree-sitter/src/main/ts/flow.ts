@@ -40,8 +40,16 @@ export class Traversal {
   }
 
   run(root: Node, module: Flow, visit: (task: Visit) => void): void {
+    this.runWork(() => this.children(root, module, 0), visit);
+  }
+
+  runScope(node: Node, visit: (task: Visit) => void): void {
+    this.runWork(() => this.next([{ node, flow: new Flow(), depth: 0 }]), visit);
+  }
+
+  private runWork(schedule: () => void, visit: (task: Visit) => void): void {
     try {
-      this.children(root, module, 0);
+      schedule();
       while (this.pending.length) {
         const item = this.pending.pop()!;
         if (typeof item === 'function') item();
@@ -58,7 +66,9 @@ export class Traversal {
   }
 
   named(node: Node): Node[] {
-    return node.namedChildren.filter(child => !this.ignored(child.type));
+    const field = this.grammar.ignoredFields?.[node.type];
+    const excluded = field === undefined ? undefined : node.childForFieldName(field)?.id;
+    return node.namedChildren.filter(child => child.id !== excluded && !this.ignored(child.type));
   }
 
   ignored(type: string): boolean {
@@ -75,7 +85,9 @@ export class Traversal {
         this.children(child, flow, at + 1);
       };
     };
-    if (this.batchChildren && !ordered && node.namedChildCount > childBatchSize) return this.batches(node, prepare);
+    if (this.batchChildren && !ordered && !this.grammar.ignoredFields?.[node.type] && node.namedChildCount > childBatchSize) {
+      return this.batches(node, prepare);
+    }
     const names = this.named(node);
     const children = ordered ? ordered.flatMap(index => names[index] ?? []) : names;
     if (!children.length) this.checkEmptyBlock(node);

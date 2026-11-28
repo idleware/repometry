@@ -5,6 +5,9 @@ import { ReportProducts } from '@repometry/core/internal/engine/report-products.
 import type { Finding } from '@repometry/core/internal/model/finding.js';
 import type { Measurement } from '@repometry/core/internal/model/measurement.js';
 import type { StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
+import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { codeStructure, recoveredSyntax } from '@repometry/core/internal/model/code-structure.js';
+import { recoveredSourceOperation } from '@repometry/core/internal/model/report.js';
 import type { Diagnostic, Report } from '@repometry/core/internal/model/report.js';
 
 export class AnalysisResults {
@@ -12,6 +15,7 @@ export class AnalysisResults {
   readonly findings: Finding[] = [];
   readonly diagnostics: Diagnostic[];
   readonly parsed = new Set<string>();
+  readonly recovered = new Set<string>();
   readonly ran = new Set<string>();
   readonly ruleSkips: NonNullable<Report['ruleSkips']>[number][] = [];
   readonly unmeasured = new Map<string, readonly StructureMeasure[]>();
@@ -58,7 +62,8 @@ export class AnalysisResults {
     }
     try {
       const stored = this.products.record(task, outcome.product, path);
-      this.recordInspection(task, outcome.diagnostics ?? [], path, paths);
+      const recovered = this.recordRecovery(task, outcome.product.value, path);
+      this.recordInspection(task, recovered ? [] : outcome.diagnostics ?? [], path, paths);
       if (stored) {
         for (const measurement of stored.measurements) this.measurements.push(measurement);
         for (const finding of stored.findings) this.findings.push(finding);
@@ -66,6 +71,15 @@ export class AnalysisResults {
     } catch (error) {
       this.diagnostics.push({ operation: task.key, state: 'failed', path, message: error instanceof Error ? error.message : String(error) });
     }
+  }
+
+  private recordRecovery(task: PlannedOperation, value: unknown, path: string | undefined): boolean {
+    if (path === undefined || task.operation.output !== codeStructure) return false;
+    const message = (value as CodeStructure)[recoveredSyntax];
+    if (message === undefined) return false;
+    this.recovered.add(path);
+    this.diagnostics.push({ operation: recoveredSourceOperation, state: 'partial', path, message });
+    return true;
   }
 
   private recordInspection(task: PlannedOperation, messages: readonly { message: string; path?: string }[], path?: string,

@@ -45,6 +45,7 @@
     "@repometry/language-php": "0.0.0",
     "@repometry/language-ruby": "0.0.0",
     "@repometry/language-kotlin": "0.0.0",
-    "@repometry/language-hcl": "0.0.0"
+    "@repometry/language-hcl": "0.0.0",
+    "@repometry/language-lua": "0.0.0"
   }
 }
