@@ -4,6 +4,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import metricCatalog from '../../main/resources/report/json/metric-catalog-v1.schema.json' with { type: 'json' };
 import fileSchema from '../../main/resources/report/json/file-metrics-v1.schema.json' with { type: 'json' };
 import reportSchema from '../../main/resources/report/json/report-v2.schema.json' with { type: 'json' };
+import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
 import { definitions } from '@repometry/core/internal/model/measurement.js';
 import { fileMetrics } from '../../main/ts/report/json/projections/file-metrics.js';
 import { fileMetricsSchema } from '../../main/ts/report/json/wire/file-metrics-model.js';
@@ -91,4 +92,29 @@ test('file quality totals use measured denominators and preserve unknown effort'
   assert.equal(output.files[2]?.quality?.duplication, undefined);
   assert.deepEqual(output.hotspots.cognitive, ['src/b.js', 'src/a.js']);
   assert.deepEqual(output.hotspots.duplication, ['src/a.js']);
+});
+
+test('stored c-sharp inventories retain their C# display when projected', () => {
+  const legacy = {
+    schema: 'urn:repometry:schema:report:2',
+    subject: { kind: 'commit', id: 'c'.repeat(40) },
+    generatedAt: '2026-11-21T00:00:00Z',
+    status: 'complete',
+    scope: { files: 2, parsed: 1 },
+    appliedConfig: {},
+    definitions: {},
+    measurements: [],
+    diagnostics: [],
+    pluginData: { metrics: [], measured: [], products: {}, rules: [],
+      inventory: [
+        { path: 'First.cs', lines: 13, language: 'c-sharp', analysed: true, provider: 'old-csharp/parse' },
+        { path: 'Second.cs', lines: 7, language: 'c-sharp', analysed: false },
+      ] },
+  } satisfies Report;
+  const stored = JSON.stringify(legacy);
+  const projection = fileMetrics(legacy);
+  assert.deepEqual(projection.languages, [{ id: 'csharp', label: 'C#', color: '#178600', analysed: true }]);
+  assert.deepEqual(projection.files.map(({ language }) => language), [0, 0]);
+  assert.equal(JSON.stringify(legacy), stored);
+  assert.equal(fileTypeId('New.cs'), 'csharp');
 });

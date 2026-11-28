@@ -13,6 +13,8 @@ import type { PluginManifest } from '@repometry/core/internal/engine/plugin-mani
 export type PluginInput = string | PluginReference | PluginManifest;
 
 const builtIns = new Map(builtInPlugins.map(plugin => [plugin.id, plugin]));
+const languagePackages = new Map(builtInPlugins.filter(plugin => plugin.id.startsWith('language-'))
+  .map(plugin => ['@repometry/' + plugin.id, plugin]));
 
 export async function loadPlugins(entries: readonly PluginInput[], root: string, configFile: string | undefined, metadataOnly = false) {
   const plugins: RegisteredPlugin[] = [];
@@ -58,10 +60,14 @@ async function resolvePlugin(input: PluginInput, entry: PluginReference, folder:
     if (path.endsWith('.json')) return { ...await dockerPluginFile(path, entry, base), builtIn: false };
     return { ...await localModule(path, entry, context), builtIn: false };
   }
-  const builtIn = builtIns.get(use);
+  const pkg = use.startsWith('npm:') ? use.slice(4) : use;
+  const builtIn = builtIns.get(use) ?? languagePackages.get(pkg);
   if (builtIn !== undefined) {
     validatePluginOptions(builtIn.config, entry.options, base);
     return { plugin: builtIn, versionSource: 'built-in', builtIn: true, include: undefined, exclude: undefined, requires: undefined };
   }
-  return { ...await installedModule(use.startsWith('npm:') ? use.slice(4) : use, entry, context), builtIn: false };
+  const installed = await installedModule(pkg, entry, context);
+  const plugin = pkg.startsWith('@repometry/language-') && pkg === '@repometry/' + installed.plugin.id
+    ? { ...installed.plugin, languageProvenanceRequiresSource: true as const } : installed.plugin;
+  return { ...installed, plugin, builtIn: false };
 }

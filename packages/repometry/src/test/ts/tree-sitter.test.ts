@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { codeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { codeStructure as authorStructure } from '@repometry/core';
+import { java } from '@repometry/language-java';
+import { treeSitter } from '@repometry/tree-sitter';
 import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
 import { qualitySummary } from '@repometry/core/internal/model/quality-summary.js';
 import { workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
@@ -13,7 +16,7 @@ import { inspectionDetails } from '../../main/ts/report/json/projections/inspect
 import { inspectionProfileDigest } from '../../main/ts/report/json/projections/inspection-context.js';
 import { effectivePlugins } from '../../main/ts/compose/plugin-list.js';
 import { inspect } from '../../main/ts/index.js';
-import { treeSitter } from './helpers/wasm-plugin.js';
+import { wasmParser } from './helpers/wasm-plugin.js';
 import { analyzeSnapshot } from './helpers/analysis.js';
 
 const go = [
@@ -25,10 +28,10 @@ const python = [
   '            return 1 if value else 0', '        return inner(flag) if flag else 0', '',
 ].join('\n');
 
-test('the built-in catalog uses one provider for Go and Python', () => {
+test('the built-in catalog has a separate provider for each native language', () => {
   const chosen = effectivePlugins([]).filter(plugin => plugin.languages?.some(language => ['go', 'python'].includes(language.id)));
   assert.deepEqual(chosen.map(plugin => [plugin.id, plugin.languages?.map(language => language.id)]),
-    [['tree-sitter', ['go', 'python']]]);
+    [['language-go', ['go']], ['language-python', ['python']]]);
 });
 
 test('only parsers and grammars used by the inspection appear in the applied profile', async () => {
@@ -43,39 +46,37 @@ test('only parsers and grammars used by the inspection appear in the applied pro
     tools: Record<string, string> }[]).filter(({ kinds }) => kinds.includes('language'));
   assert.deepEqual(parserList(scripts.appliedConfig.plugins).map(({ id }) => id), ['babel-syntax']);
   assert.deepEqual(parserList(onlyGo.appliedConfig.plugins).map(({ id, tools }) => [id, tools]),
-    [['tree-sitter', { 'tree-sitter-go': '0.25.0' }]]);
-  assert.deepEqual(inspectionDetails(mixed).profile?.analyzers.find(entry => entry.id === 'tree-sitter')?.tools,
-    { 'tree-sitter-go': '0.25.0', 'tree-sitter-python': '0.25.0' });
+    [['language-go', { 'tree-sitter-go': '0.25.0' }]]);
+  assert.deepEqual(inspectionDetails(mixed).profile?.analyzers.filter(({ id }) => id.startsWith('language-')), [
+    { id: 'language-go', version: '1.0.0', tools: { 'tree-sitter-go': '0.25.0' } },
+    { id: 'language-python', version: '1.0.0', tools: { 'tree-sitter-python': '0.25.0' } },
+  ]);
 });
 
-test('unused registered grammars preserve the digest while selectors for a present language change it', async () => {
+test('unused language packages leave report data and the profile digest intact', async () => {
   const base = languageRegistry([]);
-  const installed = base.plugins.map(plugin => plugin.id === 'tree-sitter' ? { ...plugin,
-    tools: { ...plugin.tools, 'tree-sitter-java': '1.0.0', 'tree-sitter-python': '99.0.0' },
-    providesLanguages: [...plugin.providesLanguages!, { id: 'java', label: 'Java', extensions: ['.java'], globs: ['**/java-src'] }],
-  } : plugin);
-  const registry = { ...base, plugins: installed, extensions: [...base.extensions, '.java'], globs: [...base.globs, '**/java-src'] };
-  for (const [path, content, parser, language] of [
-    ['unit.js', 'const n = 1;', 'babel-syntax', 'javascript'], ['unit.go', go, 'tree-sitter', 'go'],
-  ] as const) {
-    const input = { snapshot: workingSnapshot([{ path, bytes: Buffer.from(content) }]), excludedOutput: null };
-    const before = await analyzeSnapshot(input, [], undefined, undefined, base);
-    const expanded = await analyzeSnapshot(input, [], undefined, undefined, registry);
-    assert.notDeepEqual(expanded.appliedConfig.source, before.appliedConfig.source);
-    assert.equal(inspectionProfileDigest(expanded), inspectionProfileDigest(before));
-
-    const plugins = installed.map(plugin => plugin.id === parser ? { ...plugin,
-      providesLanguages: plugin.providesLanguages?.map(entry => entry.id === language
-        ? { ...entry, globs: ['**/sources'] } : entry),
-    } : plugin);
-    const widened = await analyzeSnapshot(input, [], undefined, undefined,
-      { ...registry, plugins, globs: [...registry.globs, '**/sources'] });
-    assert.notEqual(inspectionProfileDigest(widened), inspectionProfileDigest(before));
+  const template = wasmParser('unit.go');
+  const extra = { ...template, id: 'fixture-parser', languageProvenanceRequiresSource: true as const,
+    providesLanguages: [{ id: 'fixture', label: 'Fixture', globs: ['**/*.fixture'], extensions: ['.sample'] }] };
+  const expanded = languageRegistry([extra]);
+  const updated = languageRegistry([{ ...extra, version: '9.0.0', tools: { grammar: '2' } }]);
+  const input = { snapshot: workingSnapshot([{ path: 'unit.go', bytes: Buffer.from(go) }]), excludedOutput: null };
+  const analyze = (registry: typeof base) => analyzeSnapshot(input, [], undefined, undefined, registry);
+  const before = await analyze(base);
+  for (const registry of [expanded, updated]) {
+    const report = await analyze(registry);
+    const { generatedAt: _currentTime, ...currentData } = report;
+    const { generatedAt: _previousTime, ...previousData } = before;
+    assert.deepEqual(currentData, previousData);
+    assert.equal(inspectionProfileDigest(report), inspectionProfileDigest(before));
   }
 });
 
 test('adding or changing measurements for an unused grammar preserves the inspection digest', async () => {
-  const plugin = { ...treeSitter, id: 'fixture-parser' };
+  const goParser = wasmParser('unit.go');
+  const pythonParser = wasmParser('unit.py');
+  const plugin = { ...goParser, id: 'fixture-parser',
+    providesLanguages: [...goParser.providesLanguages!, ...pythonParser.providesLanguages!] };
   const parsers = { go: [plugin.id], python: [plugin.id] };
   const input = { snapshot: workingSnapshot([{ path: 'file.go', bytes: Buffer.from(go) }]), excludedOutput: null };
   const analyze = (provider: typeof plugin) => analyzeSnapshot(
@@ -83,7 +84,7 @@ test('adding or changing measurements for an unused grammar preserves the inspec
   const before = await analyze(plugin);
   const declarations = plugin.providesLanguages!;
   const expanded = await analyze({ ...plugin, providesLanguages: [
-    ...declarations, { id: 'java', label: 'Java', extensions: ['.java'], measures: ['functions'] },
+    ...declarations, { id: 'fixture', label: 'Fixture', extensions: ['.fixture'], measures: ['functions'] },
   ] });
   const changedMeasures = (language: string) => ({ ...plugin, providesLanguages: declarations.map(item =>
     item.id === language ? { ...item, measures: ['functions'] as const } : item) });
@@ -94,7 +95,7 @@ test('adding or changing measurements for an unused grammar preserves the inspec
 
 async function parse(path: string, source: string | Buffer): Promise<CodeStructure> {
   const payload = { path, bytes: typeof source === 'string' ? Buffer.from(source) : source };
-  const result = await treeSitter.operations[0]!.execute({
+  const result = await wasmParser(path).operations[0]!.execute({
     read: <T>(port: string) => {
       assert.equal(port, 'file');
       return payload as T;
@@ -105,13 +106,27 @@ async function parse(path: string, source: string | Buffer): Promise<CodeStructu
   return result;
 }
 
+test('the shared extractor counts a leaf parameter only when the grammar declares its type', async () => {
+  const source = { path: 'Example.java', bytes: Buffer.from(
+    'class Example { Object bare = x -> x; Object grouped = (x) -> x; }\n') };
+  async function count(singleParameterTypes?: ReadonlySet<string>) {
+    const [operation] = treeSitter({ ...java, singleParameterTypes }).create().operations;
+    const output = await operation!.execute({ read: <T>() => source as T });
+    assert.ok(authorStructure.accepts(output));
+    return output.observations?.filter(({ check }) => check === 'function-parameters').map(({ value }) => value);
+  }
+  assert.deepEqual(await count(), [0, 1]);
+  assert.deepEqual(await count(new Set(['identifier'])), [1, 1]);
+});
+
 test('changing the extractor fixture output requires a plugin version bump', async () => {
-  const fixtures = [await parse('fixture.go', go), await parse('fixture.py', python)];
+  const fixtures = [await parse('fixture.go', go), await parse('fixture.py', python)]
+    .map(facts => ({ ...facts, observations: facts.observations?.map(({ rule, ...observation }) => ({ rule, ...observation })) }));
   const expected: Readonly<Record<string, string>> = {
     '1.0.0': 'b2c7b1e35cb89bf992f47809c647f62106938d3284a3fecfb0bc6db483fad44f',
   };
-  assert.equal(hash('sha256', JSON.stringify(fixtures)), expected[treeSitter.version],
-    'If the structure output changed intentionally, bump tree-sitter’s version and record the new fixture fingerprint.');
+  assert.equal(hash('sha256', JSON.stringify(fixtures)), expected[wasmParser('unit.go').version],
+    'If the structure output changed intentionally, bump the language plugin’s version and record the new fixture fingerprint.');
 });
 
 test('vendored grammars match their recorded package provenance', async () => {
@@ -372,7 +387,7 @@ test('mixed inspection works without native tools and rejects broken syntax per 
     assert.equal(report.status, 'complete');
     assert.equal(qualitySummary(report).maintainability?.grade, 'A');
     assert.deepEqual(report.scope, { files: 2, parsed: 2 });
-    assert.deepEqual(report.pluginData?.inventory?.map(file => file.provider), ['tree-sitter/parse', 'tree-sitter/parse']);
+    assert.deepEqual(report.pluginData?.inventory?.map(file => file.provider), ['language-go/parse', 'language-python/parse']);
     const snapshot = workingSnapshot([
       { path: 'valid.go', bytes: Buffer.from(go) },
       { path: 'invalid.go', bytes: Buffer.from('package sample\nfunc f( {}') },
@@ -383,7 +398,7 @@ test('mixed inspection works without native tools and rejects broken syntax per 
     assert.equal(partial.status, 'partial');
     assert.deepEqual(partial.scope, { files: 4, parsed: 1 });
     for (const path of ['invalid.go', 'invalid.py', 'empty.py']) {
-      assert.equal(partial.diagnostics.filter(diagnostic => diagnostic.path === path && diagnostic.operation === 'tree-sitter/parse').length, 1);
+      assert.equal(partial.diagnostics.filter(diagnostic => diagnostic.path === path && diagnostic.operation === wasmParser(path).id + '/parse').length, 1);
       assert.equal(partial.pluginData?.inventory?.find(file => file.path === path)?.analysed, false);
     }
   } finally {

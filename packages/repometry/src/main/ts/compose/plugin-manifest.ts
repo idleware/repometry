@@ -1,10 +1,9 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ValidateFunction } from 'ajv';
 import { pluginManifestSchema } from '@repometry/core/internal/engine/plugin-manifest.js';
-import type { PluginManifest, PluginCategory } from '@repometry/core/internal/engine/plugin-manifest.js';
-import { findingCategory } from '@repometry/core/internal/engine/author-contracts.js';
-import { isRecord, pluginApi } from '@repometry/core/internal/engine/plugin.js';
-import type { Plugin, PluginKind } from '@repometry/core/internal/engine/plugin.js';
+import type { PluginManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import { category } from '@repometry/core/internal/model/inspection-category.js';
 import schema from '@repometry/core/plugin-v1.schema.json' with { type: 'json' };
 import { schemaError } from './schema-error.js';
 import { pluginPatterns } from './plugin-reference.js';
@@ -15,13 +14,9 @@ export type Manifest = Omit<PluginManifest, 'create'> & {
   readonly scope?: 'file' | 'repository';
   readonly fileIndependent?: boolean;
   readonly limits?: Readonly<Partial<Record<'timeoutMs' | 'maxOutputBytes' | 'memoryBytes' | 'pidsLimit', number>>>;
-  readonly tools?: Readonly<Record<string, string>>;
 };
 
-const categories: Record<PluginCategory, PluginKind> = {
-  language: 'language', source: 'source', maintainability: 'analysis', coverage: 'coverage', security: 'security',
-};
-export const dockerFields = ['image', 'command', 'scope', 'fileIndependent', 'limits', 'tools'] as const;
+export const dockerFields = ['image', 'command', 'scope', 'fileIndependent', 'limits'] as const;
 let check: ValidateFunction<Manifest> | undefined;
 const retiredFields = {
   api: 'schema', kinds: 'category', claims: 'include', settings: 'options',
@@ -46,8 +41,8 @@ function explainManifest(value: Record<string, unknown>, path: string): void {
     if (Object.hasOwn(value, field)) throw new Error(path + '/' + field + ' is retired. Write ' + replacement + '.');
   }
   if (value.schema !== pluginManifestSchema) throw new Error(path + '/schema must be ' + pluginManifestSchema);
-  if (typeof value.category !== 'string' || !Object.hasOwn(categories, value.category)) {
-    throw new Error(path + '/category must be one of ' + Object.keys(categories).join(', '));
+  if (typeof value.category !== 'string' || !Object.hasOwn(category, value.category)) {
+    throw new Error(path + '/category must be one of ' + Object.keys(category).join(', '));
   }
 }
 
@@ -61,12 +56,4 @@ function distinctIds(entries: readonly { id: string }[] | undefined, base: strin
 
 export function manifestScope({ include, exclude }: Manifest, base: string) {
   return { include: pluginPatterns(include, base + '/manifest/include'), exclude: pluginPatterns(exclude, base + '/manifest/exclude') };
-}
-
-export function manifestPlugin({ id, category, languages, optionsSchema, tools, checks }: Manifest, version: string):
-  Omit<Plugin, 'operations' | 'produces' | 'settings'> {
-  return { id, version, api: pluginApi, kinds: [categories[category]], config: optionsSchema, tools,
-    ...(checks === undefined ? {} : { rules: checks.map(check => ({ ...check, category: findingCategory(category, check.defaults?.cost !== undefined) })) }),
-    ...(languages === undefined ? {} : { providesLanguages: languages.map(({ include, measures, ...language }) => ({ ...language, globs: include,
-      ...(measures === undefined ? {} : { measures: measures.map(measure => measure === 'checks' ? 'structuralRules' : measure) }) })) }) };
 }

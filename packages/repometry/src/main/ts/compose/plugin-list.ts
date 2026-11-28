@@ -12,11 +12,13 @@ export function effectivePlugins(additional: readonly Plugin[], parsers?: Parser
 }
 
 function describePlugin(plugin: ParserPlugin) {
-  const { id, version, claims, providesLanguages, unavailableReason, config, rules } = plugin;
+  const { id, version, claims, providesLanguages, unavailableReason, config, rules, tools } = plugin;
+  const category = pluginCategory(plugin);
   const registration = pluginRegistration(plugin);
   const include = registration?.include ?? includeGlobs(claims);
-  return { id, version, category: pluginCategory(plugin), use: registration?.use ?? id,
+  return { id, version, category, use: registration?.use ?? id,
     versionSource: registration?.versionSource ?? 'built-in', available: unavailableReason === undefined,
+    ...(category === 'language' && tools !== undefined ? { tools } : {}),
     ...(include === undefined ? {} : { include }),
     ...(providesLanguages ? { languages: providesLanguages.map(({ syntax, extensions, globs, measures, ...language }) =>
       ({ ...language, include: includeGlobs({ extensions, globs }) ?? [],

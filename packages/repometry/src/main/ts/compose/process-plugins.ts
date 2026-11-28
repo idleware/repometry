@@ -1,3 +1,4 @@
+import { manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { readFile } from 'node:fs/promises';
 import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
@@ -7,8 +8,8 @@ import { sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot
 import { DockerToolRunner } from '../api/process/docker-tool-runner.js';
 import { processPlugin } from '../api/process/plugin.js';
 import { dockerLabel, inspectDockerImage } from './docker-image.js';
-import { authorOperation } from './author-operation.js';
-import { checkManifest, manifestPlugin, manifestScope } from './plugin-manifest.js';
+import { authorOperation } from '@repometry/core/internal/engine/author-operation.js';
+import { checkManifest, manifestScope } from './plugin-manifest.js';
 import type { Manifest } from './plugin-manifest.js';
 import { validatePluginOptions } from './plugin-options.js';
 import type { PluginReference } from './plugin-reference.js';

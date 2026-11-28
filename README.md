@@ -22,7 +22,7 @@ Git can serve as a project’s single source of truth for code, tests, docs, and
 
 Node.js >=24
 
-Go and Python files need no extra tools. Generating Go or Python coverage uses your project's own test tools.
+Repometry analyses JavaScript, TypeScript, Go, Python, Java and PHP with no extra tools. Ruby and Kotlin are optional plugins. See [Languages](docs/native-languages.md). Generating coverage uses your project's own test tools.
 
 ## Install
 

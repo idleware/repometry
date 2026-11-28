@@ -35,16 +35,14 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
   const entries = registered.filter(plugin => plugin.kinds.includes('language')).flatMap(plugin =>
     languageEntry(plugin, byProvider.get(plugin.id) ?? [], bindings));
   const active = entries.flatMap(({ provider }) => provider ?? []);
-  const claims = [...entries.filter(entry => entry.provider), ...entries.filter(entry => !entry.provider)].flatMap(entry => entry.claims);
-  const extensions = [...new Set(claims.flatMap(entry => entry.extensions ?? []))];
-  const globs = [...new Set(claims.flatMap(entry => entry.globs ?? []))];
-  const catalog = entries.filter(({ provider }) => provider).flatMap(({ declared }) =>
-    declared.map(({ id, label, color }) => ({ id, label, ...(color === undefined ? {} : { color }) })));
+  const { extensions, globs, catalog } = languageSelection(entries);
   const syntaxById = selectedSyntax(selection);
   const bound: readonly ParserPlugin[] = registered.map(plugin => bindings.get(plugin) ?? plugin);
   return { select: (path: string) => match(path)?.provider, isSource: (path: string) => match(path) !== undefined,
     id: (path: string) => match(path)?.identify(path) ?? fileTypeId(path), extensions, globs, catalog,
     providers: active, plugins: bound,
+    reportSelection: (present: ReadonlySet<string>) => languageSelection(
+      entries.filter(entry => !entry.requiresSource || present.has(entry.id))),
     describe: (plugin: ParserPlugin) => describeProvider(plugin, byProvider, competing),
     syntax: (id: string) => syntaxById.get(id), skipped };
 
@@ -85,7 +83,18 @@ function languageEntry(plugin: ParserPlugin, chosen: readonly ProvidedLanguage[]
   const provider = available && operation ? bindParser(plugin, operation, declared, identify) : undefined;
   if (provider) bindings.set(plugin, provider.plugin);
 
-  return [{ id: plugin.id, provider, declared, claims, matches, identify }];
+  return [{ id: plugin.id, provider, declared, claims, matches, identify, requiresSource: plugin.languageProvenanceRequiresSource }];
+}
+
+function languageSelection(entries: ReadonlyArray<ReturnType<typeof languageEntry>[number]>) {
+  const available = entries.filter(({ provider }) => provider !== undefined);
+  const unavailable = entries.filter(({ provider }) => provider === undefined);
+  const claims = [...available, ...unavailable].flatMap(entry => entry.claims);
+  const extensions = [...new Set(claims.flatMap(entry => entry.extensions ?? []))];
+  const globs = [...new Set(claims.flatMap(entry => entry.globs ?? []))];
+  const catalog = available.flatMap(({ declared }) =>
+    declared.map(({ id, label, color }) => ({ id, label, ...(color === undefined ? {} : { color }) })));
+  return { extensions, globs, catalog };
 }
 
 function parserOperation(plugin: Plugin): Operation {

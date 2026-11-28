@@ -1,4 +1,4 @@
-import { fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
+import { canonicalFileTypeId, fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
 import type { LanguageLookup } from '@repometry/core/internal/model/language.js';
 import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import type { Measurement } from '@repometry/core/internal/model/measurement.js';
@@ -16,8 +16,8 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
   const byPath = new Map<string, Metrics>();
   const pluginMetrics = metricProjection(report);
   const languages: { id: string; label?: string; color?: string; analysed: boolean }[] = [];
-  const recorded = new Map(report.pluginData?.languages?.map(item => [item.id, item]));
-  const languageCatalog = new Map([...fileTypes, ...registry.catalog, ...recorded.values()].map(item => [item.id, item]));
+  const recorded = new Map(report.pluginData?.languages?.map(item => [canonicalFileTypeId(item.id), item]));
+  const languageCatalog = new Map([...fileTypes, ...registry.catalog, ...recorded.values()].map(item => [canonicalFileTypeId(item.id), item]));
   const languageIndexes = new Map<string, number>();
   function file(path: string): Metrics {
     const existing = byPath.get(path);
@@ -45,7 +45,8 @@ export function fileMetrics(report: Report, registry: LanguageLookup = { id: fil
     const entry = file(path);
     entry.lines = lines;
     if (bytes !== undefined) entry.bytes = bytes;
-    entry.language = languageIndex(provider !== undefined || recorded.has(language) ? language : fileTypeId(path, language), analysed);
+    const id = canonicalFileTypeId(language);
+    entry.language = languageIndex(provider !== undefined || recorded.has(id) ? id : fileTypeId(path, id), analysed);
     entry.analysed = analysed;
     if (provider !== undefined) entry.provider = provider;
   }

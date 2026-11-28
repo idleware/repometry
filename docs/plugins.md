@@ -52,7 +52,8 @@ export default {
 | `requires` | no | What the plugin needs to run. See [Requirements](#requirements). |
 | `checks` | no | The checks the plugin reports. See [Checks](#checks). |
 | `create(options, context)` | JavaScript plugins | Returns the operations. See [The create function](#the-create-function). |
-| `image`, `command`, `scope`, `fileIndependent`, `limits`, `tools` | Docker plugins only | See [Docker plugins](process-plugins.md#the-manifest-file). A JavaScript plugin that has one of them is an error. |
+| `tools` | no | The executables the plugin uses and their versions, such as `{ "git": "2.45" }`. Repometry saves them with the inspection. A Docker plugin must have it; see [Docker plugins](process-plugins.md#the-manifest-file). |
+| `image`, `command`, `scope`, `fileIndependent`, `limits` | Docker plugins only | See [Docker plugins](process-plugins.md#the-manifest-file). A JavaScript plugin that has one of them is an error. |
 
 A manifest has no other field. Repometry checks the declarative part of every manifest against the [plugin manifest schema](../packages/core/src/main/resources/plugin-v1.schema.json). The schema file is published as `@repometry/core/plugin-v1.schema.json`, and its `$id` is `urn:repometry:schema:plugin:1`. For a JavaScript plugin, the `create` function is the part that the schema leaves out.
 
@@ -375,7 +376,7 @@ Repometry rejects an invalid plugin before the analysis starts. `<key>` stands f
 | `plugins/<n>/manifest/<languages or checks>/<m>/id duplicates <id>` | Two entries have one ID. |
 | `plugins/<n>/manifest/create must create the plugin operations` | The module's default export has no `create` function. |
 | `plugins/<n>/manifest/create must return executable operations and declared products` | `create` returned something other than `{ operations, produces }`. |
-| `plugins/<n>/manifest/<field> belongs in a Docker manifest` | A JavaScript plugin has `image`, `command`, `scope`, `fileIndependent`, `limits` or `tools`. |
+| `plugins/<n>/manifest/<field> belongs in a Docker manifest` | A JavaScript plugin has `image`, `command`, `scope`, `fileIndependent` or `limits`. |
 | `plugins/<n>/manifest/requires/<key> must be a semver range` | `node` or `repometry` is not a valid range. |
 | `plugins/<n>/manifest/requires/tools must be a list of unique executable names` | `tools` has a repeated name, or a name with a path separator. |
 | `plugins/<n> declares an invalid options schema: <reason>` | `optionsSchema` is not a valid JSON Schema. |

@@ -1,8 +1,8 @@
-import type { PluginCategory } from '@repometry/core/internal/model/inspection-category.js';
-import type { DataContract, InspectionInputs, Operation } from '@repometry/core/internal/engine/plugin.js';
-import { readFindings, readStructure, writeFindings, writeStructure } from '@repometry/core/internal/engine/author-contracts.js';
-import { findingResult } from '@repometry/core/internal/model/finding.js';
-import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import type { PluginCategory } from '../model/inspection-category.js';
+import type { DataContract, InspectionInputs, Operation } from './plugin.js';
+import { readFindings, readStructure, writeFindings, writeStructure } from './author-contracts.js';
+import { findingResult } from '../model/finding.js';
+import { codeStructure, codeStructures } from '../model/code-structure.js';
 
 export function authorOperation(id: string, category: PluginCategory, operation: Operation): Operation {
   const { output } = operation;

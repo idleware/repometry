@@ -19,8 +19,7 @@ import summarySchema from '../../main/resources/report/json/repository-summary-v
 const packages = [
   { name: '@repometry/core', dir: '../core', prefix: 'core/', rank: 0 },
   { name: '@repometry/tree-sitter', dir: '../tree-sitter', prefix: 'plugins/language-treesitter/', rank: 1 },
-  { name: '@repometry/language-go', dir: '../language-go', prefix: 'plugins/language-treesitter/languages/go/', rank: 2 },
-  { name: '@repometry/language-python', dir: '../language-python', prefix: 'plugins/language-treesitter/languages/python/', rank: 2 },
+  ...languagePackages(),
   { name: 'repometry', dir: '.', prefix: '', rank: 3 },
 ].map(entry => {
   const manifest = JSON.parse(readFileSync(resolve(entry.dir, 'package.json'), 'utf8')) as
@@ -269,7 +268,7 @@ const mustReport: readonly (readonly [file: string, snippet: string])[] = [
   ['index.ts', "import type { Plugin } from './plugins/built-in.js';"],
   ['compose/languages.ts', "const script = new URL('../plugins/language-js/syntax.js', import.meta.url);"],
   ['core/engine/execute.ts', "const module = import.meta.resolve('../../plugins/coverage/coverage.js');"],
-  ['core/model/language.ts', "interface Seen { readonly 'tree-sitter': number }"],
+  ['core/model/language.ts', "interface Seen { readonly 'language-go': number }"],
 ];
 
 const mustPass: readonly (readonly [file: string, snippet: string])[] = [
@@ -304,3 +303,13 @@ test('core and compose name no built-in plugin and import no plugin module but t
   const found = sourceFiles.flatMap(file => pluginBoundaryViolations(file, readSource(file)));
   assert.deepEqual(found.map(({ file, line, what }) => `${file}:${line}: ${what}`), []);
 });
+
+function languagePackages() {
+  const { workspaces } = JSON.parse(readFileSync('../../package.json', 'utf8')) as { workspaces: string[] };
+  const languagePaths = workspaces.filter(workspace => workspace.startsWith('packages/language-'));
+  return languagePaths.map(workspace => {
+    const name = workspace.slice('packages/'.length);
+    const id = name.slice('language-'.length);
+    return { name: '@repometry/' + name, dir: '../' + name, prefix: 'plugins/language-treesitter/languages/' + id + '/', rank: 2 };
+  });
+}

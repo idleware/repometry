@@ -51,7 +51,7 @@ function writeFinding(value: unknown, id: string | undefined, dimension: PluginC
 
 export function readStructure(value: StoredStructure): CodeStructure {
   const { observations, ...fields } = value;
-  return observations === undefined ? fields : { ...fields, observations: observations.map(({ rule, ...entry }) => ({ ...entry, check: rule })) };
+  return observations === undefined ? fields : { ...value, observations: observations.map(({ rule, ...entry }) => ({ ...entry, check: rule })) };
 }
 
 export function readFindings(value: StoredFindings): FindingResult {

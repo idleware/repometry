@@ -75,5 +75,7 @@ export interface Plugin {
   readonly kinds: readonly PluginKind[];
   readonly claims?: FileClaims;
   readonly providesLanguages?: readonly ProvidedLanguage[];
+  /** Publish parser selectors and display metadata only when a snapshot contains its files. */
+  readonly languageProvenanceRequiresSource?: true;
   readonly produces: readonly ProductDeclaration[];
 }

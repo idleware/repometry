@@ -25,6 +25,18 @@ export interface NodeRule {
   readonly decision?: true | ((node: Node) => number);
   readonly exit?: 'return' | 'label';
   readonly order?: readonly number[];
+  /** Body members when the grammar does not expose a single body field. */
+  readonly body?: (node: Node) => readonly Node[];
+  /** Keep a signature without a body outside measured functions. */
+  readonly requiresBody?: boolean;
+  /** Lexical parameter count when the grammar does not expose a list of formal parameters. */
+  readonly parameters?: (node: Node) => number | undefined;
+  /** Alternate branch when the grammar does not expose an alternative field. */
+  readonly alternative?: (node: Node) => Node | null;
+  /** Whether an alternative wrapper contributes its flat cognitive point. */
+  readonly elseCognitive?: (node: Node) => boolean;
+  /** A wrapper is transparent when its sole named child is a chained conditional. */
+  readonly chainedAlternative?: true;
 }
 
 export interface Grammar {
@@ -44,6 +56,8 @@ export interface Grammar {
   readonly logicalTypes: ReadonlySet<string>;
   readonly logicalOperators: ReadonlySet<string>;
   readonly logicalCognitive: 'parent' | 'sequence';
+  /** A parameters field with one of these node types is a single parameter. */
+  readonly singleParameterTypes?: ReadonlySet<string>;
   readonly parameterNames?: string;
   readonly parameterSeparators?: ReadonlySet<string>;
   readonly requireFirst?: string;

@@ -52,22 +52,22 @@ function reportedPlugins(report: Report) {
 test('assigns built-ins and a multi-language plugin side by side', async () => {
   const report = await analyze({ 'a.js': 'export const a = 1;', 'a.ts': 'export const a: number = 1;',
     'a.go': 'package sample\nfunc F() {}', 'a.py': 'def f(): pass', 'a.rs': 'fn main() {}' }, alternate(choices),
-    { javascript: ['babel-syntax'], typescript: ['babel-syntax'], go: ['tree-sitter'], python: ['tree-sitter'] });
-  assert.deepEqual(providers(report), [['a.go', 'tree-sitter/parse'], ['a.js', 'babel-syntax/parse'], ['a.py', 'tree-sitter/parse'],
+    { javascript: ['babel-syntax'], typescript: ['babel-syntax'], go: ['language-go'], python: ['language-python'] });
+  assert.deepEqual(providers(report), [['a.go', 'language-go/parse'], ['a.js', 'babel-syntax/parse'], ['a.py', 'language-python/parse'],
     ['a.rs', 'alternative/parse'], ['a.ts', 'babel-syntax/parse']]);
   assert.deepEqual(report.appliedConfig.parser, { sourceType: 'unambiguous', errorRecovery: false, attachComment: false });
 });
 
 test('the ordered Go parser list falls back when the first optional parser is unavailable', async () => {
   const files = { 'main.go': 'package main\nfunc main() {}' };
-  const parsers = { go: ['alternative', 'tree-sitter'] };
+  const parsers = { go: ['alternative', 'language-go'] };
   const plugin = alternate([go]);
   const first = await analyze(files, plugin, parsers);
   assert.deepEqual(providers(first), [['main.go', 'alternative/parse']]);
 
   const unavailable = { ...plugin, operations: [], unavailableReason: 'Optional parser unavailable' };
   const second = await analyze(files, unavailable, parsers);
-  assert.deepEqual(providers(second), [['main.go', 'tree-sitter/parse']]);
+  assert.deepEqual(providers(second), [['main.go', 'language-go/parse']]);
   assert.equal(reportedPlugins(second).some(({ id }) => id === plugin.id), false);
   assert.notEqual(inspectionProfileDigest(first), inspectionProfileDigest(second));
 
@@ -125,7 +125,7 @@ test('a chosen provider inspects only the files it parses without a parser order
 
 test('chosen parsers of different languages cannot both claim a Go file', async () => {
   await assert.rejects(async () => analyze({ 'main.go': 'package main' }, alternate([{ ...go, id: 'other' }])),
-    { message: 'Parsers tree-sitter and alternative both include main.go' });
+    { message: 'Parsers language-go and alternative both include main.go' });
 });
 
 test('missing parser precedence names the contenders in registration order', async () => {
@@ -136,8 +136,8 @@ test('missing parser precedence names the contenders in registration order', asy
 test('parser config rejects bad language and plugin references at their exact paths', () => {
   for (const [parsers, message] of [
     [{ unknown: ['babel-syntax'] }, 'Config parsers/unknown names an unknown language'],
-    [{ go: ['missing'] }, 'Config parsers/go/0 names unknown plugin missing; go is provided by tree-sitter'],
-    [{ go: ['babel-syntax'] }, 'Config parsers/go/0 names plugin babel-syntax, which does not provide go; go is provided by tree-sitter'],
+    [{ go: ['missing'] }, 'Config parsers/go/0 names unknown plugin missing; go is provided by language-go'],
+    [{ go: ['babel-syntax'] }, 'Config parsers/go/0 names plugin babel-syntax, which does not provide go; go is provided by language-go'],
   ] as const) {
     assert.throws(() => parseConfig({ parsers }), { message });
   }
@@ -145,9 +145,9 @@ test('parser config rejects bad language and plugin references at their exact pa
 
 test('the config schema and parser require nonempty lists of unique plugin ids', () => {
   const validate = new Ajv2020().compile(configSchema);
-  assert.ok(validate({ parsers: { go: ['tree-sitter'] } }));
-  assert.equal(validate({ parsers: { 'Go Lang': ['tree-sitter'] } }), false);
-  for (const go of [[], [2], ['tree-sitter', 'tree-sitter']]) {
+  assert.ok(validate({ parsers: { go: ['language-go'] } }));
+  assert.equal(validate({ parsers: { 'Go Lang': ['language-go'] } }), false);
+  for (const go of [[], [2], ['language-go', 'language-go']]) {
     const config = { parsers: { go } };
     assert.equal(validate(config), false);
     assert.throws(() => parseConfig(config), { message: 'Config parsers/go must be a nonempty list of unique plugin IDs' });
@@ -199,7 +199,7 @@ test('a chosen provider still conflicts when its parser is unavailable', async (
   const other = alternate([{ ...go, id: 'other' }]);
   const unavailable = { ...other, operations: [], unavailableReason: 'Optional parser unavailable' };
   await assert.rejects(async () => analyze({ 'main.go': 'package main' }, unavailable),
-    { message: 'Parsers tree-sitter and alternative both include main.go' });
+    { message: 'Parsers language-go and alternative both include main.go' });
 });
 
 test('an unchosen parser retains its inspection operations and provenance', async () => {
@@ -214,14 +214,14 @@ test('an unchosen parser retains its inspection operations and provenance', asyn
   const plugin: Plugin = { ...provider, kinds: ['language', 'analysis'], claims: { extensions: ['.go'] },
     produces: [...provider.produces, { contract: findingResult.id, persistence: 'report' }],
     rules: [{ id: 'kept', category: 'lint' }], operations: [...provider.operations, check] };
-  const report = await analyze({ 'main.go': 'package main' }, plugin, { go: ['tree-sitter'] });
+  const report = await analyze({ 'main.go': 'package main' }, plugin, { go: ['language-go'] });
   assert.ok(report.findings?.some(({ tool, rule }) => tool === 'alternative' && rule === 'kept'));
   assert.deepEqual(reportedPlugins(report).find(({ id }) => id === plugin.id)?.claims, plugin.claims);
-  assert.deepEqual(effectivePlugins([plugin], { go: ['tree-sitter'] }).find(({ id }) => id === plugin.id)?.include, ['**/*.go']);
+  assert.deepEqual(effectivePlugins([plugin], { go: ['language-go'] }).find(({ id }) => id === plugin.id)?.include, ['**/*.go']);
 });
 
 test('an unchosen parser manifest is validated', async () => {
-  await assert.rejects(async () => analyze({}, { ...alternate([go]), produces: [] }, { go: ['tree-sitter'] }),
+  await assert.rejects(async () => analyze({}, { ...alternate([go]), produces: [] }, { go: ['language-go'] }),
     { message: 'Undeclared output for alternative/parse: repometry.code-structure/v1' });
 });
 
@@ -245,22 +245,22 @@ test('the order of unused fallbacks does not change the report', async () => {
   const input = { snapshot: workingSnapshot([{ path: 'main.go', bytes: Buffer.from('package main') }]), excludedOutput: null };
   const inspect = (order: readonly string[]) =>
     analyzeSnapshot(input, plugins, undefined, undefined, languageRegistry(plugins, { go: order }));
-  assert.equal(saved(await inspect(['tree-sitter', first.id, second.id])), saved(await inspect(['tree-sitter', second.id, first.id])));
+  assert.equal(saved(await inspect(['language-go', first.id, second.id])), saved(await inspect(['language-go', second.id, first.id])));
 });
 
 test('plugin listing includes all registered parsers while the report records the chosen parser', async () => {
   const plugin = alternate([go]);
-  const parsers = { go: ['alternative', 'tree-sitter'] };
+  const parsers = { go: ['alternative', 'language-go'] };
   const report = await analyze({ 'main.go': 'package main' }, plugin, parsers);
   const onlyGo = (entries: readonly { readonly id: string; readonly providesLanguages?: readonly { readonly id: string }[] }[]) =>
     entries.filter(entry => entry.providesLanguages?.some(({ id }) => id === 'go')).map(({ id }) => id);
-  assert.deepEqual(onlyGo(effectivePlugins([plugin], parsers).map(({ id, languages }) => ({ id, providesLanguages: languages }))), ['tree-sitter', 'alternative']);
+  assert.deepEqual(onlyGo(effectivePlugins([plugin], parsers).map(({ id, languages }) => ({ id, providesLanguages: languages }))), ['language-go', 'alternative']);
   assert.deepEqual(onlyGo(JSON.parse(JSON.stringify(report.appliedConfig.plugins))), ['alternative']);
 });
 
 test('a parser left out of the selection is absent from the inspection profile', async () => {
   const plugin = alternate([go]);
-  const parsers = { go: ['tree-sitter'] };
+  const parsers = { go: ['language-go'] };
   const report = await analyze({}, plugin, parsers);
   assert.equal(reportedPlugins(report).some(({ id }) => id === plugin.id), false);
   const available = effectivePlugins([plugin], parsers).find(({ id }) => id === plugin.id);

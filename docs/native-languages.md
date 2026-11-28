@@ -1,38 +1,100 @@
-# Go and Python analysis
+# Languages
 
-Repometry parses Go and Python with the built-in `tree-sitter` plugin. It runs the tree-sitter grammars as WebAssembly modules inside Node.js. The package ships both grammars: tree-sitter-go 0.25.0 and tree-sitter-python 0.25.0, MIT licensed. Nothing to install. Analysis needs no `go` or `python3`, no compiler, no download and no cache.
+Repometry parses Go, Python, Java, Ruby, PHP and Kotlin with tree-sitter grammars. Each grammar runs as a WebAssembly module inside Node.js. Analysis needs no compiler, interpreter, download or cache. JavaScript and TypeScript use the built-in `babel-syntax` plugin, which this page does not cover.
 
-The plugin ID is `tree-sitter`, its operation is `tree-sitter/parse`, and it provides the languages `go` and `python`. A grammar loads when the first file of its language is parsed. Repometry does not load a grammar for a language the repository does not contain.
+Each language is one plugin in its own package. The plugin ID is `language-<id>`, its operation is `language-<id>/parse`, and the package is `@repometry/language-<id>`. A grammar loads when the first file of its language is parsed.
 
-A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin](plugins.md#languages) that provides `go` or `python` does not replace the built-in parser by itself. Both providers compete for the language, so the config needs a `parsers` line that chooses between them, or lists them in order of preference. [Parsers](cli.md#parsers) gives the rule. [Write a plugin](plugins.md#languages) lists the fields of a language.
+A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin](plugins.md#languages) that provides one of these languages does not replace the parser by itself. Both providers compete for the language, so the config needs a `parsers` line that chooses between them. [Parsers](cli.md#parsers) gives the rule. [Write a plugin](plugins.md#languages) lists the fields of a language.
+
+## Supported languages
+
+| Language | ID | Files | Plugin | Status |
+| --- | --- | --- | --- | --- |
+| Go | `go` | `.go` | `language-go` | Bundled |
+| Python | `python` | `.py` | `language-python` | Bundled |
+| Java | `java` | `.java` | `language-java` | Bundled |
+| Ruby | `ruby` | `.rb` | `language-ruby` | Optional |
+| PHP | `php` | `.php` | `language-php` | Bundled |
+| Kotlin | `kotlin` | `.kt`, `.kts` | `language-kotlin` | Optional |
+| Rust | | | | Not yet. The grammar rejects too many valid files. |
+| C# | `csharp` | `.cs` | | Not yet. The grammar rejects valid preprocessor code. The files stay in the inventory. |
+| C, C++, Swift | | | | Not yet. |
+
+A bundled language needs no setup. A file of a language without a plugin stays in the inventory as not analysed.
+
+### Add an optional language
+
+Install the package next to Repometry, then reference it in `repometry.config.json`:
+
+```sh
+npm install @repometry/language-kotlin
+```
+
+```json
+{ "plugins": ["@repometry/language-kotlin"] }
+```
+
+[Plugins](cli.md#plugins) lists the reference forms. A bundled language needs no entry, but `"plugins": ["language-java"]` configures it by ID.
 
 ## Measurements
 
-Both languages report physical code and comment lines and cyclomatic and cognitive complexity for each function and method. Nested functions get separate scores. Go includes function literals. Python includes async functions and lambdas. Class bodies count toward the file score only. Anonymous functions are displayed as `(anonymous)`. Named methods and nested functions keep their [qualified names](metrics.md).
+Every language reports physical code and comment lines and cyclomatic and cognitive complexity for each function. Nested functions get separate scores. Class bodies count toward the file score only. Anonymous functions are displayed as `(anonymous)`. Named methods and nested functions keep their [qualified names](metrics.md).
 
-| | Go | Python |
+| | Go | Python | Java | Ruby | PHP | Kotlin |
+| --- | --- | --- | --- | --- | --- | --- |
+| Label and colour | Go, `#00add8` | Python, `#3572a5` | Java, `#b07219` | Ruby, `#701516` | PHP, `#4f5d95` | Kotlin, `#a97bff` |
+| Classes | no | yes | yes | yes | yes | yes |
+| Columns | bytes | code points | code points | code points | bytes | code points |
+| Source encoding | UTF-8 | PEP 263 or UTF-8 | UTF-8 | UTF-8 | UTF-8 | UTF-8 |
+| Syntax colours | yes | yes | yes | no | no | no |
+| Duplication scheme | `go-tokens/v1` | `python-tokens/v1` | `java-tokens/v1` | `ruby-tokens/v1` | `php-tokens/v1` | `kotlin-tokens/v1` |
+
+All languages measure functions, complexity, comment and code lines, structural checks and duplication. Lines are 1-based. A file in a language without syntax colours shows as plain text. A source file that is not valid UTF-8 is rejected with a diagnostic.
+
+### Go and Python rules
+
+- Go counts one plus each `if`, loop, non-default switch or select clause, `&&`, and `||`. Functions include function literals.
+- Python counts one plus decisions in conditions, loops, exception handlers, conditional expressions, boolean operands after the first, comprehensions, and refutable pattern cases and guards. Functions include async functions and lambdas.
+
+### Java, Ruby, PHP and Kotlin rules
+
+Cyclomatic complexity starts at one in every language. Cognitive complexity adds one plus the nesting depth for a nested decision. A chained `else if` and a separate `else` add one each, at no depth. A run of the same boolean operator adds one. Only explicit `return` statements count as returns.
+
+| | Java | Ruby |
 | --- | --- | --- |
-| Label and colour | Go, `#00add8` | Python, `#3572a5` |
-| Files | `.go` | `.py` |
-| Measures | functions, cyclomatic and cognitive complexity, comment and code lines, structural checks, duplication | the same, and classes |
-| Columns | 1-based lines, byte columns | 1-based lines, Unicode code-point columns |
-| Source encoding | UTF-8 | The encoding declaration of PEP 263, or UTF-8 |
+| Function | A method or constructor with a body, a compact record constructor, a lambda. A method signature without a body is skipped. | A `def`, a singleton method, an arrow lambda. A block and a `lambda` or `proc` call belong to the enclosing function. |
+| Class | Class, interface, annotation, enum, record | Class and `class << object` body. A module qualifies names and is not counted. |
+| Cyclomatic adds one for | `if`, `else if`, loops, `catch`, `?:`, non-default `case`, `&&`, `\|\|` | `if`, `unless`, `elsif`, loops, each `when`, `in` or `rescue`, a postfix modifier, `?:`, `&&`, `\|\|`, `and`, `or` |
+| Cognitive nests | the same constructs except `case`; a `switch` nests | conditionals, loops, `case`, `rescue`, `?:`, modifiers. A `when` and the `else` arm of a `case` add nothing |
+| Extra cognitive points | A labelled `break` or `continue` | none |
+| Parameters | Each parameter. A receiver parameter does not count. | Each formal parameter, including rest, keyword, block and forwarding |
 
-- Go counts one plus each `if`, loop, non-default switch or select clause, `&&`, and `||`.
-- Python counts one plus decisions in conditions, loops, exception handlers, conditional expressions, boolean operands after the first, comprehensions, and refutable pattern cases and guards.
+| | PHP | Kotlin |
+| --- | --- | --- |
+| Function | A function or method with a body, a closure, an arrow function. An abstract or interface method without a body is skipped. | A function with a body, an anonymous function, a lambda, a secondary constructor, a property accessor. A primary constructor and a function without a body are skipped. |
+| Class | Class, anonymous class, interface, trait, enum | Class, interface, enum, named and companion object, object expression |
+| Cyclomatic adds one for | `if`, `elseif`, loops, `catch`, `?:`, non-default `case` or `match` arm, `&&`, `\|\|`, `and`, `or`, `??`, `??=`, `?->` | `if`, `else if`, loops, non-`else` `when` entry, `catch`, `?:`, `&&`, `\|\|` |
+| Cognitive nests | `if`, loops, `switch`, `match`, `catch`, `?:`. `try`, `finally`, `case` and null-aware operators add nothing | `if`, loops, `when`, `catch`. `?:` adds to cyclomatic only |
+| Extra cognitive points | `goto`, a numeric `break` or `continue` level | none |
+| Parameters | Each parameter. Closure `use` variables do not count. | Each value parameter. Receivers, `it` and defaults do not count. |
 
-Go leaves the class count unmeasured.
+- A `when` entry or `match` arm with several values adds one. `elseif` and `else if` score the same in PHP.
+- A Kotlin function is named `constructor`, `property.get` or `property.set` where it has no name of its own. A nameless companion object is `Companion`.
+- Java, Ruby and Kotlin count a line with code and a comment as a code line. Ruby counts `=begin` blocks as comments and heredoc text as code. Kotlin counts triple-quoted string text as code.
+- PHP counts markup outside `<?php` tags as code lines.
 
 ## Maintainability
 
-Both languages measure the inputs for the shared debt model. They report parameter and return counts, nesting depth, boolean operator counts, and cognitive complexity for functions and files. Cognitive complexity starts at zero. Control-flow decisions add one plus their nesting depth. An `else if` or `elif` adds one at the original depth, and a separate `else` adds one. A run of the same boolean operator adds one. File scores include functions, methods and flow outside them.
+Every language measures the inputs for the shared debt model. They report parameter and return counts, nesting depth, boolean operator counts, and cognitive complexity for functions and files. Cognitive complexity starts at zero. Control-flow decisions add one plus their nesting depth. An `else if` or `elif` adds one at the original depth, and a separate `else` adds one. A run of the same boolean operator adds one. File scores include functions, methods and flow outside them.
+
+The rules below are for Go and Python. The other languages follow [their rules](#java-ruby-php-and-kotlin-rules).
 
 - Go treats switch, type switch and select as nested decisions. Their individual clauses do not add cognitive points. Labeled jumps add one. Method parameter counts exclude the receiver.
 - Python treats match dispatch and guards and each comprehension loop or filter as decisions. Exception handlers add a decision. The try and finally suites and with blocks do not add depth. Parameter counts include `self`, `cls` and each declared variadic parameter.
 
 ## Duplication
 
-Duplication for Go and Python counts tokens. The detector compares only files of the same language. [Technical debt](metrics.md#technical-debt) gives the matching and cost rules.
+Duplication counts tokens in every language. The detector compares only files of the same language. [Technical debt](metrics.md#technical-debt) gives the matching and cost rules.
 
 A candidate is a declaration, statement or block with at least 50 significant tokens that spans at least 12 code lines. Each candidate gets two fingerprints:
 
@@ -41,7 +103,7 @@ A candidate is a declaration, statement or block with at least 50 significant to
 
 Comments, whitespace and layout do not change a fingerprint. A file with fewer than 12 code lines has no candidates. Import declarations are never candidates. A definition and the block inside it can both be candidates. Candidates with the same token range count once.
 
-The facts record the scheme `go-tokens/v1` or `python-tokens/v1`.
+The facts record the scheme `<language>-tokens/v1`, such as `go-tokens/v1`.
 
 ### Token sequence
 
@@ -53,6 +115,12 @@ A token sequence is a list of token entries. These rules apply to both languages
 - An entry in the similar sequence is the same as the exact entry, except that a token with a kind gives `!kind:`. For example, `main` gives `!identifier:`. A token without a kind keeps its exact entry.
 - A fingerprint is the SHA-256 digest of the concatenated entries of the candidate's tokens, in base64url.
 - The line count of a candidate is the number of code lines between its first and last token, inclusive. Lines with only comments or blanks are not code lines.
+
+### Java, Ruby, PHP and Kotlin tokens
+
+These languages use the same thresholds and fingerprints. The sequence omits comments and whitespace. The exact sequence keeps every other token's spelling. The similar sequence replaces identifiers and literals with their kind: strings, numbers, booleans and null. In Kotlin, an interpolated expression keeps its tokens. In PHP, the sequence also omits `<?php` tags and markup outside them.
+
+Candidates are declarations, bodies, clauses and statements, and multi-line control flow or expressions.
 
 ### Go tokens
 
@@ -93,7 +161,7 @@ Candidates:
 
 ## Failure and limits
 
-A file that the parser cannot parse gets one diagnostic from `tree-sitter/parse`. It gives the line and column of the first token the grammar rejects and, when the grammar knows it, the expected token. Lines and columns are 1-based. A Go column counts bytes, and a Python column counts characters. The operations that read the file's structure are recorded as blocked, with `Unavailable inputs: syntax`. The file stays in the inventory as not analysed, the inspection is partial, and the run goes on. For example:
+A file that the parser cannot parse gets one diagnostic from `language-<id>/parse`. It gives the line and column of the first token the grammar rejects and, when the grammar knows it, the expected token. Lines and columns are 1-based. A Go column counts bytes, and a Python column counts characters. The operations that read the file's structure are recorded as blocked, with `Unavailable inputs: syntax`. The file stays in the inventory as not analysed, the inspection is partial, and the run goes on. For example:
 
 ```text
 Expected ")" at line 2, column 8
@@ -106,16 +174,16 @@ A Go file must start with a package clause. Otherwise the diagnostic is `Expecte
 The parser differs from the compiler's own parser in these ways:
 
 - Python 2 files, and Python nested deeper than CPython allows, are measured.
-- A few valid but unusual files are rejected with a diagnostic.
+- A few valid but unusual files are rejected with a diagnostic. In test corpora, the grammars rejected 0% of Java and Ruby files, about 0.1% of PHP files, and about 1.4% of Kotlin files. Examples are PHP heredocs that contain `<?php`, and Kotlin suspend lambdas and some callable references.
 - Duplication fingerprints depend on token-level formatting, such as a trailing comma or adjacent string literals.
-- A very large file needs much memory: about 110 to 160 MB for each MiB of source. A 1 MiB file needs about 0.3 GB, and a 10 MiB file 1.1 to 1.6 GB.
+- A very large file needs much memory: about 110 to 160 MB for each MiB of source in Go and Python. A 1 MiB file needs about 0.3 GB, and a 10 MiB file 1.1 to 1.6 GB. Expect similar growth in the other languages.
 
 ## Profile
 
 An inspection records the plugins and grammars that took part. The profile covers:
 
-- the parser plugins that parsed at least one file;
-- the grammars those plugins used, by name and version, such as `tree-sitter-go` `0.25.0`;
+- the language plugins that parsed at least one file;
+- the grammars those plugins used, by name and version, such as `tree-sitter-go` `0.25.0` or `@tree-sitter-grammars/tree-sitter-kotlin` `1.1.0`;
 - the file selectors, the `include` globs, of the languages the repository contains.
 
 Adding or updating a grammar for a language the repository does not contain does not change its profile. A change in a grammar a repository uses does. Trends then shows an "Inspection profile changed" mark, and no trend delta crosses it.
@@ -145,6 +213,8 @@ Line hits come from each class's `<lines>`. Branches come from the `condition-co
 ## Upgrading from 0.12 or earlier
 
 - Profile. New inspections record the profile `repository/v4`. The first inspection made with this version starts a new profile for every repository, so Trends shows one "Inspection profile changed" mark. Saved reports keep their profiles.
-- Plugin IDs. The IDs `go-ast` and `python-ast` do not exist. A `parsers` entry that names one fails with `parsers/go/0 names unknown plugin go-ast; go is provided by tree-sitter`. Name `tree-sitter`, or remove the entry when no other plugin provides the language.
+- Plugin IDs. The ID `tree-sitter` is replaced by `language-go` and `language-python`. The IDs `go-ast` and `python-ast` do not exist. A `parsers` or `ignore[].plugin` entry that names one of these fails with `parsers/go/0 names unknown plugin tree-sitter; go is provided by language-go`. Change `"go": ["tree-sitter"]` to `"go": ["language-go"]`, and `"python": ["tree-sitter"]` to `"python": ["language-python"]`. Remove the entry when no other plugin provides the language.
+- Profile. A Go or Python repository gets one more profile change, because the parser's ID changes.
+- Report values. Saved reports keep the old IDs `tree-sitter` and `tree-sitter/parse`, and they open as before. The language ID `c-sharp` in a saved report opens too. New reports write `csharp`.
 - Duplication anchors. Go and Python duplication findings have new anchors. Update every `ignore` rule that uses one.
 - Cache. `repometry cache clear` also removes the compiled Go parser that earlier versions left in the system cache.

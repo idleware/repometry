@@ -1,4 +1,5 @@
 import { codeStructure, codeStructures, structureMeasures } from '@repometry/core/internal/model/code-structure.js';
+import type { LanguageRegistry } from './languages.js';
 import type { ParserPlugin } from './parser-order.js';
 import { pluginRegistration } from './registered-plugin.js';
 import { pluginScope } from './plugin-scope.js';
@@ -14,7 +15,6 @@ import type { AnalysisInput } from '@repometry/core/internal/usecases/inspect.js
 import type { AnalysisResults } from './analysis-results.js';
 import type { AnalysisSources } from './phases.js';
 import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
-import { builtInGrammarTools } from './built-ins.js';
 
 export const analysisProfile = 'repository/v4';
 
@@ -33,12 +33,14 @@ const measurementDefinitions = {
 export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSources, results: AnalysisResults): Report {
   const pluginData = results.pluginData();
   const { snapshot } = input;
+  const selected = new Set([...sources.providersByPath.values()].map(provider => provider.plugin.id));
+  const selectors = sources.languages.reportSelection(selected);
   const fileCount = sources.sourceFiles.length + sources.unavailableFiles.size;
   return {
     schema: reportSchema,
     subject: snapshot.subject,
     generatedAt: new Date().toISOString(),
-    appliedConfig: appliedConfiguration(input, sources, results),
+    appliedConfig: appliedConfiguration(input, sources, results, selectors),
     definitions: { ...Object.fromEntries((pluginData?.metrics ?? []).map(metric => [metric.id, metric.description ?? metric.label])),
       ...measurementDefinitions },
     scope: { files: fileCount, parsed: results.parsed.size },
@@ -47,13 +49,13 @@ export function assembleAnalysisReport(input: AnalysisInput, sources: AnalysisSo
     diagnostics: results.diagnostics,
     findings: results.findings,
     ...(results.ruleSkips.length === 0 ? {} : { ruleSkips: results.ruleSkips }),
-    ...(pluginData === undefined ? {} : { pluginData: { ...pluginData, languages: sources.languages.catalog,
+    ...(pluginData === undefined ? {} : { pluginData: { ...pluginData, languages: selectors.catalog,
       inventory: reportInventory(snapshot, sources, results) } }),
   };
 }
 
 function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], coverage }: AnalysisInput,
-  sources: AnalysisSources, results: AnalysisResults): Report['appliedConfig'] {
+  sources: AnalysisSources, results: AnalysisResults, selectors: ReturnType<LanguageRegistry['reportSelection']>): Report['appliedConfig'] {
   const { languages, plugins, providersByPath } = sources;
   const securityScanners = results.securityScanners(plugins);
   const active = new Set(plugins.map(plugin => plugin.id));
@@ -65,14 +67,12 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
     const ranOther = plugin.operations.some(({ id, output }) => output.id !== codeStructure.id && output.id !== codeStructures.id
       && results.ran.has(plugin.id + '/' + id));
     if (!used && !ranOther) return [];
-    const entry = languages.describe(plugin);
-    const grammarTools = builtInGrammarTools.get(plugin.id);
-    return [pluginProvenance(grammarTools ? { ...entry, tools: grammarTools(plugin, used ?? new Set()) } : entry)];
+    return [pluginProvenance(languages.describe(plugin))];
   });
   const defaultParser = languages.providers[0]?.plugin;
   return {
     profile: analysisProfile, mode: snapshot.subject.kind,
-    source: { extensions: languages.extensions, ...(languages.globs.length ? { globs: languages.globs } : {}),
+    source: { extensions: selectors.extensions, ...(selectors.globs.length ? { globs: selectors.globs } : {}),
       excludedDirectories: sourceDirectoriesExcluded, excludedOutput, excludedPaths,
       defaultExclusions: defaultSourceExclusions, generatedSourcePolicy, generatedExcluded: snapshot.generatedExcluded ?? [] },
     parser: defaultParser && parsed.has(defaultParser.id) ? defaultParser.settings : undefined,

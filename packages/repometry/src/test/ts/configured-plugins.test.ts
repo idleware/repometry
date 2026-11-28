@@ -120,6 +120,7 @@ test('plugins lists configured languages and effective file claims before runnin
     id: 'fixture', version: '1.0.0', category: 'language',
     use: './fixture.json', versionSource: 'manifest',
     available: list.find(entry => entry.id === 'fixture')?.available,
+    tools: fixture.tools,
     ...(!list.find(entry => entry.id === 'fixture')?.available ? { reason: 'required executable docker is not on PATH' } : {}),
     languages: [{ id: 'fixture', label: 'Fixture', color: '#123456', include: ['**/*.fixture'] }],
   });

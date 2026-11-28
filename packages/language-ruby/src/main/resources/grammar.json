@@ -1,0 +1,7 @@
+{
+  "package": "tree-sitter-ruby",
+  "version": "0.23.1",
+  "license": "MIT",
+  "integrity": "sha512-d9/RXgWjR6HanN7wTYhS5bpBQLz1VkH048Vm3CodPGyJVnamXMGb8oEhDypVCBq4QnHui9sTXuJBBP3WtCw5RA==",
+  "sha256": "09a96427d7c72f0613ed470cd9812223fc4a91d6a9c025c0235cc6bd59ff96f4"
+}

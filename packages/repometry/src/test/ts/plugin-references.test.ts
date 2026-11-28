@@ -174,6 +174,7 @@ test('docker references read the embedded label with image inspect and use its v
   assert.deepEqual(listed(setup.run('plugins'), 'fixture'), {
     id: 'fixture', version: '3.2.1', category: 'language', use: 'docker:fixture:1', versionSource: 'manifest',
     available: true,
+    tools: manifest.tools,
     languages: manifest.languages,
   });
 });
@@ -270,6 +271,38 @@ test('the built-in reference stays in its original position and duplicates are r
   await setup.config(['secrets', 'secrets']);
   assert.equal(setup.run('plugins').stderr.trim(),
     'repometry: ' + join(setup.settingsDir, 'test.json') + ': plugins/1 plugin secrets from secrets duplicates secrets');
+});
+
+test('a default language package reference configures its existing parser', async t => {
+  const setup = await fixture(t);
+  for (const use of ['language-go', '@repometry/language-go', 'npm:@repometry/language-go']) {
+    await setup.config([{ use, exclude: ['testdata/**'] }]);
+    const entry = listed(setup.run('plugins'), 'language-go') as { use?: string; exclude?: readonly string[] };
+    assert.equal(entry.use, use);
+    assert.deepEqual(entry.exclude, ['testdata/**']);
+  }
+});
+
+test('plugins lists each enabled language grammar and its version', async t => {
+  const setup = await fixture(t);
+  await setup.config([]);
+  const defaults = setup.run('plugins');
+  assert.equal(listed(defaults, 'language-ruby'), undefined);
+  assert.equal(listed(defaults, 'language-kotlin'), undefined);
+  await setup.config(['@repometry/language-ruby', '@repometry/language-kotlin']);
+  const output = setup.run('plugins');
+  const expected = {
+    'language-go': { 'tree-sitter-go': '0.25.0' },
+    'language-python': { 'tree-sitter-python': '0.25.0' },
+    'language-java': { 'tree-sitter-java': '0.23.5' },
+    'language-ruby': { 'tree-sitter-ruby': '0.23.1' },
+    'language-php': { 'tree-sitter-php': '0.24.2' },
+    'language-kotlin': { '@tree-sitter-grammars/tree-sitter-kotlin': '1.1.0' },
+  };
+  for (const [id, tools] of Object.entries(expected)) {
+    const entry = listed(output, id) as { tools?: Readonly<Record<string, string>> };
+    assert.deepEqual(entry.tools, tools, id);
+  }
 });
 
 test('scope replaces plugin selection and cannot restore globally excluded files', async t => {

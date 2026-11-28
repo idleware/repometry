@@ -3,7 +3,9 @@ import type { StructureMeasure } from '../model/code-structure.js';
 import { category } from '../model/inspection-category.js';
 import type { PluginCategory } from '../model/inspection-category.js';
 import type { JsonValue } from '../model/plugin-data.js';
-import type { Operation, Plugin, ProductDeclaration, RuleDescriptor } from './plugin.js';
+import { findingCategory } from './author-contracts.js';
+import { pluginApi } from './plugin.js';
+import type { Operation, Plugin, PluginKind, ProductDeclaration, RuleDescriptor } from './plugin.js';
 
 export const pluginManifestSchema = 'urn:repometry:schema:plugin:1';
 
@@ -27,6 +29,7 @@ export interface PluginManifest<Options = JsonValue> {
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
   readonly languages?: readonly Language[];
+  readonly tools?: Readonly<Record<string, string>>;
   readonly optionsSchema?: boolean | Readonly<Record<string, unknown>>;
   readonly requires?: {
     readonly node?: string;
@@ -46,4 +49,16 @@ interface PluginOperations {
 export function pluginCategory(plugin: Plugin): PluginCategory {
   const categories = [category.language, category.source, category.security, category.coverage];
   return categories.find(value => plugin.kinds.includes(value)) ?? category.maintainability;
+}
+
+const kindsByCategory: Record<PluginCategory, PluginKind> = {
+  language: 'language', source: 'source', maintainability: 'analysis', coverage: 'coverage', security: 'security',
+};
+
+export function manifestPlugin({ id, category, languages, optionsSchema, tools, checks }: Omit<PluginManifest, 'create'>, version: string):
+  Omit<Plugin, 'operations' | 'produces' | 'settings'> {
+  return { id, version, api: pluginApi, kinds: [kindsByCategory[category]], config: optionsSchema, tools,
+    ...(checks === undefined ? {} : { rules: checks.map(check => ({ ...check, category: findingCategory(category, check.defaults?.cost !== undefined) })) }),
+    ...(languages === undefined ? {} : { providesLanguages: languages.map(({ include, measures, ...language }) => ({ ...language, globs: include,
+      ...(measures === undefined ? {} : { measures: measures.map(measure => measure === 'checks' ? 'structuralRules' : measure) }) })) }) };
 }

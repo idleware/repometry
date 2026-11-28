@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import type { Node, Parser, Tree } from 'web-tree-sitter';
-import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
-import type { Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
-import { codeStructure } from '@repometry/core/internal/model/code-structure.js';
+import { codeStructure, pluginManifestSchema } from '@repometry/core';
+import type { Operation, PluginManifest } from '@repometry/core';
+import { readStructure } from '@repometry/core/internal/engine/author-contracts.js';
+import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
 import type { SourceFile } from '@repometry/core/internal/model/source.js';
 import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
-import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
 import type { Grammar } from './language.js';
 import { SourceLines } from './source-lines.js';
 import { Structure } from './structure.js';
@@ -16,11 +16,13 @@ import { scanClones } from './tokens.js';
 const parsers = new Map<Grammar, Promise<Parser>>();
 let initialized: Promise<void> | undefined;
 
-/** The tree-sitter language plugin for the given language units, which parse in that order of precedence. */
-export function treeSitter(grammars: readonly Grammar[]): Plugin {
-  const byExtension = new Map(grammars.flatMap(grammar => grammar.language.extensions!.map(extension => [extension, grammar] as const)));
+type NativeManifest = PluginManifest & { readonly version: string; create(): Awaited<ReturnType<PluginManifest['create']>> };
+
+/** The public manifest backed by one grammar. */
+export function treeSitter(grammar: Grammar): NativeManifest {
+  const byExtension = new Map(grammar.language.extensions!.map(extension => [extension, grammar] as const));
   // At this depth the emitted `execute` keeps the text it had as a module constant: profiles digest that text.
-  const operations: Operation[] = [{
+  const [parse] = [{
     id: 'parse', role: 'provider', inputs: { file: sourceFile }, output: codeStructure,
     async execute(inputs) {
       const file = inputs.read('file', sourceFile);
@@ -28,14 +30,18 @@ export function treeSitter(grammars: readonly Grammar[]): Plugin {
       if (!grammar) throw new Error('No grammar for ' + file.path);
       return inspectFile(file, grammar);
     },
-  }];
+  }] satisfies [Operation];
+  const { extensions, globs, measures, ...language } = grammar.language;
   return {
-    id: 'tree-sitter', version: '1.0.0', api: pluginApi, kinds: ['language'],
-    providesLanguages: grammars.map(({ language }) => language),
-    tools: { 'web-tree-sitter': '0.27.2', ...Object.fromEntries(grammars.map(({ tool }) => [tool.package, tool.version])) },
-    settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } },
-    produces: [{ contract: codeStructure.id, persistence: 'transient' }],
-    operations,
+    schema: pluginManifestSchema, id: 'language-' + language.id.replaceAll('-', ''), category: 'language', version: '1.0.0',
+    languages: [{ ...language, include: [...(extensions ?? []).map(ext => '**/*' + ext), ...(globs ?? [])],
+      ...(measures === undefined ? {} : { measures: measures.map(measure => measure === 'structuralRules' ? 'checks' : measure) }) }],
+    tools: { [grammar.tool.package]: grammar.tool.version },
+    create: () => ({
+      produces: [{ contract: codeStructure.id, persistence: 'transient' }],
+      operations: [{ ...parse, implementation: parse.execute.toString(),
+        execute: async inputs => readStructure(await parse.execute(inputs) as CodeStructure) }],
+    }),
   };
 }
 

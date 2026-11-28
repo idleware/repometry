@@ -55,20 +55,26 @@ export class Structure {
   }
 
   private scope({ node, flow, depth }: Visit, isClass: boolean, decorators: readonly Node[] = []): void {
-    const body = node.childForFieldName('body');
+    const rule = this.grammar.rules[node.type];
+    const body = rule?.body?.(node) ?? fieldBody(node);
+    if (rule?.requiresBody && body.length === 0) {
+      this.walk.children(node, flow, depth);
+      return;
+    }
     const header = this.header(node, body, decorators).map(child => ({ node: child, flow, depth }));
     this.walk.next([...header, () => this.enterScope(node, body, isClass)]);
   }
 
-  private header(node: Node, body: Node | null, decorators: readonly Node[]): readonly Node[] {
-    const header = this.walk.named(node).filter(child => child.id !== body?.id);
+  private header(node: Node, body: readonly Node[], decorators: readonly Node[]): readonly Node[] {
+    const bodies = new Set(body.map(member => member.id));
+    const header = this.walk.named(node).filter(child => !bodies.has(child.id));
     if (!decorators.length) return header;
     const annotation = node.childForFieldName('return_type');
     const index = header.findIndex(child => child.id === annotation?.id);
     return index === -1 ? [...header, ...decorators] : [...header.slice(0, index), ...decorators, ...header.slice(index)];
   }
 
-  private enterScope(node: Node, body: Node | null, isClass: boolean): void {
+  private enterScope(node: Node, body: readonly Node[], isClass: boolean): void {
     const simple = this.grammar.name(node);
     const name = simple && [...this.names, simple].join('.');
     const label = name ?? '(anonymous)';
@@ -82,7 +88,7 @@ export class Structure {
       this.anchors.pop();
       if (simple) this.names.pop();
     }]);
-    if (body) this.walk.next([{ node: body, flow: own, depth: 0 }]);
+    this.walk.next(body.map(member => ({ node: member, flow: own, depth: 0 })));
   }
 
   private recordFunction(node: Node, own: Flow, label: string, name: string | undefined): void {
@@ -97,8 +103,11 @@ export class Structure {
   }
 
   private parameters(node: Node): number {
+    const specified = this.grammar.rules[node.type]?.parameters?.(node);
+    if (specified !== undefined) return specified;
     const list = node.childForFieldName('parameters');
     if (!list) return 0;
+    if (this.grammar.singleParameterTypes?.has(list.type)) return 1;
     const { parameterNames, parameterSeparators } = this.grammar;
     const parameters = this.walk.named(list).filter(item => !parameterSeparators?.has(item.type));
     return parameters.reduce((count, item) =>
@@ -116,4 +125,9 @@ export class Structure {
     const end = this.grammar.trimObservationComments ? this.codeLines[lowerBound(this.codeLines, endLine + 1) - 1] : endLine;
     this.observations.push({ rule, value, label, line, endLine: Math.max(line, end ?? line), ...(anchor ? { anchor } : {}) });
   }
+}
+
+function fieldBody(node: Node): readonly Node[] {
+  const body = node.childForFieldName('body');
+  return body ? [body] : [];
 }

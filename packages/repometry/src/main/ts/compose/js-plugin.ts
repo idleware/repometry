@@ -1,11 +1,12 @@
+import { manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { readFile } from 'node:fs/promises';
 import { findPackageJSON } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import type { PluginManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
-import { checkManifest, dockerFields, manifestPlugin, manifestScope } from './plugin-manifest.js';
+import { checkManifest, dockerFields, manifestScope } from './plugin-manifest.js';
 import type { PluginReference } from './plugin-reference.js';
-import { authorOperation } from './author-operation.js';
+import { authorOperation } from '@repometry/core/internal/engine/author-operation.js';
 import { validatePluginOptions } from './plugin-options.js';
 import { readRequirements, unmetRequirement } from './plugin-requirements.js';
 

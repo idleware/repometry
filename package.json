@@ -13,6 +13,10 @@
     "packages/tree-sitter",
     "packages/language-go",
     "packages/language-python",
+    "packages/language-java",
+    "packages/language-ruby",
+    "packages/language-php",
+    "packages/language-kotlin",
     "packages/repometry"
   ],
   "scripts": {

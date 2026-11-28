@@ -18,7 +18,9 @@ export class Control {
     switch (kind) {
       case 'if': return this.conditional(node, flow, depth, task.chained);
       case 'elif': flow.cognitive++; break;
-      case 'else': flow.cognitive++; return this.walk.children(node, flow, depth + Number(parent !== 'nest'));
+      case 'else':
+        if (rule?.elseCognitive?.(node) !== false) flow.cognitive++;
+        return this.walk.children(node, flow, depth + Number(parent !== 'nest'));
       case 'sequence': return this.sequence(node, flow, depth);
       case 'nest': flow.block(node, depth); break;
     }
@@ -45,16 +47,22 @@ export class Control {
   private conditional(node: Node, flow: Flow, depth: number, chained?: boolean): void {
     flow.block(node, depth, chained);
     const work: Work[] = [];
+    const alternate = this.walk.grammar.rules[node.type]?.alternative?.(node);
     for (let index = 0; index < node.childCount; index++) {
       const child = node.child(index)!;
-      if (!child.isNamed || this.walk.ignored(child.type)) continue;
-      work.push(node.fieldNameForChild(index) === 'alternative' ? this.alternative(child, flow, depth) : { node: child, flow, depth: depth + 1 });
+      const explicitAlternative = child.id === alternate?.id;
+      if ((!child.isNamed && !explicitAlternative) || this.walk.ignored(child.type)) continue;
+      const alternative = explicitAlternative || node.fieldNameForChild(index) === 'alternative';
+      work.push(alternative ? this.alternative(child, flow, depth) : { node: child, flow, depth: depth + 1 });
     }
     this.walk.next(work);
   }
 
   private alternative(node: Node, flow: Flow, depth: number): Work {
-    switch (this.walk.grammar.rules[node.type]?.flow) {
+    const rule = this.walk.grammar.rules[node.type];
+    const chained = rule?.chainedAlternative ? this.chainedChild(node) : undefined;
+    if (chained) return { node: chained, flow, depth, chained: true };
+    switch (rule?.flow) {
       case 'if': return { node, flow, depth, chained: true };
       case 'elif': return { node, flow, depth: depth + 1 };
       case 'else': return { node, flow, depth: depth + 1, parent: 'nest' };
@@ -63,6 +71,11 @@ export class Control {
         this.walk.next([{ node, flow, depth: depth + 1 }]);
       };
     }
+  }
+
+  private chainedChild(node: Node): Node | undefined {
+    const [child, sibling] = this.walk.named(node);
+    return child && sibling === undefined && this.walk.grammar.rules[child.type]?.flow === 'if' ? child : undefined;
   }
 
   private sequence(node: Node, flow: Flow, depth: number): void {

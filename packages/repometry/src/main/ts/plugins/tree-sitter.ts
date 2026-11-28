@@ -1,15 +1,23 @@
+import { authorOperation } from '@repometry/core/internal/engine/author-operation.js';
+import { manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
-import { go } from '@repometry/language-go';
-import { python } from '@repometry/language-python';
-import { treeSitter as treeSitterPlugin } from '@repometry/tree-sitter';
+import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
+import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
+import goManifest, { go } from '@repometry/language-go';
+import pythonManifest, { python } from '@repometry/language-python';
+import javaManifest, { java } from '@repometry/language-java';
+import phpManifest, { php } from '@repometry/language-php';
 
-const units = [go, python];
+type NativeManifest = typeof goManifest;
 
-/** The built-in tree-sitter plugin with the bundled languages. */
-export const treeSitter = treeSitterPlugin(units);
+export const languagePlugins = [nativePlugin(goManifest, go.language), nativePlugin(pythonManifest, python.language),
+  nativePlugin(javaManifest, java.language, true), nativePlugin(phpManifest, php.language, true)];
 
-/** The grammar packages a plugin's inspection used, for the languages the repository contains. */
-export function usedGrammarTools(plugin: Plugin, languages: ReadonlySet<string>) {
-  return Object.fromEntries(units.filter(({ language }) => languages.has(language.id))
-    .map(({ tool }) => [tool.package, plugin.tools?.[tool.package] ?? tool.version]));
+function nativePlugin(manifest: NativeManifest, language: ProvidedLanguage, requiresSource?: true): Plugin {
+  const { operations, produces } = manifest.create();
+  return { ...manifestPlugin(manifest, manifest.version),
+    providesLanguages: [language],
+    ...(requiresSource === undefined ? {} : { languageProvenanceRequiresSource: requiresSource }),
+    settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } },
+    produces, operations: operations.map(operation => authorOperation(manifest.id, manifest.category, operation)) };
 }

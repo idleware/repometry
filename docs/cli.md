@@ -38,7 +38,7 @@ This page covers the options that every command shares, the configuration file, 
     "secrets",
     { "use": "./tools/long-lines.js", "options": { "maxLength": 100 }, "exclude": ["docs/**"] }
   ],
-  "parsers": { "go": ["tree-sitter"] },
+  "parsers": { "go": ["language-go"] },
   "components": [{ "name": "CLI", "include": ["src/cli/*"] }],
   "ignore": [
     { "category": "security", "path": ["**/test/**", "fixtures/**"], "reason": "Fixtures are insecure on purpose." }
@@ -87,6 +87,7 @@ A string is the same as an object with only `use`. An entry accepts no other key
 {
   "plugins": [
     "@acme/repometry-eslint",
+    "@repometry/language-kotlin",
     "docker:ghcr.io/acme/parser@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     { "use": "./tools/my-checks.js", "options": { "limit": 10 }, "exclude": ["legacy/**"] },
     { "use": "./tools/parser.json" },
@@ -105,7 +106,7 @@ Repometry reads `use` with the first row of this table that fits.
 | Starts with `./`, `../` or `/` | A local file, resolved against the folder of the config file. A `.js`, `.mjs` or `.cjs` file is a JavaScript module. A `.json` file is a [Docker manifest](process-plugins.md#the-manifest-file). Any other file is an error. |
 | `npm:<package>` | An installed npm package. |
 | A built-in plugin ID | That built-in plugin. |
-| Anything else | An installed npm package. |
+| Anything else | An installed npm package, such as `@repometry/language-kotlin`, the optional [Kotlin plugin](native-languages.md#add-an-optional-language). |
 
 A package resolves from Repometry's own installation only, including an installation that `npm exec` assembles. Repometry downloads nothing during a run. Install a package next to Repometry, or use `npm:` to choose a package whose name is also a built-in plugin ID.
 
@@ -285,16 +286,16 @@ To keep the built-in JavaScript parser when `my-parser` also provides JavaScript
 { "parsers": { "javascript": ["babel-syntax"], "typescript": ["babel-syntax"] } }
 ```
 
-To keep the built-in Go parser when `my-parser` also provides Go, list `tree-sitter`:
+To keep the built-in Go parser when `my-parser` also provides Go, list `language-go`:
 
 ```json
-{ "parsers": { "go": ["tree-sitter"] } }
+{ "parsers": { "go": ["language-go"] } }
 ```
 
 To prefer `my-parser` and use the built-in parser when `my-parser` is unavailable, list both in that order:
 
 ```json
-{ "parsers": { "go": ["my-parser", "tree-sitter"] } }
+{ "parsers": { "go": ["my-parser", "language-go"] } }
 ```
 
 `repometry plugins` and the applied configuration in the report show each language under the one plugin that parses it. A plugin that parses none of its languages stays in the list with its availability, and without those languages.
@@ -386,7 +387,7 @@ An error that comes from the config file starts with `repometry: <file>: `, wher
 | `parsers/<language> must use a language ID` | The key is not a language ID: lowercase letters, digits and `-`, starting with a letter. |
 | `parsers/<language> must be a nonempty list of unique plugin IDs` | The value is not a list, is empty, repeats an ID, or holds something other than a string. |
 | `parsers/<language> names an unknown language` | No plugin provides this language. |
-| `parsers/<language>/<n> names unknown plugin <id>; <language> is provided by <a>, <b>` | The list holds an ID that is not a plugin. The text after `;` names the plugins that provide the language, such as `parsers/go/0 names unknown plugin go-ast; go is provided by tree-sitter`. |
+| `parsers/<language>/<n> names unknown plugin <id>; <language> is provided by <a>, <b>` | The list holds an ID that is not a plugin. The text after `;` names the plugins that provide the language, such as `parsers/go/0 names unknown plugin go-ast; go is provided by language-go`. |
 | `parsers/<language>/<n> names plugin <id>, which does not provide <language>; <language> is provided by <a>, <b>` | The plugin exists but does not provide the language. The text after `;` names the plugins that do. |
 | `parsers/<language> is required to choose among <a>, <b>` | Several plugins provide the language and `parsers` has no entry for it. |
 | `Parsers <a> and <b> both include <path>` | Two chosen parsers select one file under different languages. Narrow the `include` globs of one plugin. |

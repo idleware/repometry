@@ -30,7 +30,7 @@ export const fileTypes: readonly FileType[] = [
   { id: 'kotlin', label: 'Kotlin', color: '#a97bff', extensions: ['.kt', '.kts'] },
   { id: 'ruby', label: 'Ruby', color: '#701516', extensions: ['.rb'] },
   { id: 'php', label: 'PHP', color: '#4f5d95', extensions: ['.php'] },
-  { id: 'c-sharp', label: 'C#', color: '#178600', extensions: ['.cs'] },
+  { id: 'csharp', label: 'C#', color: '#178600', extensions: ['.cs'] },
   { id: 'c', label: 'C', color: '#555555', extensions: ['.c', '.h'] },
   { id: 'cpp', label: 'C++', color: '#f34b7d', extensions: ['.cc', '.cpp', '.cxx', '.hpp', '.hh'] },
   { id: 'swift', label: 'Swift', color: '#f05138', extensions: ['.swift'] },
@@ -57,4 +57,8 @@ export function fileTypeId(path: string, fallback?: string): string {
   const extension = posix.extname(name);
   return exactNames.get(basename) ?? names.get(name) ?? names.get(name.split('.', 1)[0]!) ?? extensions.get(extension)
     ?? fallback ?? (extension.slice(1) || 'other');
+}
+
+export function canonicalFileTypeId(id: string): string {
+  return id === 'c-sharp' ? 'csharp' : id;
 }

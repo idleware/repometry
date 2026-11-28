@@ -4,7 +4,7 @@ import { diffCoverage } from './coverage/diff-coverage.js';
 import { duplication } from './duplication/duplication.js';
 import { babelProvider } from './language-js/babel-provider.js';
 import { jsSecurity } from './language-js/js-security.js';
-import { treeSitter, usedGrammarTools } from './tree-sitter.js';
+import { languagePlugins } from './tree-sitter.js';
 import { maintainability } from './maintainability/maintainability.js';
 import { actionsSecurity } from './security/actions-security.js';
 import { dockerfile } from './security/dockerfile.js';
@@ -15,6 +15,4 @@ import { structure } from './structure/structure.js';
 
 /** The built-in plugins in run order. The first language plugin is the default provider. */
 export const builtInPlugins: readonly Plugin[] = [babelProvider, structure, maintainability, duplication, coverage, diffCoverage,
-  secrets, jsSecurity, actionsSecurity, npmSupplyChain, dockerfile, githubSource, gitlabSource, localSource, treeSitter];
-
-export const builtInGrammarTools = new Map([[treeSitter.id, usedGrammarTools]]);
+  secrets, jsSecurity, actionsSecurity, npmSupplyChain, dockerfile, githubSource, gitlabSource, localSource, ...languagePlugins];

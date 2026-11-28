@@ -13,7 +13,7 @@ import type { Finding, FindingResult } from '@repometry/core/internal/model/find
 import type { SourceFile } from '@repometry/core/internal/model/source.js';
 import { sourceFile, sourceFiles } from '@repometry/core/internal/model/snapshot.js';
 import { duplication } from '../../../main/ts/plugins/duplication/duplication.js';
-import { treeSitter } from './wasm-plugin.js';
+import { wasmParser } from './wasm-plugin.js';
 
 const extensions = { go: '.go', python: '.py' };
 const encodingErrors = new Set(['ERR_ENCODING_INVALID_ENCODED_DATA', 'ERR_ENCODING_NOT_SUPPORTED']);
@@ -60,7 +60,7 @@ async function baseline(operation: Operation, files: readonly SourceFile[], resu
 
 async function next(file: SourceFile, rejected: Record<string, string>): Promise<CodeStructure | undefined> {
   try {
-    const value = await treeSitter.operations[0]!.execute({
+    const value = await wasmParser(file.path).operations[0]!.execute({
       read: <T>(name: string, contract: { readonly id: string }) => {
         assert.equal(name, 'file', 'WASM input port');
         assert.equal(contract.id, sourceFile.id, 'WASM input contract');
