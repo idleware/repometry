@@ -5,8 +5,8 @@ import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import { LocalReportStore } from '../report/json/store/local-store.js';
 import { inspectCommits, rangeInspector } from './range-inspection.js';
-import type { CommitOutcome, RangeInspection, RangeMessage } from './range-inspection.js';
-import type { parseConfig } from './config.js';
+import type { CommitOutcome, RangeConfiguration, RangeInspection, RangeMessage } from './range-inspection.js';
+import type { loadConfig } from './config.js';
 
 const minimumChunkSize = 25;
 const workerMemoryBytes = 512 * 1024 * 1024;
@@ -25,14 +25,14 @@ export function historyChunks(commits: readonly string[], concurrency: number, m
 
 interface RangeOptions {
   readonly inspection: RangeInspection;
-  readonly config: ReturnType<typeof parseConfig>;
-  readonly configValue: unknown;
+  readonly config: Awaited<ReturnType<typeof loadConfig>>;
+  readonly configuration: RangeConfiguration;
   readonly concurrency?: number;
   readonly skipSaved: boolean;
 }
 
 export async function analyzeCommits(commits: readonly string[], options: RangeOptions) {
-  const { inspection, config, configValue, concurrency, skipSaved } = options;
+  const { inspection, config, configuration, concurrency, skipSaved } = options;
   const inspectCommit = rangeInspector(inspection, config);
   const outcomes = new Map<string, Outcome>();
   const control = new AbortController();
@@ -55,7 +55,7 @@ export async function analyzeCommits(commits: readonly string[], options: RangeO
     if (!signal.aborted && chunks.length === 1) {
       await inspectCommits(chunks[0]!, inspectCommit, () => signal.aborted, record);
     } else if (!signal.aborted) {
-      await Promise.all(chunks.map(chunk => runChunk(chunk, inspection, configValue, signal, record)));
+      await Promise.all(chunks.map(chunk => runChunk(chunk, inspection, configuration, signal, record)));
     }
     const results = collectOutcomes(commits, outcomes);
     if (results.analyzed.length || results.skipped.length) {
@@ -104,7 +104,7 @@ function collectOutcomes(commits: readonly string[], outcomes: ReadonlyMap<strin
   return { analyzed, partial, skipped, failed };
 }
 
-async function runChunk(commits: readonly string[], inspection: RangeInspection, config: unknown, signal: AbortSignal,
+async function runChunk(commits: readonly string[], inspection: RangeInspection, configuration: RangeConfiguration, signal: AbortSignal,
   record: (outcome: CommitOutcome) => void): Promise<void> {
   const pending = new Set(commits);
   try {
@@ -112,7 +112,7 @@ async function runChunk(commits: readonly string[], inspection: RangeInspection,
     const worker = fork(new URL('./range-worker.js', import.meta.url), [], {
       detached: process.platform !== 'win32', execArgv: [], stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
     });
-    const message: RangeMessage = { kind: 'start', commits, inspection, config };
+    const message: RangeMessage = { kind: 'start', commits, inspection, configuration };
     await runWorker(worker, message, signal, outcome => {
       if (pending.delete(outcome.commit)) record(outcome);
     });

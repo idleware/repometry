@@ -28,7 +28,8 @@
     "./internal/*.js": {
       "types": "./target/main/ts/*.d.ts",
       "default": "./target/main/ts/*.js"
-    }
+    },
+    "./plugin-v1.schema.json": "./target/main/resources/plugin-v1.schema.json"
   },
   "files": [
     "target/main",
@@ -38,7 +39,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('../../LICENSE', 'LICENSE')\"",
+    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && node -e \"const fs = require('node:fs'); fs.cpSync('../../LICENSE', 'LICENSE'); fs.cpSync('src/main/resources', 'target/main/resources', { recursive: true })\"",
     "build:test": "npm run build && node -e \"require('node:fs').rmSync('target/verification', { recursive: true, force: true })\" && tsc -p tsconfig.test.json",
     "test": "npm run build:test && node --test 'target/verification/test/ts/*.test.js'",
     "prepack": "npm run build"

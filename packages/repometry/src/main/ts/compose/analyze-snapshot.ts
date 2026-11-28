@@ -8,6 +8,7 @@ import { selectAnalysisSources } from './phases.js';
 import { historyProfile } from './history-cache.js';
 import type { HistoryCache } from './history-cache.js';
 import type { LanguageRegistry } from './languages.js';
+import { pluginScope } from './plugin-scope.js';
 
 export { inspectionFileMatcher } from './phases.js';
 
@@ -16,7 +17,8 @@ export async function analyzeSnapshot(input: AnalysisInput, languages: LanguageR
   const sources = selectAnalysisSources(input.snapshot, input.coverage !== undefined, languages);
   const reusable = history?.begin(input.snapshot, historyProfile(input, sources, cache?.configurationDigest));
   const results = new AnalysisResults(sources.plugins, input.snapshot.oversizedClaims ?? []);
-  for (const task of defaultFilePlan(sources)) results.remember(task);
+  const defaults = languages.plugins.some(pluginScope) ? [] : defaultFilePlan(sources);
+  for (const task of defaults) results.remember(task);
 
   const batchFacts = await collectRepositorySyntax(sources, results, cache, reusable);
   const parsed = await inspectFiles(sources, batchFacts, results, cache, reusable);

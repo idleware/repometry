@@ -1,4 +1,4 @@
-import { parseConfig } from './config.js';
+import { loadConfig } from './config.js';
 import { inspectCommits, rangeInspector } from './range-inspection.js';
 import type { CommitOutcome, RangeMessage } from './range-inspection.js';
 
@@ -15,9 +15,9 @@ process.on('message', (message: RangeMessage) => {
   }
 });
 
-async function run({ commits, inspection, config }: Extract<RangeMessage, { kind: 'start' }>): Promise<void> {
+async function run({ commits, inspection, configuration: { value, root, file } }: Extract<RangeMessage, { kind: 'start' }>): Promise<void> {
   try {
-    await inspectCommits(commits, rangeInspector(inspection, parseConfig(config)), () => stopped, send);
+    await inspectCommits(commits, rangeInspector(inspection, await loadConfig(value, root, file)), () => stopped, send);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

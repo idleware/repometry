@@ -32,14 +32,15 @@ test('local profile ignores findings without dropping their evidence or modifyin
   await mkdir(join(dir, '.repometry'));
   await mkdir(join(dir, 'src'));
   await writeFile(join(dir, 'src', 'adapter.js'), 'export const adapter = (a,b,c,d,e,f) => [a,b,c,d,e,f];\n');
-  const ignore = [{ path: 'src/**', tool: 'repometry', rule: 'function-parameters', reason: 'Existing interface' }];
+  const ignore = [{ path: ['bin/**', 'src/**'], category: 'maintainability', plugin: 'repometry', check: 'function-parameters', reason: 'Existing interface' }];
   await writeFile(join(dir, 'repometry.config.json'), JSON.stringify({ ignore }));
   const scan = invoke(dir, ['analyze', '--working-tree']);
   assert.equal(scan.status, 0, scan.stderr);
   const id = JSON.parse(scan.stdout).subject.id as string;
   const read = () => JSON.parse(invoke(dir, ['show', id]).stdout) as Report;
   const filtered = read();
-  assert.deepEqual(filtered.appliedConfig.findingIgnore, ignore);
+  assert.deepEqual(filtered.appliedConfig.findingIgnore, [{ tool: 'repometry', rule: 'function-parameters',
+    path: ['bin/**', 'src/**'], reason: 'Existing interface', category: 'maintainability' }]);
   assert.deepEqual(filtered.findings, []);
   assert.equal(filtered.ignoredFindings?.[0]?.matchedRule, 0);
   assert.equal(filtered.ignoredFindings?.[0]?.finding.rule, 'function-parameters');
@@ -171,7 +172,7 @@ test('typed exclusions replace configured exclusions and apply to source files a
 
   const invalid = invoke(dir, ['analyze', '--working-tree', '--exclude', '../vendor']);
   assert.equal(invalid.status, 1);
-  assert.match(invalid.stderr, /Invalid source exclusion/);
+  assert.match(invalid.stderr, /Profile exclude\/0 must be a repository-relative path or glob/);
 });
 
 test('default vendor and generated-source exclusions also filter LCOV', async t => {
@@ -250,10 +251,10 @@ test('export writes the whole store without working trees and refuses to overwri
   assert.equal(invoke(dir, ['report', 'html=viewer']).status, 0);
 
   await writeFile(join(dir, 'repometry.config.json'), JSON.stringify({ components: [
-    { name: ' Matching component ', pathGlobs: ['private-*', 'private-*'], description: 'Source files' },
-    { name: 'Empty component', pathGlobs: ['other/*'] },
+    { name: ' Matching component ', include: ['private-*', 'private-*'], description: 'Source files' },
+    { name: 'Empty component', include: ['other/*'] },
   ], branch: 'report-branch' }));
-  const detailed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--title', 'Demo <"name">']);
+  const detailed = invoke(dir, ['report', 'html=private-viewer', '--source', 'none', '--title', 'Demo <"name">']);
   assert.equal(detailed.status, 0, detailed.stderr);
   const page = await readFile(join(dir, 'private-viewer', 'index.html'), 'utf8');
   assert.match(page, /name="repometry-view" content="private"/);
@@ -284,7 +285,7 @@ test('export writes the whole store without working trees and refuses to overwri
     [['Matching component', ['private-filename.ts']], ['Empty component', []]]);
   assert.equal(detail.inspection.diagnostics[0]?.message, 'private-diagnostic');
   await store.save({ ...report, generatedAt: '2026-11-21T00:00:00.000Z', diagnostics: [] });
-  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--sources', 'none', '--branch', 'explicit-branch']);
+  const refreshed = invoke(dir, ['report', 'html=private-viewer', '--source', 'none', '--branch', 'explicit-branch']);
   assert.equal(refreshed.status, 0, refreshed.stderr);
   const nextSummary = JSON.parse(await readFile(join(dir, 'private-viewer', 'summary.json'), 'utf8'));
   assert.notEqual(nextSummary.commits[0].detail, firstPath);
@@ -336,15 +337,15 @@ test('the command registry handles scoped help, suggestions, version and plugin 
   const help = invoke(directory, ['help', 'report']);
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /^Usage: repometry report/);
-  assert.match(help.stdout, /--sources/);
+  assert.match(help.stdout, /--source/);
   const unknown = invoke(directory, ['report', '--soruces', 'example']);
   assert.equal(unknown.status, 1);
-  assert.match(unknown.stderr, /Did you mean --sources/);
+  assert.match(unknown.stderr, /Did you mean --source/);
   assert.match(invoke(directory, ['--version']).stdout.trim(), /^\d+\.\d+\.\d+/);
   const listing = JSON.parse(invoke(directory, ['-C', directory, 'plugins']).stdout);
   assert.ok(listing.importers.includes('sarif-secrets'));
   assert.ok(listing.importers.includes('cobertura'));
-  assert.ok(listing.plugins.some((plugin: { id: string; kinds: string[] }) => plugin.id === 'github' && plugin.kinds.includes('source')));
+  assert.ok(listing.plugins.some((plugin: { id: string; category: string }) => plugin.id === 'github' && plugin.category === 'source'));
 });
 
 test('report validates separate destinations and the default output is under the store workspace', async t => {

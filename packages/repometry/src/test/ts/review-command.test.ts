@@ -95,13 +95,13 @@ test('renaming a file and moving a function within a file add no new issues', as
   assert.deepEqual(result.review?.issues.filter(issue => issue.effect === 'new'), []);
 });
 
-test('editing the settings adds a note', async t => {
+test('editing the configuration adds a note', async t => {
   const root = await project(t, { 'src/run.js': branchy('run', 3), 'repometry.config.json': '{ "exclude": [] }\n' });
   await change(root, { 'repometry.config.json': '{ "exclude": ["docs/**"] }\n' });
   const result = review(root);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.review?.notes.map(note => note.message),
-    ['This change edits Repometry settings, which can hide issues from this check.']);
+    ['This change edits the Repometry configuration, which can hide issues from this check.']);
 });
 
 test('review measures the same changed lines from Cobertura and LCOV', async t => {

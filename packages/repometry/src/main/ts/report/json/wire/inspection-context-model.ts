@@ -1,4 +1,9 @@
-import type { FindingIgnoreRule } from '@repometry/core/internal/model/ignore-rule.js';
+export interface IgnoreView {
+  readonly tool?: string;
+  readonly rule?: string;
+  readonly path?: string;
+  readonly reason?: string;
+}
 
 export type ProfileBoundary = 'changed' | 'unavailable';
 
@@ -13,5 +18,5 @@ export interface InspectionContext {
   /** Sensitive findings by severity; critical appears once the scanners' severity scores are read for it. */
   readonly security?: { readonly critical?: number; readonly low: number; readonly medium: number; readonly high: number; readonly unknown: number };
   readonly scanners?: readonly { readonly name: string; readonly version: string | null }[];
-  readonly ignores?: { readonly rules: readonly FindingIgnoreRule[]; readonly count: number };
+  readonly ignores?: { readonly rules: readonly IgnoreView[]; readonly count: number };
 }

@@ -1,25 +1,4 @@
-export { pluginApi } from '@repometry/core';
-export { plan } from '@repometry/core';
-export type { InputBinding, PlanRequest, PlannedOperation } from '@repometry/core';
-export { execute } from '@repometry/core';
-export type { Outcome } from '@repometry/core';
-export type { DataContract, InspectionInputs, Operation, Plugin, PluginConfigSchema, Product, RuleDescriptor } from '@repometry/core';
-export type { FileClaims, MetricDescriptor, MetricScope, PluginKind, ProductDeclaration } from '@repometry/core';
-export { LocalOperationCache } from './report/json/store/operation-cache.js';
-export type { OperationCache, OperationCacheOptions } from '@repometry/core';
-export { codeStructure, codeStructures } from '@repometry/core';
-export type { CodeStructure, FunctionComplexity, StructureMeasure, StructuralCheck, StructuralObservation } from '@repometry/core';
-export type { LanguageDisplay, LanguageSyntax, ProvidedLanguage } from '@repometry/core';
-export type { Candidate, CloneSource } from '@repometry/core';
-export { sourceFile, sourceFiles } from '@repometry/core';
-export type { InventoryFile, SourceFile, SourceSnapshot } from '@repometry/core';
-export { measurements } from '@repometry/core';
-export type { Measurement } from '@repometry/core';
-export { findingResult } from '@repometry/core';
-export type { Finding, FindingLocation, FindingResult } from '@repometry/core';
-export type { SourceContext, SourcePlugin, SourceProvider } from '@repometry/core';
-export type { ToolInvocation, ToolResult, ToolRunner } from '@repometry/core';
-export { DockerToolRunner } from './api/process/docker-tool-runner.js';
-export type { DockerToolLimits } from './api/process/docker-tool-runner.js';
-export { processPlugin, processPluginProtocol } from './api/process/plugin.js';
-export type { ProcessOperation, ProcessPluginManifest } from './api/process/plugin.js';
+export { codeStructure, codeStructures, findingResult, measurements, pluginManifestSchema, sourceFile, sourceFiles } from '@repometry/core';
+export type { Candidate, Check, CloneSource, CodeStructure, DataContract, Finding, FindingLocation, FindingResult, FunctionComplexity,
+  InspectionInputs, LanguageDisplay, LanguageSyntax, Measurement, MetricDescriptor, MetricScope, Operation, PluginCategory,
+  PluginManifest, ProductOutput, SourceFile, StructuralCheck, StructuralObservation } from '@repometry/core';

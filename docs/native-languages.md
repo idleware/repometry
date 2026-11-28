@@ -4,7 +4,7 @@ Repometry parses Go and Python with the built-in `tree-sitter` plugin. It runs t
 
 The plugin ID is `tree-sitter`, its operation is `tree-sitter/parse`, and it provides the languages `go` and `python`. A grammar loads when the first file of its language is parsed. Repometry does not load a grammar for a language the repository does not contain.
 
-A [configured language plugin](process-plugins.md) that provides `go` or `python` does not replace the built-in parser by itself. Both providers compete for the language, so the config needs a `parsers` line that chooses between them, or lists them in order of preference. [Parsers](cli.md#parsers) gives the rule. [Write a plugin](plugins.md#languages) lists the rules for language providers.
+A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin](plugins.md#languages) that provides `go` or `python` does not replace the built-in parser by itself. Both providers compete for the language, so the config needs a `parsers` line that chooses between them, or lists them in order of preference. [Parsers](cli.md#parsers) gives the rule. [Write a plugin](plugins.md#languages) lists the fields of a language.
 
 ## Measurements
 
@@ -14,7 +14,7 @@ Both languages report physical code and comment lines and cyclomatic and cogniti
 | --- | --- | --- |
 | Label and colour | Go, `#00add8` | Python, `#3572a5` |
 | Files | `.go` | `.py` |
-| Measures | functions, cyclomatic and cognitive complexity, comment and code lines, structural rules, duplication | the same, and classes |
+| Measures | functions, cyclomatic and cognitive complexity, comment and code lines, structural checks, duplication | the same, and classes |
 | Columns | 1-based lines, byte columns | 1-based lines, Unicode code-point columns |
 | Source encoding | UTF-8 | The encoding declaration of PEP 263, or UTF-8 |
 
@@ -116,7 +116,7 @@ An inspection records the plugins and grammars that took part. The profile cover
 
 - the parser plugins that parsed at least one file;
 - the grammars those plugins used, by name and version, such as `tree-sitter-go` `0.25.0`;
-- the file selectors, extensions and globs, of the languages the repository contains.
+- the file selectors, the `include` globs, of the languages the repository contains.
 
 Adding or updating a grammar for a language the repository does not contain does not change its profile. A change in a grammar a repository uses does. Trends then shows an "Inspection profile changed" mark, and no trend delta crosses it.
 
@@ -145,6 +145,6 @@ Line hits come from each class's `<lines>`. Branches come from the `condition-co
 ## Upgrading from 0.12 or earlier
 
 - Profile. New inspections record the profile `repository/v4`. The first inspection made with this version starts a new profile for every repository, so Trends shows one "Inspection profile changed" mark. Saved reports keep their profiles.
-- Plugin IDs. The IDs `go-ast` and `python-ast` do not exist. A `parsers` entry that names one fails with `Config parsers/go/0 names unknown plugin go-ast; go is provided by tree-sitter`. Name `tree-sitter`, or remove the entry when no other plugin provides the language.
+- Plugin IDs. The IDs `go-ast` and `python-ast` do not exist. A `parsers` entry that names one fails with `parsers/go/0 names unknown plugin go-ast; go is provided by tree-sitter`. Name `tree-sitter`, or remove the entry when no other plugin provides the language.
 - Duplication anchors. Go and Python duplication findings have new anchors. Update every `ignore` rule that uses one.
 - Cache. `repometry cache clear` also removes the compiled Go parser that earlier versions left in the system cache.

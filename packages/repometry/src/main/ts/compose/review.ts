@@ -30,9 +30,9 @@ export interface ReviewRequest extends ReviewOptions, CoverageInputs {
   readonly plugins?: readonly Plugin[];
   readonly parsers?: ParserOrder;
   /** The settings that shaped both inspections, which keeps the second one's reuse of unchanged files honest. */
-  readonly settings?: unknown;
+  readonly profile?: unknown;
   /** The settings file's repository path; a change to it is noted. */
-  readonly settingsPath?: string;
+  readonly profilePath?: string;
 }
 
 /**
@@ -52,17 +52,17 @@ export async function review(request: ReviewRequest): Promise<PullReview> {
   const mergeBase = await findMergeBase(directory, requested, head);
   const output = await mkdtemp(join(tmpdir(), 'repometry-review-'));
   try {
-    const history = new HistoryCache(request.settings);
+    const history = new HistoryCache(request.profile);
     const inspectCommit = (id: string, coverage: boolean) => inspectWithOptions({ directory, output, source: { revision: id }, exclude, ignore, plugins, parsers,
       ...coverage ? inputs : {} }, { history, deferSummary: true, recordChurn: false });
     const base = await inspectCommit(mergeBase, false);
     const headReport = await inspectCommit(head, true);
     const changes = await readLineChanges(directory, mergeBase, head);
     const coverage = withCoverage
-      ? await measureChangedLines({ directory, base: mergeBase, revision: head, ...inputs, exclude, plugins, parsers }) : null;
+      ? await measureChangedLines({ directory, base: mergeBase, revision: head, ...inputs, exclude, ignore, plugins, parsers }) : null;
     const sources = { base: await sourceLines(directory, mergeBase, changes, 'previous'), head: await sourceLines(directory, head, changes, 'path') };
-    const settingsChanged = request.settingsPath !== undefined
-      && changes.files.some(file => file.path === request.settingsPath || file.previous === request.settingsPath);
+    const settingsChanged = request.profilePath !== undefined
+      && changes.files.some(file => file.path === request.profilePath || file.previous === request.profilePath);
     return projectReview(request, { requestedBase: request.base, base, head: headReport, changes, sources, coverage, settingsChanged });
   } finally {
     await rm(output, { recursive: true, force: true });

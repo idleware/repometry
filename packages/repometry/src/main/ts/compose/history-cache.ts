@@ -1,3 +1,4 @@
+import { pluginScope } from './plugin-scope.js';
 import { GitBlobHistory } from '../api/git/blob-history.js';
 import type { Outcome } from '@repometry/core/internal/engine/execute.js';
 import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
@@ -58,8 +59,9 @@ export function historyProfile(input: AnalysisInput, sources: AnalysisSources, o
     sources.languages.providers.map(({ plugin }) => sources.languages.describe(plugin).providesLanguages?.map(({ id }) => id))]);
 }
 
-function pluginIdentity({ operations, ...manifest }: Plugin) {
-  return { ...manifest, operations: operations.map(({ execute, inputs, output, ...operation }) => ({ ...operation,
+function pluginIdentity(plugin: Plugin) {
+  const { operations, ...manifest } = plugin;
+  return { ...manifest, ...pluginScope(plugin), operations: operations.map(({ execute, inputs, output, ...operation }) => ({ ...operation,
     inputs: Object.entries(inputs).map(([port, contract]) => [port, contract.id]), output: output.id,
     implementation: operation.implementation ?? execute.toString(),
   })) };

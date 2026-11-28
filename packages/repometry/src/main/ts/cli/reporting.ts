@@ -3,14 +3,14 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { commitMetadataReader } from '../api/git/commit-metadata.js';
 import { readLocalSources, sourceRemotes } from '../api/git/local-sources.js';
-import { defaultLanguages, languageRegistry } from '../compose/languages.js';
+import { defaultLanguages } from '../compose/languages.js';
 import { resolveSourceLocator } from '../compose/sources.js';
 import { commitSummary, withCommitMetadata } from '../report/json/projections/commit-summary.js';
 import { exportSite, siteSummary } from '../report/html/site/export-site.js';
 import { readExportedSummary, serveExportedSite } from '../report/html/site/exported-server.js';
 import { serveSite } from '../report/html/site/local-server.js';
 import { listPullReviews } from '../report/json/store/pull-review-store.js';
-import { readConfig } from './config.js';
+import { readDisplayConfig } from './config.js';
 import type { Invocation } from './arguments.js';
 import { findRepository, invocationDirectory, isDirectory, selectStore } from './store.js';
 import type { Store } from './store.js';
@@ -18,11 +18,7 @@ import type { Store } from './store.js';
 const reporters = { html: '.repometry/report/html', json: '.repometry/report/summary.json' } as const;
 export const reporterIds = Object.keys(reporters);
 
-type Config = Awaited<ReturnType<typeof readConfig>>;
-
-function reportLanguages({ plugins, parsers }: Config) {
-  return plugins.length || parsers ? languageRegistry(plugins, parsers) : defaultLanguages;
-}
+type Config = Awaited<ReturnType<typeof readDisplayConfig>>;
 
 export async function outputReports(root: string, store: Store, input: Invocation, config: Config) {
   const typed = input.args.length > 0;
@@ -41,10 +37,10 @@ export async function outputReports(root: string, store: Store, input: Invocatio
   if (new Set(requests.map(request => request.path)).size !== requests.length) throw new Error('Each report requires a separate output');
   const repository = await findRepository(root);
   const readCommitMetadata = repository === undefined ? undefined : commitMetadataReader(repository);
-  const sourceOption = input.text('sources') ?? config.sources;
+  const sourceOption = input.text('source') ?? config.source;
   const sources = resolveSourceLocator(sourceOption, { remotes: await sourceRemotes(root), env: process.env });
   const pulls = store.path ? await listPullReviews(store.path) : [];
-  const options = { languages: reportLanguages(config), sources,
+  const options = { languages: defaultLanguages, sources,
     components: config.components, pulls, readCommitMetadata, branch: input.text('branch') ?? config.branch,
     title: input.text('title') ?? basename(root) };
   for (const request of requests) {
@@ -78,19 +74,24 @@ export async function viewTarget(input: Invocation, port: number) {
     const local = exported.sources?.provider === 'local' && repository ? readLocalSources(repository) : undefined;
     return { ...await serveExportedSite(target, port, local), label: target + ' (exported report)' };
   }
-  const data = resolve(target, 'data');
-  const dataStore = basename(target) === '.repometry' && await isDirectory(data);
-  const directStore = await isDirectory(resolve(target, 'commits'));
-  if (!repository && !dataStore && !directStore && storeOption === undefined) {
-    throw new Error(`No report at ${target}: expected a repository, a .repometry folder or an exported report`);
-  }
   const root = repository ?? target;
-  const store = selectStore(root, storeOption ?? (dataStore ? data : directStore ? target : undefined), invocationDirectory(input));
-  if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error(`No saved inspections in ${store.path ?? storeOption}. Run repometry analyze first.`);
-  const [pulls, config] = await Promise.all([store.path ? listPullReviews(store.path) : [], readConfig(root, input)]);
+  const store = await liveStore(root, target, storeOption, input, repository !== undefined);
+  const [pulls, config] = await Promise.all([store.path ? listPullReviews(store.path) : [], readDisplayConfig(root, input)]);
   const local = repository ? readLocalSources(repository) : undefined;
-  const server = await serveSite(store.reader, port, { languages: reportLanguages(config), title: input.text('title') ?? basename(root), components: config.components, pulls,
+  const server = await serveSite(store.reader, port, { languages: defaultLanguages, title: input.text('title') ?? basename(root), components: config.components, pulls,
     branch: input.text('branch') ?? config.branch, readCommitMetadata: repository ? commitMetadataReader(repository) : undefined,
     sources: local ? resolveSourceLocator('local', { remotes: [], env: {} }) : undefined }, local);
   return { ...server, label: `${basename(root)} (live from ${store.path ?? storeOption})` };
+}
+
+async function liveStore(root: string, target: string, storeOption: string | undefined, input: Invocation, inRepository: boolean) {
+  const data = resolve(target, 'data');
+  const dataStore = basename(target) === '.repometry' && await isDirectory(data);
+  const directStore = await isDirectory(resolve(target, 'commits'));
+  if (!inRepository && !dataStore && !directStore && storeOption === undefined) {
+    throw new Error(`No report at ${target}: expected a repository, a .repometry folder or an exported report`);
+  }
+  const store = selectStore(root, storeOption ?? (dataStore ? data : directStore ? target : undefined), invocationDirectory(input));
+  if ((await store.reader.listSummaries?.() ?? []).length === 0) throw new Error(`No saved inspections in ${store.path ?? storeOption}. Run repometry analyze first.`);
+  return store;
 }

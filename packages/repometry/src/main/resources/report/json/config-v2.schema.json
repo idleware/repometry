@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:config:2",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "exclude": {
+      "$ref": "#/$defs/strings"
+    },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "category": {
+            "enum": [
+              "maintainability",
+              "coverage",
+              "security"
+            ]
+          },
+          "plugin": {
+            "type": "string",
+            "pattern": "^(?=[^\\r\\n\\u0000]*\\S)[^\\r\\n\\u0000]+$"
+          },
+          "check": {
+            "type": "string",
+            "pattern": "^(?=[^\\r\\n\\u0000]*\\S)[^\\r\\n\\u0000]+$"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?=[^\\r\\n\\u0000]*\\S)[^\\r\\n\\u0000]+$"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?=[^\\r\\n\\u0000]*\\S)[^\\r\\n\\u0000]+$"
+                }
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^(?=[^\\r\\n\\u0000]*\\S)[^\\r\\n\\u0000]+$"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "category"
+            ]
+          },
+          {
+            "required": [
+              "plugin"
+            ]
+          },
+          {
+            "required": [
+              "check"
+            ]
+          },
+          {
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "category"
+              ],
+              "properties": {
+                "category": {
+                  "const": "coverage"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "check": false,
+                "plugin": {
+                  "const": "lcov"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "imports": {
+      "$ref": "#/$defs/strings"
+    },
+    "reports": {
+      "$ref": "#/$defs/strings"
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "include"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "description": {
+            "type": "string"
+          },
+          "include": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(?![A-Za-z]:)(?:(?!\\.{1,2}(?:/|$))[^/\\\\\\u0000]+/)*(?!\\.{1,2}$)[^/\\\\\\u0000]+$"
+            }
+          }
+        }
+      }
+    },
+    "minCoverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "minLines": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxNewIssues": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pluginReference"
+      }
+    },
+    "parsers": {
+      "description": "Parser plugin IDs in availability order for each language ID.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "pluginReference": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        {
+          "type": "object",
+          "required": [
+            "use"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "use": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "options": true,
+            "include": {
+              "$ref": "#/$defs/strings"
+            },
+            "exclude": {
+              "$ref": "#/$defs/strings"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

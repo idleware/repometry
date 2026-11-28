@@ -34,7 +34,9 @@ The rest of the object has three fields:
 - `tree` is the ID of the root directory object.
 - `report` is the report, with schema `urn:repometry:schema:report:2`, without the parts kept in objects.
 
-In `report`, `appliedConfig` keeps only `churnWindow`, the setting that describes this commit's Git history. `definitions` is `null`, and so is every entry of `pluginData` other than `products` and `inventory`. The profile object holds their values.
+In `report`, `appliedConfig` keeps only `churnWindow`, the value that describes this commit's Git history. `definitions` is `null`, and so is every entry of `pluginData` other than `products` and `inventory`. The profile object holds their values.
+
+The report keeps some field names that differ from the terms of the [configuration](cli.md#configuration) and of [Write a plugin](plugins.md). A finding names its plugin in `tool` and its check in `rule`, and so does an entry of `appliedConfig.findingIgnore`. `ruleSkips` lists the skipped checks. A plugin's entry in `appliedConfig.plugins` has `api` for the manifest `schema`, `kinds` for the `category`, `claims` for `include`, `settings` for the `options` and `providesLanguages` for `languages`. The names stay as they are so that every saved report stays readable.
 
 The row lists are `measurements`, `findings`, `ruleSkips`, `pluginData.inventory` and each list under `pluginData.products`. A row that names no file stays in the list as it is. Rows of files are replaced by `[first, count]` entries. An entry stands for `count` consecutive files starting at index `first` in the sorted list of the tree's file paths, and each of those files contributes its next run of rows for that list. Expanding the entries in order gives the rows in their saved order. Paths sort by UTF-16 code units.
 
@@ -51,7 +53,7 @@ The folder under `objects/` is the first two digits of the path hint, so every v
 
 Reading a commit's report checks the rebuilt report against the `revision` in its summary row. `store check` also checks each object against its content ID. Nothing checks the path hint.
 
-There are three kinds of objects:
+There are three types of objects:
 
 - A profile object is `{"appliedConfig": …, "definitions": …, "catalog": …}`. It holds the applied configuration with `churnWindow` set to `null`, the metric definitions, and the `pluginData` catalog entries when the report has plugin data. Commits with the same configuration, definitions and catalog share it. The applied configuration is the profile: it lists the plugins that took part, their tools with versions, and the file selectors of the languages present. A parser plugin counts only when it parsed a file, and its `tools` list only the grammars it used, such as `tree-sitter-go`. A change to any of these starts a new profile, and the viewer marks it in Trends. [Go and Python analysis](native-languages.md#profile) gives an example.
 - A directory object is an array of `[name, entry]` pairs sorted by name. A subdirectory's name ends with `/`, and its entry is the ID of its directory object. A file's entry is an object with an optional `inventory`, the file's inventory rows, and an optional `data`, the ID of its data object.
@@ -104,7 +106,7 @@ Before 0.8.0, a commit's report file held the whole report and referred to no ob
 - `strings` lists the strings, and `shapes` lists the key lists of objects.
 - In `data`, `null`, booleans and numbers stand for themselves. `[0, i]` is string `i`, `[1, …]` is an array, and `[k, …]` with `k` of 2 or more is an object with the keys of shape `k − 2`.
 
-Repometry reads these files as they are, and no command rewrites them. It also reads a file that holds a plain report with schema `urn:repometry:schema:report:2`. A store can mix all kinds. Analysing such a commit again without `--skip-saved` saves its report in the current layout.
+Repometry reads these files as they are, and no command rewrites them. It also reads a file that holds a plain report with schema `urn:repometry:schema:report:2`. A store can mix all types. Analysing such a commit again without `--skip-saved` saves its report in the current layout.
 
 ## Checking a store
 

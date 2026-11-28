@@ -4,23 +4,28 @@ import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import { normalizeProfile } from '@repometry/core/internal/profile/profile.js';
 import type { Component } from '../report/json/wire/component-model.js';
 import type { Invocation } from './arguments.js';
-import { readProcessPlugins } from '../compose/process-plugins.js';
+import { readPluginReferences } from '../compose/plugin-reference.js';
+import { loadPlugins } from '../compose/load-plugins.js';
 import { languageRegistry } from '../compose/languages.js';
-import { readParserOrder } from '../compose/parser-order.js';
+import { registeredPlugins } from '../compose/built-ins.js';
+import { readParserOrder, selectParsers } from '../compose/parser-order.js';
 import { invocationDirectory } from './store.js';
 
-const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'sources', 'branch',
+const keys = new Set(['$schema', 'exclude', 'ignore', 'imports', 'reports', 'source', 'branch',
   'minCoverage', 'minLines', 'maxNewIssues', 'plugins', 'components', 'parsers']);
 
 export function parseConfig(value: unknown) {
-  if (!isRecord(value) || Object.keys(value).some(key => !keys.has(key))) throw new Error('Invalid Repometry JSON configuration');
+  if (!isRecord(value)) throw new Error('Config must be an object');
+  if (Object.hasOwn(value, 'sources')) throw new Error('Config sources is renamed. Write source.');
+  const unknown = Object.keys(value).find(key => !keys.has(key));
+  if (unknown !== undefined) throw new Error('Config /' + unknown + ' is not a supported field');
   string(value.$schema, '$schema');
   const profile = normalizeProfile({ exclude: value.exclude, ignore: value.ignore });
-  const plugins = readProcessPlugins(value.plugins);
+  const plugins = readPluginReferences(value.plugins);
   const parsers = readParserOrder(value.parsers, 'Config parsers');
-  if (plugins.length || parsers !== undefined) languageRegistry(plugins, parsers, 'Config parsers');
+  if (!plugins.length && parsers !== undefined) languageRegistry([], parsers, 'Config parsers');
   return { ...profile, plugins, parsers, imports: list(value.imports, 'imports'), reports: list(value.reports, 'reports'),
-    sources: string(value.sources, 'sources'), branch: string(value.branch, 'branch'),
+    source: string(value.source, 'source'), branch: string(value.branch, 'branch'),
     components: parseComponents(value.components),
     minCoverage: number(value.minCoverage, 'minCoverage', 100), minLines: number(value.minLines, 'minLines'),
     maxNewIssues: number(value.maxNewIssues, 'maxNewIssues') };
@@ -36,8 +41,35 @@ export function configFile(root: string, input: Invocation): string | undefined 
   return explicit === undefined ? resolve(root, 'repometry.config.json') : resolve(invocationDirectory(input), explicit);
 }
 
-export async function readConfig(root: string, input: Invocation) {
-  return parseConfig(await readConfigValue(root, input));
+export async function readConfig(root: string, input: Invocation, metadataOnly = false) {
+  return loadConfig(await readConfigValue(root, input), root, configFile(root, input), metadataOnly);
+}
+
+export async function readDisplayConfig(root: string, input: Invocation) {
+  const value = await readConfigValue(root, input);
+  try {
+    return parseConfig(value);
+  } catch (error) {
+    throw configurationError(configFile(root, input), error);
+  }
+}
+
+export async function loadConfig(value: unknown, root: string, file: string | undefined, metadataOnly = false) {
+  try {
+    const { plugins: references, ...config } = parseConfig(value);
+    const plugins = await loadPlugins(references, root, file, metadataOnly);
+    if (metadataOnly) selectParsers(registeredPlugins(plugins), config.parsers, 'Config parsers');
+    else if (plugins.length) languageRegistry(plugins, config.parsers, 'Config parsers');
+    return { ...config, plugins };
+  } catch (error) {
+    throw configurationError(file, error);
+  }
+}
+
+function configurationError(file: string | undefined, error: unknown): unknown {
+  if (file === undefined) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(file + ': ' + message.replace(/^Config /, ''), { cause: error });
 }
 
 export async function readConfigValue(root: string, input: Invocation): Promise<unknown> {
@@ -49,9 +81,13 @@ export async function readConfigValue(root: string, input: Invocation): Promise<
     json = await readFile(file, 'utf8');
   } catch (error) {
     if (explicit === undefined && error instanceof Error && 'code' in error && error.code === 'ENOENT') return {};
-    throw error;
+    throw configurationError(file, error);
   }
-  return JSON.parse(json) as unknown;
+  try {
+    return JSON.parse(json) as unknown;
+  } catch (error) {
+    throw configurationError(file, error);
+  }
 }
 
 export function listOption(input: Invocation, name: string, configured: readonly string[]): readonly string[] {
@@ -73,28 +109,40 @@ function string(value: unknown, key: string): string | undefined {
 
 function number(value: unknown, key: string, max?: number): number | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'number' || value < 0 || (max === undefined
-    ? !Number.isSafeInteger(value) : !Number.isFinite(value) || value > max)) {
-    throw new Error('Invalid config ' + key + (max === undefined ? ': expected a non-negative integer' : ': expected a number from 0 to ' + max));
+  const valid = typeof value === 'number' && value >= 0
+    && (max === undefined ? Number.isSafeInteger(value) : value <= max);
+  if (!valid) {
+    const expected = max === undefined ? 'a non-negative integer' : 'a number from 0 to ' + max;
+    throw new Error('Config ' + key + ' must be ' + expected);
   }
   return value;
 }
 
 function parseComponents(config: unknown): readonly Component[] {
   if (config === undefined) return [];
-  if (!Array.isArray(config)) throw new Error('Expected an array of component definitions');
+  if (!Array.isArray(config)) throw new Error('Config components must be an array');
   const names = new Set<string>();
-  return config.map((entry: unknown) => {
-    if (!isRecord(entry) || typeof entry.name !== 'string' || !entry.name.trim() || entry.name.length > 100
-      || !Array.isArray(entry.pathGlobs) || entry.pathGlobs.length === 0 || !entry.pathGlobs.every(validPattern)
-      || (entry.description !== undefined && typeof entry.description !== 'string')) {
-      throw new Error('Each component requires a name and one or more root-relative pathGlobs');
-    }
-    const name = entry.name.trim();
-    if (names.has(name)) throw new Error(`Duplicate component name: ${name}`);
+  return config.map((entry: unknown, index: number) => {
+    const base = 'Config components/' + index;
+    const { name, include, description } = componentFields(entry, base);
+    if (names.has(name)) throw new Error(base + '/name duplicates ' + name);
     names.add(name);
-    return { name, pathGlobs: [...new Set(entry.pathGlobs)], description: entry.description };
+    return { name, pathGlobs: [...new Set(include)], description };
   });
+}
+
+function componentFields(entry: unknown, base: string) {
+  if (!isRecord(entry)) throw new Error(base + ' must be an object');
+  if (Object.hasOwn(entry, 'pathGlobs')) throw new Error(base + '/pathGlobs is renamed. Write include.');
+  const unknown = Object.keys(entry).find(key => !['name', 'include', 'description'].includes(key));
+  if (unknown !== undefined) throw new Error(base + '/' + unknown + ' is not a supported field');
+  const { name, include, description } = entry;
+  if (typeof name !== 'string' || !name.trim() || name.length > 100) throw new Error(base + '/name must be between 1 and 100 characters');
+  if (!Array.isArray(include) || include.length === 0 || !include.every(validPattern)) {
+    throw new Error(base + '/include must specify repository-relative include globs');
+  }
+  if (description !== undefined && typeof description !== 'string') throw new Error(base + '/description must be a string');
+  return { name: name.trim(), include: include as readonly string[], description };
 }
 
 function validPattern(pattern: unknown): pattern is string {

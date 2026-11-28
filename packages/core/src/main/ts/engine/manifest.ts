@@ -36,7 +36,7 @@ export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDec
     products.set(contract, declaration);
   }
   const undeclared = rules?.find(rule => rule.measure !== undefined && !catalog.has(rule.measure));
-  if (undeclared) throw new Error(`Rule ${undeclared.id} in plugin ${id} references undeclared metric ${undeclared.measure}`);
+  if (undeclared) throw new Error(`Check ${undeclared.id} in plugin ${id} references undeclared metric ${undeclared.measure}`);
   for (const metric of catalog.values()) {
     if (!metric.ratio) continue;
     const invalid = [metric.ratio.of, metric.ratio.over].find(component =>
@@ -49,24 +49,24 @@ export function manifestProducts(plugin: Plugin): ReadonlyMap<string, ProductDec
 function manifestDeclarations(plugin: Plugin) {
   const { id, kinds: declaredKinds, claims, providesLanguages, produces, rules, config } = plugin;
   if (declaredKinds === undefined && claims === undefined && providesLanguages === undefined && produces === undefined) {
-    throw new Error(`Missing plugin manifest for ${id}. Declare kinds and produces.`);
+    throw new Error(`Missing plugin manifest for ${id}. Declare its category and products.`);
   }
-  if (Object.hasOwn(plugin, 'languages')) throw new Error(`Plugin ${id} must declare languages in claims.languages`);
+  if (Object.hasOwn(plugin, 'languages')) throw new Error(`Plugin ${id} must pass its language declarations through the manifest loader`);
   if (!strings(declaredKinds) || declaredKinds.length === 0 || declaredKinds.some(kind => !kinds.has(kind))) {
-    throw new Error(`Invalid kinds for plugin ${id}`);
+    throw new Error(`Invalid categories for plugin ${id}`);
   }
   if (claims !== undefined && (!isRecord(claims) || Object.entries(claims).some(([key, values]) =>
     key === 'scanOnly' ? typeof values !== 'boolean'
     : !['extensions', 'globs', 'languages'].includes(key) || !strings(values)
     || (key === 'extensions' && !values.every(isExtension))))) {
-    throw new Error(`Invalid file claims for plugin ${id}`);
+    throw new Error(`Invalid file selection for plugin ${id}`);
   }
   if (providesLanguages !== undefined && (!declaredKinds.includes('language') || !validLanguages(providesLanguages))) {
     throw new Error(`Invalid provided languages for plugin ${id}`);
   }
   if (!Array.isArray(produces)) throw new Error(`Plugin ${id} must declare its products`);
   if (rules !== undefined && (!Array.isArray(rules) || !rules.every(isRuleDescriptor)
-    || new Set(rules.map(rule => rule.id)).size !== rules.length)) throw new Error(`Invalid or duplicate rules for plugin ${id}`);
+    || new Set(rules.map(rule => rule.id)).size !== rules.length)) throw new Error(`Invalid or duplicate checks for plugin ${id}`);
   if (config !== undefined && typeof config !== 'boolean' && !isRecord(config)) throw new Error(`Invalid configuration schema for plugin ${id}`);
   return { id, produces, rules };
 }

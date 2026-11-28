@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:repometry:schema:plugin:1",
+  "title": "Repometry plugin manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "category"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "version": {
+      "$ref": "#/$defs/text"
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.:/@_-]*$"
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[^\\u0000]*$"
+      }
+    },
+    "scope": {
+      "enum": [
+        "file",
+        "repository"
+      ]
+    },
+    "fileIndependent": {
+      "type": "boolean",
+      "description": "Each file's results and diagnostics are independent of the other files supplied to a repository parser."
+    },
+    "include": {
+      "$ref": "#/$defs/globs"
+    },
+    "exclude": {
+      "$ref": "#/$defs/globs"
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "maxOutputBytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "memoryBytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "pidsLimit": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "include"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "syntax": {
+            "$ref": "#/$defs/syntax"
+          },
+          "measures": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "functions",
+                "cyclomaticComplexity",
+                "cognitiveComplexity",
+                "classes",
+                "commentLines",
+                "codeLines",
+                "duplication",
+                "checks"
+              ]
+            }
+          },
+          "include": {
+            "$ref": "#/$defs/globs"
+          }
+        }
+      }
+    },
+    "optionsSchema": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/text"
+        },
+        "repometry": {
+          "$ref": "#/$defs/text"
+        },
+        "tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\s/\\\\\\u0000]+$"
+          }
+        }
+      }
+    },
+    "schema": {
+      "const": "urn:repometry:schema:plugin:1"
+    },
+    "category": {
+      "enum": [
+        "language",
+        "source",
+        "maintainability",
+        "coverage",
+        "security"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/text"
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          },
+          "measure": {
+            "$ref": "#/$defs/text"
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "limit": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cost": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "per": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "syntax": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lineComments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syntax/$defs/marker"
+          }
+        },
+        "blockComments": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/syntax/$defs/marker"
+            }
+          }
+        },
+        "strings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "quote"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "quote": {
+                "$ref": "#/$defs/syntax/$defs/marker"
+              },
+              "multiline": {
+                "type": "boolean"
+              },
+              "raw": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "stringPrefixes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syntax/$defs/word"
+          }
+        },
+        "keywords": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/syntax/$defs/word"
+          }
+        },
+        "regexAfter": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syntax/$defs/word"
+          }
+        }
+      },
+      "$defs": {
+        "marker": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8,
+          "pattern": "^\\S+$"
+        },
+        "word": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][\\w$]*$"
+        }
+      }
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "text": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "globs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "const": "language"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "languages"
+        ]
+      },
+      "else": {
+        "properties": {
+          "languages": false
+        }
+      }
+    }
+  ]
+}

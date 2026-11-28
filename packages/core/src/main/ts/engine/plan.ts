@@ -89,9 +89,9 @@ function indexOperations(plugins: PlanRequest['plugins']) {
     ids.add(plugin.id);
     const products = manifestProducts(plugin);
     const hasSettings = plugin.settings !== undefined;
-    if (hasSettings && !isJsonValue(plugin.settings)) throw new Error(`Plugin settings must be JSON data: ${plugin.id}`);
+    if (hasSettings && !isJsonValue(plugin.settings)) throw new Error(`Plugin ${plugin.id} options must be JSON data`);
     if (hasSettings && plugin.config !== undefined && !new Ajv2020().validate(plugin.config, plugin.settings)) {
-      throw new Error(`Plugin settings violate the configuration schema: ${plugin.id}`);
+      throw new Error(`Plugin ${plugin.id} options do not match optionsSchema`);
     }
     for (const declaration of products.values()) {
       for (const metric of declaration.metrics ?? []) {

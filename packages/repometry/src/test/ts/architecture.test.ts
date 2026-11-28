@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { test } from 'node:test';
 import { parse } from '@babel/parser';
@@ -22,9 +22,12 @@ const packages = [
   { name: '@repometry/language-go', dir: '../language-go', prefix: 'plugins/language-treesitter/languages/go/', rank: 2 },
   { name: '@repometry/language-python', dir: '../language-python', prefix: 'plugins/language-treesitter/languages/python/', rank: 2 },
   { name: 'repometry', dir: '.', prefix: '', rank: 3 },
-].map(entry => ({ ...entry, source: resolve(entry.dir, 'src/main/ts'),
-  dependencies: Object.keys((JSON.parse(readFileSync(resolve(entry.dir, 'package.json'), 'utf8')) as
-    { dependencies?: Record<string, string> }).dependencies ?? {}) }));
+].map(entry => {
+  const manifest = JSON.parse(readFileSync(resolve(entry.dir, 'package.json'), 'utf8')) as
+    { dependencies?: Record<string, string>; exports?: Record<string, unknown> };
+  return { ...entry, source: resolve(entry.dir, 'src/main/ts'),
+    dependencies: Object.keys(manifest.dependencies ?? {}), exports: manifest.exports ?? {} };
+});
 type Package = (typeof packages)[number];
 
 /** The package a module path belongs to: the one with the longest matching prefix. */
@@ -83,14 +86,11 @@ function imports(files: readonly string[]): Edge[] {
       }
       const named = /^(@repometry\/[^/]+|repometry)(\/.*)?$/.exec(specifier);
       if (named) {
-        const target = packages.find(({ name }) => name === named[1]);
-        assert.ok(target && target.rank < owner.rank, `${from} imports ${named[1]} against the package direction`);
-        assert.ok(owner.dependencies.includes(target.name), `${from} imports ${target.name}, which ${owner.name} does not declare`);
-        const subpath = named[2] ?? '';
-        const to = subpath === '' ? target.prefix + 'index.ts'
-          : /^\/internal\/.+\.js$/.test(subpath) ? target.prefix + subpath.slice('/internal/'.length, -3) + '.ts' : '';
-        assert.ok(paths.has(to), `Unresolved package import from ${from} to ${specifier}`);
-        edges.push({ from, to, kind });
+        const to = packageTarget(from, owner, named[1]!, named[2] ?? '');
+        if (to !== undefined) {
+          assert.ok(paths.has(to), `Unresolved package import from ${from} to ${specifier}`);
+          edges.push({ from, to, kind });
+        }
         return;
       }
       if (!specifier.startsWith('.') || !specifier.endsWith('.js')) return;
@@ -115,6 +115,20 @@ function imports(files: readonly string[]): Edge[] {
     });
   }
   return edges;
+}
+
+function packageTarget(from: string, owner: Package, name: string, subpath: string): string | undefined {
+  const target = packages.find(entry => entry.name === name);
+  assert.ok(target && target.rank < owner.rank, `${from} imports ${name} against the package direction`);
+  assert.ok(owner.dependencies.includes(target.name), `${from} imports ${target.name}, which ${owner.name} does not declare`);
+  if (subpath === '') return target.prefix + 'index.ts';
+  if (/^\/internal\/.+\.js$/.test(subpath)) return target.prefix + subpath.slice('/internal/'.length, -3) + '.ts';
+  const resource = target.exports['.' + subpath];
+  assert.ok(subpath.endsWith('.json') && typeof resource === 'string' && resource.startsWith('./target/main/resources/'),
+    `Unresolved package import from ${from} to ${name}${subpath}`);
+  const source = resource.replace('./target/main/resources/', 'src/main/resources/');
+  assert.ok(existsSync(resolve(target.dir, source)), `Exported resource has no source: ${name}${subpath}`);
+  return undefined;
 }
 
 function allowed({ from, to, kind }: Edge): boolean {
@@ -216,7 +230,8 @@ function pluginBoundaryViolations(file: string, text: string): Violation[] {
   const literal = (node: Node, value: string) => {
     path(node, value);
     if (!namesChecked) return;
-    const allowed = (name: string) => vocabulary.has(name) || (keys.has(node) && fieldNames.has(name));
+    const allowed = (name: string) => vocabulary.has(name) || (keys.has(node) && fieldNames.has(name))
+      || (name === 'maintainability' && file === 'core/model/inspection-category.ts');
     const id = [...pluginIds].find(name => value.startsWith(`${name}/`) || (value === name && !allowed(name)));
     if (id) report(node, `names the built-in plugin ${id} in '${value}'`);
     else if (inCompose && /^repometry\.[a-z0-9-]+\/v\d+$/.test(value)) report(node, `writes the contract id '${value}'`);

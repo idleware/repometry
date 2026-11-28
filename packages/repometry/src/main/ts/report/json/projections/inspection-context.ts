@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import { findingImportMethods } from '@repometry/core/internal/model/scanner-import.js';
 import { nativeScanners, securityCounts } from './security-summary.js';
+import { ignoreView } from './ignore-view.js';
 import { normalizeFindingIgnore } from '@repometry/core/internal/model/finding-ignore.js';
 import type { Report } from '../validation/report.js';
 import { comparePaths, digest } from '@repometry/core/internal/model/snapshot.js';
@@ -24,7 +25,7 @@ export function inspectionContext(report: Report): InspectionContext | undefined
 function ignoreContext(report: Report): Pick<InspectionContext, 'ignores'> {
   if (report.appliedConfig.findingIgnore === undefined) return {};
   try {
-    const rules = normalizeFindingIgnore(report.appliedConfig.findingIgnore);
+    const rules = ignoreView(normalizeFindingIgnore(report.appliedConfig.findingIgnore));
     return { ignores: { rules, count: report.ignoredFindings?.length ?? 0 } };
   } catch {
     return {};

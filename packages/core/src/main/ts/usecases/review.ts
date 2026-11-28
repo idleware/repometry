@@ -29,7 +29,7 @@ export interface ReviewInputs {
 
 export const coverageDefaults = { minimumPercent: 80, minimumLines: 20 } as const;
 const hostOperations = new Set(['git/churn', 'source/claims']);
-const settingsNote = 'This change edits Repometry settings, which can hide issues from this check.';
+const settingsNote = 'This change edits the Repometry configuration, which can hide issues from this check.';
 
 export function projectReview(options: ReviewOptions, inputs: ReviewInputs): PullReview {
   checkOptions(options, inputs.coverage !== null);

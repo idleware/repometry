@@ -1,5 +1,5 @@
 import { isRecord } from '../engine/plugin.js';
-import { normalizeFindingIgnore } from '../model/finding-ignore.js';
+import { readIgnoreRules } from './ignore.js';
 import { normalizeExclusions } from './exclusions.js';
 
 export function normalizeProfile(profile: unknown) {
@@ -7,5 +7,5 @@ export function normalizeProfile(profile: unknown) {
     throw new Error('Expected a JSON profile with optional exclude and ignore arrays');
   }
   return { exclude: normalizeExclusions(profile.exclude === undefined ? [] : profile.exclude),
-    ignore: normalizeFindingIgnore(profile.ignore === undefined ? [] : profile.ignore) };
+    ignore: readIgnoreRules(profile.ignore === undefined ? [] : profile.ignore) };
 }

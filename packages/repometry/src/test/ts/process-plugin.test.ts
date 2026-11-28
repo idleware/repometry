@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
-import { processPlugin, processPluginProtocol } from '../../main/ts/api/process/plugin.js';
+import { processPlugin, pluginRequestSchema } from '../../main/ts/api/process/plugin.js';
 import type { ProcessPluginManifest } from '../../main/ts/api/process/plugin.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
 import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
@@ -33,7 +33,7 @@ async function inspectFixture(t: { after(callback: () => Promise<void>): void },
   return inspect({ directory, output: join(directory, '.repometry'), source: { workingTree: true }, plugins: [processPlugin(plugin, runner)] });
 }
 
-test('process operations receive file identities and settings, and preserve diagnostics and results', async t => {
+test('process operations receive file identities and options, and preserve diagnostics and results', async t => {
   const location = { path: filePath, sha256: digest(fileText) };
   const warning = { kind: 'diagnostic', severity: 'warning', message: 'Partial fixture analysis' };
   const product = { kind: 'product', contract: measurements.id, value: [observation] };
@@ -42,7 +42,7 @@ test('process operations receive file identities and settings, and preserve diag
     assert.deepEqual(request.files.map(file => file.path), [filePath]);
     assert.equal(Buffer.from(request.files[0]!.bytes).toString(), fileText);
     assert.deepEqual(JSON.parse(Buffer.from(request.stdin!).toString()), {
-      protocol: processPluginProtocol, operation: 'fixture-process/count', settings: { factor: 2 },
+      schema: pluginRequestSchema, operation: 'fixture-process/count', options: { factor: 2 },
       files: [location], inputs: { source: { contract: sourceFile.id, file: location } },
     });
     const records = [
@@ -119,13 +119,13 @@ test('a repository-scoped JSON Lines process plugin returns both file results th
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
     const value = input.inputs.files.files.map(({ path }) => ({
       definition: ${JSON.stringify(metric.id)}, target: 'file', path,
-      value: fs.readFileSync(path, 'utf8') ? input.settings.factor : 0,
+      value: fs.readFileSync(path, 'utf8') ? input.options.factor : 0,
     }));
     process.stdout.write(JSON.stringify({ kind: 'product', contract: ${JSON.stringify(measurements.id)}, value }) + '\\n');
   `;
   const plugin = { ...manifest, operations: [{ ...manifest.operations[0]!, argv: ['node', '-e', source],
     scope: 'repository' as const, inputs: { files: sourceFiles } }] };
   const report = await inspectFixture(t, new DockerToolRunner(image!), plugin, [[filePath, fileText], ['second.txt', 'second']]);
-  assert.equal(report.status, 'complete');
+  assert.equal(report.status, 'complete', JSON.stringify(report.diagnostics));
   assert.deepEqual(report.measurements.filter(row => row.definition === metric.id), [observation, { ...observation, path: 'second.txt' }]);
 });

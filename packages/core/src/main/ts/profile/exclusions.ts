@@ -22,14 +22,14 @@ export function isGeneratedSource(bytes: Uint8Array): boolean {
   return lines.reduce((sum, line) => sum + line.length, 0) > lines.length * generatedSourcePolicy.minMeanLineLength;
 }
 
-export function normalizeExclusions(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) throw new Error('Profile exclude must be an array of repository-relative paths or globs');
+export function normalizeExclusions(value: unknown, field = 'Profile exclude'): readonly string[] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array of repository-relative paths or globs`);
   const patterns = new Set<string>();
-  for (const item of value as unknown[]) {
-    if (typeof item !== 'string') throw new Error('Each exclusion must be a string');
+  for (const [index, item] of (value as unknown[]).entries()) {
+    if (typeof item !== 'string') throw new Error(`${field}/${index} must be a string`);
     const pattern = item.replace(/^(?:\.\/)+/, '').replace(/\/+$/, '');
     if (!isRelativePath(pattern) || /[\\\0]/.test(pattern) || /^[#!]/.test(pattern)) {
-      throw new Error(`Invalid source exclusion: ${JSON.stringify(item)}. Use a repository-relative path or glob.`);
+      throw new Error(`${field}/${index} must be a repository-relative path or glob. Received ${JSON.stringify(item)}.`);
     }
     patterns.add(pattern);
   }

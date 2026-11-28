@@ -25,6 +25,6 @@ function namedSourceLocator(option: string, context: Omit<SourceContext, 'option
   const provider = providers.find(item => item.id === id);
   if (!provider) throw new Error(`Unknown source provider: ${id}. Choose ${providers.map(item => item.id).join(', ')}.`);
   const locator = provider.locate({ ...context, option: spec });
-  if (!locator) throw new Error(`Cannot locate sources for ${id}. Name the repository as ${id}:OWNER/REPO.`);
+  if (!locator) throw new Error(`Cannot locate source files for ${id}. Name the repository as ${id}:OWNER/REPO.`);
   return locator;
 }

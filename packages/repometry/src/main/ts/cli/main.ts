@@ -19,7 +19,7 @@ import { checkStore } from '../report/json/store/store-check.js';
 import type { ReportReader } from '../report/json/validation/report.js';
 import { dispatch, flag, option } from './arguments.js';
 import type { Command, Invocation } from './arguments.js';
-import { configFile, listOption, parseConfig, readConfig, readConfigValue } from './config.js';
+import { configFile, listOption, loadConfig, readConfig, readConfigValue, readDisplayConfig } from './config.js';
 import { analyzeCommits, isSaved } from './range-jobs.js';
 import { importerIds, readInputs } from './imports.js';
 import { outputReports, reporterIds, viewTarget } from './reporting.js';
@@ -64,10 +64,10 @@ const commands: Readonly<Record<string, Command>> = {
   },
   report: {
     description: 'Render HTML or JSON from saved reports.', parameters: '[FORMAT[=PATH]]...', max: Infinity,
-    options: { ...displayOptions, ...storageOptions, sources: option('auto|none|ID[:SPEC]', 'Select where the report reads source files.') },
+    options: { ...displayOptions, ...storageOptions, source: option('auto|none|ID[:SPEC]', 'Select where the report reads source files.') },
     async run(input) {
       const { root, store } = await context(input);
-      const config = await readConfig(root, input);
+      const config = await readDisplayConfig(root, input);
       print({ schema: 'urn:repometry:schema:render-result:1', reports: await outputReports(root, store, input, config) });
     },
   },
@@ -86,8 +86,8 @@ const commands: Readonly<Record<string, Command>> = {
   plugins: { description: 'List effective plugins and supported formats.', options: { ...configOptions, repo: repoOption },
     async run(input) {
       const { root } = await repositoryContext(input);
-      const config = await readConfig(root, input);
-      print({ schema: 'urn:repometry:schema:plugin-list:1', plugins: effectivePlugins(config.plugins, config.parsers),
+      const config = await readConfig(root, input, true);
+      print({ schema: 'urn:repometry:schema:plugin-list:2', plugins: effectivePlugins(config.plugins, config.parsers),
         importers: importerIds, reporters: reporterIds, ci: ['github'], stores: ['local', 'git'] });
     },
   },
@@ -171,13 +171,14 @@ async function analyzeRange(input: Invocation, range: RevisionRange): Promise<nu
   if (input.text('import-root')) throw new Error('--import-root requires a scanner report');
   const concurrency = count(input.text('concurrency'), '--concurrency', 1);
   const configValue = await readConfigValue(root, input);
-  const config = parseConfig(configValue);
+  const settingsFile = configFile(root, input);
+  const config = await loadConfig(configValue, root, settingsFile);
   if (config.imports.length) process.stderr.write('Imports from the config describe one checkout and are skipped for a range.\n');
   const { base, head, commits } = await firstParentRange(root, range.base, range.head);
   if (!commits.length) process.stderr.write(`No commits in ${range.base}..${range.head}.\n`);
   const inspection = { directory, output, exclude: listOption(input, 'exclude', config.exclude) };
   const { interrupted, ...results } = await analyzeCommits(commits, {
-    inspection, config, configValue, concurrency, skipSaved: input.flag('skip-saved'),
+    inspection, config, configuration: { value: configValue, root, file: settingsFile }, concurrency, skipSaved: input.flag('skip-saved'),
   });
   print({ schema: 'urn:repometry:schema:analyze-range:1', range: `${base}..${head}`,
     ...results, store: output });
@@ -207,11 +208,11 @@ async function review(input: Invocation): Promise<number> {
   const { findings, ...coverage } = imports.length ? readInputs(directory, imports) : readInputs(root, config.imports);
   if (findings.length && imports.length) throw new Error('review compares both sides of a change; scanner imports apply to full inspections only');
   if (findings.length) process.stderr.write('Scanner imports from the config are skipped: review compares both sides of a change.\n');
-  const settingsPath = configFile(root, input);
-  const { plugins, ...settings } = config;
+  const profileFile = configFile(root, input);
+  const { plugins, ...profile } = config;
   const report = await reviewChange({ directory: root, base: input.args[0]!, revision: input.args[1] ?? 'HEAD', ...coverage,
-    exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, parsers: config.parsers, settings,
-    settingsPath: settingsPath === undefined ? undefined : relative(root, settingsPath).split(sep).join('/'),
+    exclude: listOption(input, 'exclude', config.exclude), ignore: config.ignore, plugins, parsers: config.parsers, profile,
+    profilePath: profileFile === undefined ? undefined : relative(root, profileFile).split(sep).join('/'),
     number: count(input.text('pull'), '--pull', 1) ?? (github ? await gitHubPullRequest() : undefined),
     minimumPercent: config.minCoverage, minimumLines: config.minLines, maxNewIssues: config.maxNewIssues });
   const markdown = pullReviewMarkdown(report);

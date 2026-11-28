@@ -1,5 +1,7 @@
 import { codeStructure, codeStructures, structureMeasures } from '@repometry/core/internal/model/code-structure.js';
 import type { ParserPlugin } from './parser-order.js';
+import { pluginRegistration } from './registered-plugin.js';
+import { pluginScope } from './plugin-scope.js';
 import { definitions } from '@repometry/core/internal/model/measurement.js';
 import { debtModel } from '@repometry/core/internal/model/quality-summary.js';
 import { reportSchema } from '@repometry/core/internal/model/report.js';
@@ -57,6 +59,7 @@ function appliedConfiguration({ snapshot, excludedOutput, excludedPaths = [], co
   const active = new Set(plugins.map(plugin => plugin.id));
   const parsed = languagesForPaths(results.parsed, providersByPath);
   const provenance = languages.plugins.flatMap(plugin => {
+    if (plugin.unavailableReason !== undefined && pluginRegistration(plugin)) return [pluginProvenance(plugin)];
     if (!plugin.kinds.includes('language')) return active.has(plugin.id) ? [pluginProvenance(plugin)] : [];
     const used = parsed.get(plugin.id);
     const ranOther = plugin.operations.some(({ id, output }) => output.id !== codeStructure.id && output.id !== codeStructures.id
@@ -108,8 +111,11 @@ function languagesForPaths(paths: Iterable<string>, providersByPath: AnalysisSou
   return parsed;
 }
 
-function pluginProvenance({ id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason }: ParserPlugin) {
-  return { id, version, api, tools: tools ?? {}, kinds,
+function pluginProvenance(plugin: ParserPlugin) {
+  const { id, version, api, tools, kinds, claims, settings, providesLanguages, unavailableReason } = plugin;
+  const image = pluginRegistration(plugin)?.image;
+  return { id, version, api, tools: tools ?? {}, kinds, ...pluginScope(plugin),
+    ...(image === undefined ? {} : { image }),
     ...(claims === undefined ? {} : { claims }), ...(settings === undefined ? {} : { settings }),
     ...(providesLanguages === undefined ? {} : { providesLanguages: providesLanguages.map(({ syntax, ...language }) => language) }), ...(unavailableReason === undefined ? {} : { unavailableReason }) };
 }

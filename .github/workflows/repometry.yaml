@@ -93,7 +93,7 @@ jobs:
             repometry analyze "$(git rev-list --first-parent -n 22 HEAD | tail -n 1)..HEAD~1" --store "$RUNNER_TEMP/store" --skip-saved
           fi
           repometry analyze --store "$RUNNER_TEMP/store" --import lcov=target/coverage/lcov.info
-          repometry report "html=$RUNNER_TEMP/site" --store "$RUNNER_TEMP/store" --sources github
+          repometry report "html=$RUNNER_TEMP/site" --store "$RUNNER_TEMP/store" --source github
       - env:
           GH_TOKEN: ${{ github.token }}
         working-directory: ${{ runner.temp }}/store

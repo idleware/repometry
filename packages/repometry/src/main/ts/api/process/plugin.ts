@@ -7,7 +7,7 @@ import type { SourceFile } from '@repometry/core/internal/model/source.js';
 import type { ToolInvocation, ToolRunner } from '@repometry/core/internal/ports/tool-runner.js';
 import { toolFailure } from './failure.js';
 
-export const processPluginProtocol = 'repometry.plugin-process/v1';
+export const pluginRequestSchema = 'urn:repometry:schema:plugin-request:1';
 
 export interface ProcessOperation extends Omit<Operation, 'execute'>, Pick<ToolInvocation, 'argv' | 'timeoutMs' | 'maxOutputBytes'> {}
 
@@ -34,7 +34,7 @@ export function bindProcessPlugin({ operations, ...manifest }: ProcessPluginMani
 
 function bindOperation(plugin: string, settings: JsonValue, operation: ProcessOperation, runner: ProcessRunner): Operation {
   const { id, role, scope, fileIndependent, inputs, output, argv, timeoutMs, maxOutputBytes } = operation;
-  const implementation = digest(JSON.stringify([processPluginProtocol, operation.implementation, runner.implementation, argv, timeoutMs, maxOutputBytes]));
+  const implementation = digest(JSON.stringify([pluginRequestSchema, operation.implementation, runner.implementation, argv, timeoutMs, maxOutputBytes]));
   return { id, role, scope, ...(fileIndependent === undefined ? {} : { fileIndependent }), inputs, output, implementation, async execute(context) {
     const { files, stdin } = encodeRequest(`${plugin}/${id}`, settings, operation, context);
     const result = await runner.run({ argv, timeoutMs, maxOutputBytes, files, stdin });
@@ -68,7 +68,7 @@ function encodeRequest(key: string, settings: JsonValue, operation: ProcessOpera
     return [port, { contract: contract.id, value }];
   }));
   const entries = [...files.values()];
-  const request = { protocol: processPluginProtocol, operation: key, settings, files: entries.map(({ reference }) => reference), inputs };
+  const request = { schema: pluginRequestSchema, operation: key, options: settings, files: entries.map(({ reference }) => reference), inputs };
   return { files: entries.map(({ file }) => file), stdin: Buffer.from(`${JSON.stringify(request)}\n`) };
 }
 

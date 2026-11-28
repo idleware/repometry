@@ -85,7 +85,7 @@ export async function inspectRepositories(sources: AnalysisSources, results: Ana
 }
 
 /** Runs the inspections that read what the files phase gathered: clone sources and, when given, the coverage input. */
-export async function inspectAfterFiles({ coverage: input, excludedPaths = [], snapshot }: AnalysisInput,
+export async function inspectAfterFiles({ coverage: input, excludedPaths = [], snapshot, ignoresCoverage }: AnalysisInput,
   sources: AnalysisSources, parsed: readonly ParsedFile[], results: AnalysisResults, cache?: OperationCacheOptions): Promise<void> {
   const clones = parsed.flatMap(({ structure: { clones }, parser }) => clones ? [{ ...clones, scheme: clones.scheme ?? parser }] : []);
   const products = new Map<string, Product>([['sources', { contract: cloneSourcesContract.id, value: clones }]]);
@@ -99,7 +99,7 @@ export async function inspectAfterFiles({ coverage: input, excludedPaths = [], s
     const functionBodies = parsed.flatMap(({ path, structure: { functionBodies } }) => functionBodies ? [[path, functionBodies] as const] : []);
     products.set('lcov', { contract: lcovInput.id, value: { text: input.text, root: input.sourceRoot,
       sourceLines: sourceLineCounts(sources.sourceFiles), codeLines: new Map(codeLines), unclassified,
-      functionBodies: new Map(functionBodies), excludes: (path: string) => excludes(path) || sources.unavailableFiles.has(path) } });
+      functionBodies: new Map(functionBodies), excludes: (path: string) => excludes(path) || ignoresCoverage?.(path) === true || sources.unavailableFiles.has(path) } });
   }
   const { candidates, inspections } = sources.steps.afterFiles;
   const tasks = plan({ plugins: candidates, select: inspections.map(({ key }) => key),

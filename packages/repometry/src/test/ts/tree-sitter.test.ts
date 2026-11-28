@@ -26,8 +26,8 @@ const python = [
 ].join('\n');
 
 test('the built-in catalog uses one provider for Go and Python', () => {
-  const chosen = effectivePlugins([]).filter(plugin => plugin.providesLanguages?.some(language => ['go', 'python'].includes(language.id)));
-  assert.deepEqual(chosen.map(plugin => [plugin.id, plugin.providesLanguages?.map(language => language.id)]),
+  const chosen = effectivePlugins([]).filter(plugin => plugin.languages?.some(language => ['go', 'python'].includes(language.id)));
+  assert.deepEqual(chosen.map(plugin => [plugin.id, plugin.languages?.map(language => language.id)]),
     [['tree-sitter', ['go', 'python']]]);
 });
 

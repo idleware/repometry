@@ -24,7 +24,7 @@ function review(issues: readonly ReviewedIssue[], extra: Partial<PullReview> = {
     coverage: { imported: true, covered: 126, total: 150, percent: 84, uncovered: [], unmapped: [],
       gate: { minimumPercent: 80, minimumLines: 20, status: 'passed' } },
     issueGate: { maximum: 0, count: 2, status: 'failed' }, unmeasured: [],
-    notes: [{ message: 'This change edits Repometry settings, which can hide issues from this check.' }], ...extra };
+    notes: [{ message: 'This change edits the Repometry configuration, which can hide issues from this check.' }], ...extra };
 }
 
 const flag = (verdict: string) => '<picture><source media="(prefers-color-scheme: dark)" '
@@ -48,7 +48,7 @@ test('a review renders as one Markdown text for the summary and the comment', ()
     '',
     '- Changed-line coverage: 84.00% (126 of 150 lines), minimum 80%, passed',
     '- Debt: +40 min added, −70 min removed',
-    '- Note: This change edits Repometry settings, which can hide issues from this check.',
+    '- Note: This change edits the Repometry configuration, which can hide issues from this check.',
     '',
     '### New',
     '',

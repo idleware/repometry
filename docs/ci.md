@@ -139,7 +139,7 @@ git fetch origin repometry
 npx repometry view --store git:origin/repometry
 ```
 
-For a private repository, also change `--sources github` to `--sources none`. The report then leaves out the source view, because a browser can't load private files from GitHub.
+For a private repository, also change `--source github` to `--source none`. The report then leaves out the source view, because a browser can't load private files from GitHub.
 
 ## Repair a store
 

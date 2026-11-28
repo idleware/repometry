@@ -42,15 +42,17 @@ Run these commands in your repository. Without an install, start each with `npx`
 | --- | --- |
 | `repometry analyze` | Analyze HEAD and save its inspection under `.repometry/`. |
 | `repometry analyze HEAD~50..HEAD --skip-saved` | Build history for the last 50 commits, oldest first, skipping saved inspections. A long range uses every core; `--concurrency N` sets a limit. |
-| `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. [Commands and settings](docs/cli.md#analysis-settings) lists the formats, such as `cobertura` for `coverage.xml`. |
+| `repometry analyze --import lcov=coverage/lcov.info --import sarif=results.sarif` | Import coverage and scanner results. Repeat `--import` for each file. [Commands and configuration](docs/cli.md#analysis-options) lists the formats, such as `cobertura` for `coverage.xml`. |
 | `repometry view` | Open the report locally on a free port. Use `--port 3030` to choose a port. |
 | `repometry report html` | Export a static report to `.repometry/report/html`. Use `repometry report html=DIR` for another folder. |
 | `repometry review origin/main --import lcov=coverage/lcov.info` | Report the issues a change adds or worsens on the lines it changes, and their coverage. |
 | `repometry store check --repair --from git:origin/repometry` | Check saved inspections. `--repair` restores missing data from a copy. |
 | `repometry history` | List saved inspections. `show REVISION` prints one report. See [Reading inspections](docs/store.md#reading-inspections). |
 | `repometry projects DIR` | Build an index page for a folder of exported reports. See [Projects index](docs/cli.md#projects-index). |
-| `repometry plugins` | List supported formats. |
+| `repometry plugins` | List the effective plugins and the supported formats. See [The plugins command](docs/cli.md#the-plugins-command). |
 | `repometry help analyze` | Get help for a command. |
+
+`repometry.config.json` holds the options that every run shares: exclusions, ignore rules, components, plugins and limits for `review`. See [Configuration](docs/cli.md#configuration). To add a plugin, see [Write a plugin](docs/plugins.md) and [Docker plugins](docs/process-plugins.md).
 
 A report shows everything the store holds, so publish it only where you would publish that data.
 

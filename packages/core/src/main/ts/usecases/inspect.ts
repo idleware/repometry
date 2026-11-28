@@ -1,18 +1,21 @@
 import { isDeepStrictEqual } from 'node:util';
 import { isRecord } from '../engine/plugin.js';
-import { normalizeFindingIgnore, partitionFindings } from '../model/finding-ignore.js';
+import { partitionFindings } from '../model/finding-ignore.js';
+import type { RecordedFindingIgnore } from '../model/ignore-rule.js';
 import type { FindingIgnoreRule } from '../model/finding-ignore.js';
 import { reportSchema } from '../model/report.js';
 import type { Report } from '../model/report.js';
 import { digest } from '../model/snapshot.js';
 import type { SourceSnapshot } from '../model/source.js';
 import { normalizeExclusions, sourceExclusionMatcher } from '../profile/exclusions.js';
+import { coverageIgnore, readIgnoreRules, recordIgnoreRules } from '../profile/ignore.js';
 
 export interface AnalysisInput {
   /** The source adapter has already applied the exclusions to this snapshot. */
   readonly snapshot: SourceSnapshot;
   readonly excludedOutput: string | null;
   readonly excludedPaths?: readonly string[];
+  readonly ignoresCoverage?: (path: string) => boolean;
   readonly coverage?: { readonly text: string; readonly sourceRoot: string };
 }
 
@@ -44,12 +47,12 @@ export interface InspectionOptions {
 
 export async function executeInspection(options: InspectionOptions, ports: InspectionPorts): Promise<Report> {
   const excludedPaths = normalizeExclusions(options.exclude ?? []);
-  const ignore = normalizeFindingIgnore(options.ignore ?? []);
+  const ignore = recordIgnoreRules(readIgnoreRules(options.ignore ?? []));
   const source = await ports.readSource(sourceExclusionMatcher(excludedPaths));
   const { snapshot, root, excludedOutput } = source;
   const lcov = await ports.readCoverage?.(source);
   const report = await ports.analyze({
-    snapshot, excludedOutput, excludedPaths,
+    snapshot, excludedOutput, excludedPaths, ignoresCoverage: coverageIgnore(ignore),
     coverage: lcov === undefined ? undefined : { text: lcov.text, sourceRoot: root },
   });
   if (report.subject.kind !== snapshot.subject.kind || report.subject.id !== snapshot.subject.id) {
@@ -62,13 +65,18 @@ export async function executeInspection(options: InspectionOptions, ports: Inspe
   const covered = lcov && lcov.inputDigests.length > 1 ? withLcovDigests(report, lcov) : report;
   const findings = ports.importFindings
     ? await ports.importFindings(covered, root, sourceExclusionMatcher(excludedPaths, snapshot.generatedExcluded)) : covered;
-  const filtered: Report = ignore.length === 0 ? findings : { ...findings, schema: reportSchema,
-    appliedConfig: { ...findings.appliedConfig, findingIgnore: ignore },
-    ...(findings.findings === undefined ? {} : partitionFindings(findings.findings, ignore)) };
+  const filtered = applyIgnore(findings, ignore);
   const result = snapshot.subject.kind === 'commit' && ports.recordChurn
     ? await ports.recordChurn(filtered, root, snapshot.files.map(file => file.path)) : filtered;
   await source.save(result);
   return result;
+}
+
+function applyIgnore(report: Report, ignore: readonly RecordedFindingIgnore[]): Report {
+  if (ignore.length === 0) return report;
+  return { ...report, schema: reportSchema,
+    appliedConfig: { ...report.appliedConfig, findingIgnore: ignore },
+    ...(report.findings === undefined ? {} : partitionFindings(report.findings, ignore)) };
 }
 
 function withLcovDigests(report: Report, { text, inputDigests }: { text: string; inputDigests: readonly string[] }): Report {

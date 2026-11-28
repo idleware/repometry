@@ -1,15 +1,17 @@
-import { extname } from 'node:path';
 import { plan } from '@repometry/core/internal/engine/plan.js';
-import type { FileClaims, Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import type { Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
 import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
 import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
 import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
 import { isExcludedDirectory } from '@repometry/core/internal/model/snapshot.js';
-import { exclusionMatcher } from '@repometry/core/internal/profile/exclusions.js';
 import { describeProvider, selectedSyntax, selectParsers } from './parser-order.js';
 import type { ParserOrder, ParserPlugin } from './parser-order.js';
 import { languageMeasures, restrictStructureMeasures, structureImplementation } from './structure-measures.js';
-import { builtInPluginIds, builtInPlugins } from './built-ins.js';
+import { builtInPluginIds, builtInPlugins, registeredPlugins } from './built-ins.js';
+import { pluginRegistration } from './registered-plugin.js';
+import { languageFileSelection } from './file-selection.js';
+
+export { claimMatcher } from './file-selection.js';
 
 export interface LanguageProvider {
   readonly plugin: Plugin;
@@ -24,8 +26,7 @@ export const defaultLanguages = languageRegistry([]);
 export type LanguageRegistry = ReturnType<typeof languageRegistry>;
 
 export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrder, label = 'parsers') {
-  const builtIns = builtInPlugins.filter(plugin => !plugins.includes(plugin));
-  const registered: readonly ParserPlugin[] = [...builtIns, ...plugins];
+  const registered: readonly ParserPlugin[] = registeredPlugins(plugins);
   if (plugins.length) validateRegistrations(plugins, registered);
   const { selection, competing } = selectParsers(registered, parsers, label);
   const byProvider = new Map<string, ProvidedLanguage[]>();
@@ -56,7 +57,7 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
     let matched: (typeof entries)[number] | undefined;
     for (const entry of entries) {
       if (!entry.matches(path)) continue;
-      if (matched) throw new Error('Multiple language providers claim ' + path + ': ' + matched.id + ', ' + entry.id);
+      if (matched) throw new Error(`Parsers ${matched.id} and ${entry.id} both include ${path}`);
       if (path.split('/').slice(0, -1).some(isExcludedDirectory)) return undefined;
       matched = entry;
     }
@@ -65,7 +66,7 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
 }
 
 function validateRegistrations(plugins: readonly Plugin[], registered: readonly Plugin[]): void {
-  if (plugins.some(plugin => builtInPluginIds.has(plugin.id) && !builtInPlugins.includes(plugin))) {
+  if (plugins.some(plugin => builtInPluginIds.has(plugin.id) && !builtInPlugins.includes(plugin) && !pluginRegistration(plugin)?.builtIn)) {
     throw new Error('An additional plugin uses a built-in plugin ID');
   }
   plan({ plugins: registered, select: [], inputs: new Map() });
@@ -80,16 +81,10 @@ function languageEntry(plugin: ParserPlugin, chosen: readonly ProvidedLanguage[]
     bindings.set(plugin, { ...plugin, operations: plugin.operations.filter(item => item !== operation) });
   }
   if (!selected) return [];
-  const classifiers = declared.map(({ id, extensions, globs }) => ({ id, matches: claimMatcher({ extensions, globs }) }));
-  function identify(path: string): string | undefined {
-    const [first, second] = classifiers.filter(({ matches }) => matches(path));
-    if (second) throw new Error(`Language plugin ${plugin.id} declares multiple languages for ${path}`);
-    return first?.id;
-  }
+  const { claims, matches, identify } = languageFileSelection(plugin, declared);
   const provider = available && operation ? bindParser(plugin, operation, declared, identify) : undefined;
   if (provider) bindings.set(plugin, provider.plugin);
-  const claims: readonly FileClaims[] = declared.length ? declared : [plugin.claims!];
-  const matches = declared.length ? (path: string) => identify(path) !== undefined : claimMatcher(plugin.claims);
+
   return [{ id: plugin.id, provider, declared, claims, matches, identify }];
 }
 
@@ -98,7 +93,7 @@ function parserOperation(plugin: Plugin): Operation {
     && operation.output.id === (operation.scope === 'repository' ? codeStructures.id : codeStructure.id));
   const [operation] = operations;
   if (!operation || operations.length !== 1 || (!plugin.claims && !plugin.providesLanguages?.length)) {
-    throw new Error(`Language plugin ${plugin.id} must claim files and provide code structure`);
+    throw new Error(`Language plugin ${plugin.id} must declare languages with include patterns and provide exactly one code structure operation`);
   }
   return operation;
 }
@@ -110,13 +105,4 @@ function bindParser(plugin: Plugin, operation: Operation, declared: readonly Pro
   const executable = bound === operation ? plugin : { ...plugin, operations: plugin.operations.map(item => item === operation ? bound : item) };
   return { plugin: executable, operation: bound, key: `${plugin.id}/${operation.id}`, batch: operation.scope === 'repository', language,
     implementationFor: present => structureImplementation(operation, new Map([...measured].filter(([id]) => present.has(id)))) };
-}
-
-export function claimMatcher(claims: FileClaims | undefined, identify = fileTypeId): (path: string) => boolean {
-  const { extensions = [], globs = [], languages = [] } = claims ?? {};
-  if (extensions.length === 0 && globs.length === 0 && languages.length === 0) return () => true;
-  const glob = exclusionMatcher(globs);
-  const suffixes = new Set(extensions);
-  const languageSet = new Set(languages);
-  return path => suffixes.has(extname(path)) || glob(path) || (languageSet.size > 0 && languageSet.has(identify(path)));
 }

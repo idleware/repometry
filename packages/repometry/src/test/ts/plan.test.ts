@@ -91,7 +91,7 @@ function catalogPlan(...plugins: readonly Plugin[]) {
 test('rules must reference metrics declared by their own plugin', () => {
   const plugin = { ...catalogPlugin, produces: [],
     rules: [{ id: 'threshold', category: 'structure', measure: metric.id }] };
-  assert.throws(() => catalogPlan({ ...catalogPlugin, id: 'other' }, plugin), /rule.*threshold.*undeclared metric.*fixture.count/i);
+  assert.throws(() => catalogPlan({ ...catalogPlugin, id: 'other' }, plugin), /check.*threshold.*undeclared metric.*fixture.count/i);
   assert.doesNotThrow(() => catalogPlan({ ...plugin, produces: catalogPlugin.produces }));
 });
 
@@ -112,9 +112,9 @@ test('metric IDs are unique across products and across plugins', () => {
     /duplicate metric.*fixture.count.*catalog.*competing-plugin/i);
 });
 
-test('language claims go through claims.languages only', () => {
+test('the engine expects normalized language declarations', () => {
   const oldShape = { ...catalogPlugin, languages: ['javascript'] };
-  assert.throws(() => catalogPlan(oldShape), /claims.languages/);
+  assert.throws(() => catalogPlan(oldShape), /pass its language declarations through the manifest loader/);
   assert.doesNotThrow(() => catalogPlan({ ...catalogPlugin, claims: { languages: ['javascript'] } }));
 });
 

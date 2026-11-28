@@ -9,6 +9,7 @@ import { builtInPluginIds } from './built-ins.js';
 import { claimMatcher } from './languages.js';
 import type { LanguageProvider, LanguageRegistry } from './languages.js';
 import { inspectionClaims } from './parser-order.js';
+import { scopedMatcher, scopeOperation } from './plugin-scope.js';
 
 /**
  * A phase of a run: the host inputs it offers by external port name, and what one of its tasks covers: one file, the files
@@ -111,7 +112,7 @@ function analysisSteps(plugins: readonly Plugin[], languages: LanguageRegistry, 
   // Those that read the code structure, directly or through the products of others, run on the parsed files their plugin claims.
   const readers = new Set(reached(files, [codeStructure.id], 'some'));
   const claims = new Map(plugins.map(plugin => [plugin.id, claimsOf(plugin, languages)]));
-  const step = (operations: readonly ActiveOperation[]): Step => ({ candidates: candidatesOf(operations),
+  const step = (operations: readonly ActiveOperation[]): Step => ({ candidates: candidatesOf(operations, claims),
     inspections: operations.filter(({ operation }) => operation.role === 'inspection').map(active => ({ ...active, parsed: readers.has(active),
       matches: (path: string, isParsed: boolean) => (!readers.has(active) || isParsed) && claims.get(active.plugin.id)!(path) })) });
   const parsers = repositoryParsers(plugins, languages);
@@ -135,14 +136,20 @@ function repositoryParsers(plugins: readonly Plugin[], languages: LanguageRegist
 /** A chosen parser inspects its parsed files. Other inspections use their plugin's claims. */
 function claimsOf(plugin: Plugin, languages: LanguageRegistry): (path: string) => boolean {
   return languages.providers.some(provider => provider.plugin === plugin)
-    ? path => languages.select(path)?.plugin === plugin : claimMatcher(inspectionClaims(plugin), languages.id);
+    ? path => languages.select(path)?.plugin === plugin : scopedMatcher(plugin, claimMatcher(inspectionClaims(plugin), languages.id));
 }
 
 /** The plugins restricted to the given operations, in their order, for the planner to choose from. */
-export function candidatesOf(operations: readonly ActiveOperation[]): Plugin[] {
+export function candidatesOf(operations: readonly ActiveOperation[], matches?: ReadonlyMap<string, (path: string) => boolean>): Plugin[] {
   const byPlugin = new Map<Plugin, Operation[]>();
   for (const { plugin, operation } of operations) byPlugin.set(plugin, [...byPlugin.get(plugin) ?? [], operation]);
-  return [...byPlugin].map(([plugin, chosen]) => chosen.length === plugin.operations.length ? plugin : { ...plugin, operations: chosen });
+  return [...byPlugin].map(([plugin, chosen]) => bindOperations(plugin, chosen, matches?.get(plugin.id)));
+}
+
+function bindOperations(plugin: Plugin, chosen: readonly Operation[], matches: ((path: string) => boolean) | undefined): Plugin {
+  const operations = matches ? chosen.map(operation => scopeOperation(plugin, operation, matches)) : chosen;
+  if (operations.length === plugin.operations.length && operations.every((operation, index) => operation === plugin.operations[index])) return plugin;
+  return { ...plugin, operations };
 }
 
 /** The external inputs of a phase as the planner reads them, by port name. */

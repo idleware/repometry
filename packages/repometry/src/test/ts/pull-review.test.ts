@@ -140,7 +140,7 @@ test('a failure on both sides, a file over 1 MiB and churn are notes, not failur
 
 test('a settings change adds a note', () => {
   const review = projectReview({}, inputs([], [], { settingsChanged: true }));
-  assert.deepEqual(review.notes, [{ message: 'This change edits Repometry settings, which can hide issues from this check.' }]);
+  assert.deepEqual(review.notes, [{ message: 'This change edits the Repometry configuration, which can hide issues from this check.' }]);
 });
 
 test('uncovered changed lines are merged into ranges', () => {

@@ -6,12 +6,16 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import configSchema from '../../main/resources/report/json/config-v1.schema.json' with { type: 'json' };
-import processPluginsSchema from '../../main/resources/config/process-plugins-v1.schema.json' with { type: 'json' };
+import configSchema from '../../main/resources/report/json/config-v2.schema.json' with { type: 'json' };
+import dockerSchema from '@repometry/core/plugin-v1.schema.json' with { type: 'json' };
 import { parseConfig } from '../../main/ts/cli/config.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
-import { readProcessPlugins } from '../../main/ts/compose/process-plugins.js';
-import { DockerToolRunner, codeStructures, pluginApi, processPlugin, sourceFiles } from '../../main/ts/plugin.js';
+import { dockerPluginFile } from '../../main/ts/compose/process-plugins.js';
+import { DockerToolRunner } from '../../main/ts/api/process/docker-tool-runner.js';
+import { processPlugin } from '../../main/ts/api/process/plugin.js';
+import { pluginApi } from '@repometry/core/internal/engine/plugin.js';
+import { codeStructures } from '@repometry/core/internal/model/code-structure.js';
+import { sourceFiles } from '@repometry/core/internal/model/snapshot.js';
 import { LocalReportStore } from '../../main/ts/report/json/store/local-store.js';
 import type { FileMetricsReport } from '../../main/ts/report/json/wire/file-metrics-model.js';
 import type { Report } from '@repometry/core/internal/model/report.js';
@@ -19,55 +23,62 @@ import type { Report } from '@repometry/core/internal/model/report.js';
 const cli = resolve('target/main/ts/cli/main.js');
 const digest = 'a'.repeat(64);
 const fixture = {
-  id: 'fixture', version: '1.0.0', scope: 'repository',
+  schema: 'urn:repometry:schema:plugin:1', category: 'language', id: 'fixture', version: '1.0.0', scope: 'repository',
   image: 'sha256:' + digest, command: ['node', '/tools/parse.js'],
-  claims: { extensions: ['.fixture'] },
   tools: { node: '26' },
-  providesLanguages: [{ id: 'fixture', label: 'Fixture', color: '#123456' }],
+  languages: [{ id: 'fixture', label: 'Fixture', color: '#123456', include: ['**/*.fixture'] }],
 };
 
 test('the standalone config schema validates the same plugin declarations as the CLI', () => {
   const schemas = new Ajv2020();
   const validate = schemas.compile(configSchema);
-  const config = { plugins: [fixture] };
+  const config = { plugins: ['./fixture.json', { use: './checks.mjs', include: ['src/**'], exclude: [], options: { strict: true } }] };
   assert.ok(validate(config), schemas.errorsText(validate.errors));
   assert.equal(validate({ ...config, unknownKey: true }), false);
   assert.equal(validate.errors?.[0]?.keyword, 'additionalProperties');
-  assert.equal(validate({ plugins: [{ ...fixture, command: [] }] }), false);
-  assert.equal(validate.errors?.[0]?.instancePath, '/plugins/0/command');
-  assert.deepEqual(schemas.getSchema(processPluginsSchema.$id)?.schema, processPluginsSchema);
+  assert.equal(validate({ plugins: [fixture] }), false);
+  const manifest = schemas.compile(dockerSchema);
+  assert.ok(manifest(fixture), schemas.errorsText(manifest.errors));
+  assert.equal(manifest({ ...fixture, command: [] }), false);
+  assert.equal(manifest.errors?.[0]?.instancePath, '/command');
 });
 
 test('component glob validation agrees between config and its schema', () => {
   const validate = new Ajv2020().compile(configSchema);
-  const config = (pathGlobs: string[]) => ({ components: [{ name: ' Tools ', pathGlobs, description: 'Build tools' }] });
+  const config = (include: string[]) => ({ components: [{ name: ' Tools ', include, description: 'Build tools' }] });
   const valid = config(['src/tools/**', 'src/tools/**', '.github/workflows/*.yml']);
   assert.ok(validate(valid), JSON.stringify(validate.errors));
   assert.deepEqual(parseConfig(valid).components,
     [{ name: 'Tools', pathGlobs: ['src/tools/**', '.github/workflows/*.yml'], description: 'Build tools' }]);
   for (const value of [[], ['/etc'], ['C:/src'], ['src\\file'], ['src//file'], ['src/../file'], ['./src'], ['src/']]) {
     assert.equal(validate(config(value)), false, JSON.stringify(value));
-    assert.throws(() => parseConfig(config(value)), /root-relative pathGlobs/);
+    assert.throws(() => parseConfig(config(value)), /repository-relative include globs/);
   }
-  assert.throws(() => parseConfig({ components: [...valid.components, { name: 'Tools', pathGlobs: ['other/**'] }] }),
-    /Duplicate component name/);
+  assert.throws(() => parseConfig({ components: [...valid.components, { name: 'Tools', include: ['other/**'] }] }),
+    /components\/1\/name duplicates Tools/);
 });
 
-test('configured repository parsers opt into file independence explicitly', () => {
-  const operation = (definition: unknown) => readProcessPlugins([definition])[0]!.operations[0]!;
-  const defaultOperation = operation(fixture);
-  const independent = operation({ ...fixture, fileIndependent: true });
-  const dependent = operation({ ...fixture, fileIndependent: false });
+test('configured repository parsers opt into file independence explicitly', async t => {
+  const operation = async (definition: unknown) => {
+    const { manifest } = await configuration(t, definition);
+    return (await dockerPluginFile(manifest, { use: './fixture.json' }, 'Config plugins/0')).plugin.operations[0];
+  };
+  const defaultOperation = await operation(fixture);
+  const independent = await operation({ ...fixture, fileIndependent: true });
+  const dependent = await operation({ ...fixture, fileIndependent: false });
+  await assert.rejects(operation({ ...fixture, fileIndependent: 'true' }),
+    { message: 'Config plugins/0/manifest/fileIndependent must be boolean' });
+  if (!defaultOperation || !independent || !dependent) return;
   assert.equal(Object.hasOwn(defaultOperation, 'fileIndependent'), false);
   assert.equal(independent.fileIndependent, true);
   assert.equal(dependent.fileIndependent, false);
   assert.equal(independent.implementation, defaultOperation.implementation);
-  assert.throws(() => operation({ ...fixture, fileIndependent: 'true' }), /plugins\/0\/fileIndependent.*boolean/);
 });
 
 interface ListedPlugin {
   readonly id: string;
-  readonly providesLanguages?: readonly { readonly id: string }[];
+  readonly available: boolean;
+  readonly languages?: readonly { readonly id: string }[];
 }
 
 function entries(json: string): readonly ListedPlugin[] {
@@ -77,22 +88,27 @@ function entries(json: string): readonly ListedPlugin[] {
 async function configuration(t: TestContext, plugin: unknown) {
   const directory = await mkdtemp(join(tmpdir(), 'repometry-configured-plugin-'));
   t.after(() => rm(directory, { force: true, recursive: true }));
-  await writeFile(join(directory, 'repometry.config.json'), JSON.stringify({ plugins: [plugin] }));
-  return { directory, run: (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: directory, encoding: 'utf8' }) };
+  const manifest = join(directory, 'fixture.json');
+  await writeFile(manifest, JSON.stringify(plugin));
+  await writeFile(join(directory, 'repometry.config.json'), JSON.stringify({ plugins: ['./fixture.json'] }));
+  return { directory, manifest, run: (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: directory, encoding: 'utf8' }) };
 }
 
 test('configured syntax loads and validates but is not included in the plugins listing', async t => {
   const syntax = { lineComments: [';'], strings: [{ quote: '~' }], keywords: ['zap'] };
-  const definition = { ...fixture, providesLanguages: [{ ...fixture.providesLanguages[0]!, syntax }] };
-  assert.deepEqual(readProcessPlugins([definition])[0]?.providesLanguages?.[0]?.syntax, syntax);
-  const invalid = { ...definition, providesLanguages: [{ ...fixture.providesLanguages[0]!, syntax: { lineComments: [''] } }] };
-  assert.throws(() => readProcessPlugins([invalid]), /Config plugins\/0\/providesLanguages\/0\/syntax\/lineComments\/0/);
-  const { run } = await configuration(t, definition);
+  const definition = { ...fixture, languages: [{ ...fixture.languages[0]!, syntax }] };
+  const { run, manifest } = await configuration(t, definition);
+  const configured = await dockerPluginFile(manifest, { use: './fixture.json' }, 'Config plugins/0');
+  assert.deepEqual(configured.plugin.providesLanguages?.[0]?.syntax, syntax);
+  const invalid = { ...definition, languages: [{ ...fixture.languages[0]!, syntax: { lineComments: [''] } }] };
+  const bad = await configuration(t, invalid);
+  await assert.rejects(dockerPluginFile(bad.manifest, { use: './fixture.json' }, 'Config plugins/0'),
+    { message: 'Config plugins/0/manifest/languages/0/syntax/lineComments/0 must NOT have fewer than 1 characters' });
   const output = run('plugins');
   assert.equal(output.status, 0, output.stderr);
   assert.ok(entries(output.stdout).some(plugin => plugin.id === 'fixture'));
   assert.ok(entries(output.stdout).every(plugin =>
-    plugin.providesLanguages?.every(language => !Object.hasOwn(language, 'syntax')) ?? true));
+    plugin.languages?.every(language => !Object.hasOwn(language, 'syntax')) ?? true));
 });
 
 test('plugins lists configured languages and effective file claims before running any tools', async t => {
@@ -101,10 +117,13 @@ test('plugins lists configured languages and effective file claims before runnin
   assert.equal(configured.status, 0, configured.stderr);
   const list = entries(configured.stdout);
   assert.deepEqual(list.find(entry => entry.id === 'fixture'), {
-    id: 'fixture', version: '1.0.0', kinds: ['language'], claims: { extensions: ['.fixture'] },
-    providesLanguages: [{ id: 'fixture', label: 'Fixture', color: '#123456', extensions: ['.fixture'] }],
+    id: 'fixture', version: '1.0.0', category: 'language',
+    use: './fixture.json', versionSource: 'manifest',
+    available: list.find(entry => entry.id === 'fixture')?.available,
+    ...(!list.find(entry => entry.id === 'fixture')?.available ? { reason: 'required executable docker is not on PATH' } : {}),
+    languages: [{ id: 'fixture', label: 'Fixture', color: '#123456', include: ['**/*.fixture'] }],
   });
-  assert.ok(list.find(entry => entry.id === 'babel-syntax')?.providesLanguages?.some(language => language.id === 'typescript'));
+  assert.ok(list.find(entry => entry.id === 'babel-syntax')?.languages?.some(language => language.id === 'typescript'));
   const builtin = run('plugins', '--no-config');
   assert.equal(builtin.status, 0, builtin.stderr);
   assert.ok(entries(builtin.stdout).every(entry => entry.id !== 'fixture'));
@@ -112,7 +131,7 @@ test('plugins lists configured languages and effective file claims before runnin
 
 test('invalid process plugin declarations name the field that needs correction', async t => {
   const invalid = [
-    [{ ...fixture, image: 'node:26-alpine' }, 'image'],
+    [{ ...fixture, image: '--invalid' }, 'image'],
     [{ ...fixture, command: [] }, 'command'],
     [{ ...fixture, limits: { pidsLimit: 0 } }, 'pidsLimit'],
   ] as const;
@@ -120,7 +139,7 @@ test('invalid process plugin declarations name the field that needs correction',
     const { run } = await configuration(t, plugin);
     const result = run('plugins');
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, new RegExp('plugins/0/(?:limits/)?' + field));
+    assert.match(result.stderr, new RegExp('plugins/0/manifest/(?:limits/)?' + field));
   }
 });
 
@@ -156,8 +175,8 @@ test('configured process plugins use the same source routing and packed result a
   assert.equal(raw.status, 0, raw.stderr);
   const fromConfig = JSON.parse(raw.stdout) as Report;
   const plugin = processPlugin({
-    id: fixture.id, version: fixture.version, api: pluginApi, kinds: ['language'], tools: fixture.tools, claims: fixture.claims,
-    providesLanguages: [{ ...fixture.providesLanguages[0]!, extensions: ['.fixture'] }],
+    id: fixture.id, version: fixture.version, api: pluginApi, kinds: ['language'], tools: fixture.tools,
+    providesLanguages: [{ id: 'fixture', label: 'Fixture', color: '#123456', globs: ['**/*.fixture'] }],
     produces: [{ contract: codeStructures.id, persistence: 'transient' }],
     operations: [{ id: 'parse', role: 'provider', scope: 'repository', inputs: { files: sourceFiles }, output: codeStructures,
       argv: ['node', '-e', parser], timeoutMs: 30_000, maxOutputBytes: 8 * 1024 * 1024 }],

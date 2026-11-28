@@ -34,8 +34,8 @@ export async function importFindings(input: FindingInput, root: string, excludes
     throw new Error(`Invalid ${input.format.toUpperCase()} finding input (${input.category})`);
   }
   const { toolVersion, settingsDigest = null, scope = null } = input;
-  if (toolVersion !== undefined && (parsed.tools.length !== 1 || !text(toolVersion))) throw new Error('A tool version override requires one scanner');
-  if (settingsDigest !== null && !/^[a-f0-9]{64}$/.test(settingsDigest)) throw new Error('Invalid scanner settings digest');
+  if (toolVersion !== undefined && (parsed.tools.length !== 1 || !text(toolVersion))) throw new Error('A scanner version override requires one scanner');
+  if (settingsDigest !== null && !/^[a-f0-9]{64}$/.test(settingsDigest)) throw new Error('Invalid scanner configuration digest');
   const tools = toolVersion === undefined ? parsed.tools : [{ name: parsed.tools[0]!.name, version: toolVersion }];
   const findings: Finding[] = [];
   let unmapped = 0;

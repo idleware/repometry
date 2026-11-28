@@ -1,7 +1,7 @@
 import { HistoryCache } from '../compose/history-cache.js';
 import { inspectWithOptions } from '../compose/inspect.js';
 import type { Report } from '@repometry/core/internal/model/report.js';
-import type { parseConfig } from './config.js';
+import type { loadConfig } from './config.js';
 
 export interface RangeInspection {
   readonly directory: string;
@@ -13,11 +13,17 @@ export type CommitOutcome =
   | { readonly commit: string; readonly state: 'analyzed' | 'partial' }
   | { readonly commit: string; readonly state: 'failed'; readonly error: string };
 
+export interface RangeConfiguration {
+  readonly value: unknown;
+  readonly root: string;
+  readonly file: string | undefined;
+}
+
 export type RangeMessage =
-  | { readonly kind: 'start'; readonly commits: readonly string[]; readonly inspection: RangeInspection; readonly config: unknown }
+  | { readonly kind: 'start'; readonly commits: readonly string[]; readonly inspection: RangeInspection; readonly configuration: RangeConfiguration }
   | { readonly kind: 'stop' };
 
-export function rangeInspector(inspection: RangeInspection, config: ReturnType<typeof parseConfig>) {
+export function rangeInspector(inspection: RangeInspection, config: Awaited<ReturnType<typeof loadConfig>>) {
   const { plugins, ...profile } = config;
   const history = new HistoryCache(profile);
   const { directory, output, exclude } = inspection;

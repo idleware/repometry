@@ -1,3 +1,4 @@
+import { ignoreView } from './ignore-view.js';
 import { javascriptType, typescriptType } from '@repometry/core/internal/model/file-types.js';
 import { isRecord } from '@repometry/core/internal/model/plugin-data.js';
 import { legacySyntaxPlugin } from './inspection-context.js';
@@ -70,8 +71,7 @@ export function profileSettings(applied: unknown): ProfileSettings | undefined {
     debtModel: isRecord(model) && typeof model.name === 'string' && finite(model.scale) && finite(model.exponent) && finite(model.minutesPerPersonMonth)
       ? { name: model.name, scale: model.scale, exponent: model.exponent, minutesPerPersonMonth: model.minutesPerPersonMonth } : null,
     churn: isRecord(churn) && finite(churn.lookbackDays) && finite(churn.maxCommits) ? { lookbackDays: churn.lookbackDays, maxCommits: churn.maxCommits } : null,
-    ignore: Array.isArray(applied.findingIgnore) ? applied.findingIgnore.flatMap(entry => isRecord(entry) ? [Object.fromEntries(
-      (['tool', 'rule', 'path', 'reason'] as const).flatMap(key => typeof entry[key] === 'string' ? [[key, entry[key]]] : []))] : []) : [],
+    ignore: ignoreView(applied.findingIgnore),
     analyzers: plugins.flatMap(({ id, version, tools }) => typeof id === 'string' && typeof version === 'string'
       ? [{ id, version, tools: isRecord(tools)
         ? Object.fromEntries(Object.entries(tools).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {} }] : []),
