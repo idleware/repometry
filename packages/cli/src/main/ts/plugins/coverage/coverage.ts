@@ -1,7 +1,9 @@
 import { posix, win32 } from 'node:path';
 import reportSchema from '../../../resources/report/json/report-v2.schema.json' with { type: 'json' };
-import { isRecord, pluginApi } from '@repometry/core/internal/engine/plugin.js';
-import type { DataContract, MetricDescriptor, Plugin } from '@repometry/core/internal/engine/plugin.js';
+import { isRecord } from '@repometry/core/internal/engine/plugin.js';
+import type { DataContract, MetricDescriptor } from '@repometry/core/internal/engine/plugin.js';
+import { pluginManifestSchema } from '@repometry/core/internal/engine/plugin-manifest.js';
+import type { BundledManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { comparePaths } from '@repometry/core/internal/model/snapshot.js';
 import { definitions, measurements } from '@repometry/core/internal/model/measurement.js';
 import type { Measurement } from '@repometry/core/internal/model/measurement.js';
@@ -33,38 +35,42 @@ const kinds = [
 ] as const;
 const [lineMetrics, branchMetrics, functionMetrics] = kinds;
 
-export const coverage: Plugin = {
+export const coverage: BundledManifest = {
+  schema: pluginManifestSchema,
   id: 'lcov',
+  category: 'coverage',
   version: '1.2.0',
-  api: pluginApi,
-  kinds: ['coverage', 'import'],
-  produces: [{ contract: coverageResult.id, persistence: 'report',
-    metrics: kinds.flatMap<MetricDescriptor>(({ ids: [id, of, over], labels }) => [
-      { id, label: labels[0], unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
-        ratio: { of, over }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
-      { id: of, label: labels[1], unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
-      { id: over, label: labels[2], unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
-    ]) }, { contract: lcovLines.id, persistence: 'report',
-    schema: { ...reportSchema.$defs.lcovLines,
-      $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges, lcovHitRuns: reportSchema.$defs.lcovHitRuns,
-        lcovFunctionCalls: reportSchema.$defs.lcovFunctionCalls } } }],
-  operations: [{
-    id: 'import',
-    role: 'inspection',
-    inputs: { report: lcovInput },
-    output: coverageResult,
-    execute(inputs) {
-      const result = importCoverage(inputs.read('report', lcovInput));
-      for (const { path, reason } of result.gaps) inputs.emitDiagnostic?.(reason, path);
-      return result;
-    },
-  }, {
-    id: 'lines',
-    role: 'inspection',
-    inputs: { coverage: coverageResult },
-    output: lcovLines,
-    execute: inputs => inputs.read('coverage', coverageResult).lineCoverage,
-  }],
+  create(): ReturnType<BundledManifest['create']> {
+    return {
+      produces: [{ contract: coverageResult.id, persistence: 'report',
+        metrics: kinds.flatMap<MetricDescriptor>(({ ids: [id, of, over], labels }) => [
+          { id, label: labels[0], unit: 'ratio', scope: 'file', aggregate: 'sum', better: 'higher',
+            ratio: { of, over }, bands: [0.6, 0.7, 0.8, 0.9], group: 'Coverage' },
+          { id: of, label: labels[1], unit: 'count', scope: 'file', aggregate: 'sum', better: 'higher', group: 'Coverage' },
+          { id: over, label: labels[2], unit: 'count', scope: 'file', aggregate: 'sum', better: 'none', group: 'Coverage' },
+        ]) }, { contract: lcovLines.id, persistence: 'report',
+        valueSchema: { ...reportSchema.$defs.lcovLines,
+          $defs: { lcovLineRanges: reportSchema.$defs.lcovLineRanges, lcovHitRuns: reportSchema.$defs.lcovHitRuns,
+            lcovFunctionCalls: reportSchema.$defs.lcovFunctionCalls } } }],
+      operations: [{
+        id: 'import',
+        role: 'inspection',
+        inputs: { report: lcovInput },
+        output: coverageResult,
+        execute(inputs) {
+          const result = importCoverage(inputs.read('report', lcovInput));
+          for (const { path, reason } of result.gaps) inputs.emitDiagnostic?.(reason, path);
+          return result;
+        },
+      }, {
+        id: 'lines',
+        role: 'inspection',
+        inputs: { coverage: coverageResult },
+        output: lcovLines,
+        execute: inputs => inputs.read('coverage', coverageResult).lineCoverage,
+      }],
+    };
+  },
 };
 
 export function mapCoverage({ text, root, sourceLines, codeLines, unclassified, excludes }: CoverageInput) {

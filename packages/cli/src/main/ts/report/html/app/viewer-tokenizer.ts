@@ -3,7 +3,7 @@
 // comes back as plain text, never in another language's colours.
 import type { LanguageSyntax } from '../../json/wire/file-metrics-model.js';
 import { element } from './viewer-dom.js';
-import { syntaxOf } from './viewer-languages.js';
+import { languageIdOf, syntaxOf } from './viewer-languages.js';
 
 export type TokenKind = '' | 'c' | 's' | 'n' | 'k';
 export type Run = [TokenKind, string];
@@ -113,14 +113,16 @@ function regexEnd(line: string, at: number): number {
 
 const char = (cursor: Cursor, offset = 0) => cursor.line[cursor.at + offset];
 
+function marked(cursor: Cursor): boolean {
+  const found = cursor.grammar.forms.find(candidate => cursor.line.startsWith(candidate.start, cursor.at));
+  if (!found) return false;
+  begin(cursor, found, 0);
+  return true;
+}
+
 /** Where a token can start, tried in order; each takes what it recognises and says whether it did. */
 const starts: readonly ((cursor: Cursor) => boolean)[] = [
-  function marked(cursor) {
-    const found = cursor.grammar.forms.find(candidate => cursor.line.startsWith(candidate.start, cursor.at));
-    if (!found) return false;
-    begin(cursor, found, 0);
-    return true;
-  },
+  marked,
   function regex(cursor) {
     if (char(cursor) !== '/' || !cursor.grammar.regexAfter || !cursor.state.regexAllowed) return false;
     const end = regexEnd(cursor.line, cursor.at);
@@ -190,17 +192,71 @@ function runs() {
  */
 export function tokenizer(syntax: LanguageSyntax | undefined): (line: string) => Run[] {
   if (!syntax) return line => [['', line]];
-  const grammar = grammarOf(syntax);
+  return scanLines(grammarOf(syntax), scanLine);
+}
+
+function scanLine(cursor: Cursor): void {
+  while (cursor.at < cursor.line.length) {
+    if (cursor.state.open) inside(cursor, cursor.state.open);
+    else starts.find(start => start(cursor));
+  }
+}
+
+function scanLines(grammar: Grammar, scan: (cursor: Cursor) => void): (line: string) => Run[] {
   const state: ScanState = { open: undefined, regexAllowed: true };
   return line => {
     const collected = runs();
-    const cursor: Cursor = { line, grammar, at: 0, state, push: collected.push };
-    while (cursor.at < line.length) {
-      if (state.open) inside(cursor, state.open);
-      else starts.find(start => start(cursor));
-    }
+    scan({ line, grammar, at: 0, state, push: collected.push });
     return collected.done();
   };
+}
+
+// Bash Reference Manual §§3.1.2, 3.1.3 and 3.2.1. Colour complete unquoted words without parsing their command position.
+const shellGrammar = {
+  ...grammarOf({ keywords: ['case', 'coproc', 'do', 'done', 'elif', 'else', 'esac', 'fi', 'for', 'function',
+    'if', 'in', 'select', 'then', 'time', 'until', 'while'] }),
+  forms: [
+    form('s', "$'", "'"), form('s', '$"', '"'),
+    form('s', "'", "'", false, true), form('s', '"', '"'),
+  ],
+};
+const shellBoundary = /^[ \t;|&()<>]$/;
+const shellWord = /^(?:[^ \t;|&()<>'"\\$]|\$(?!['"]))+/;
+
+function scanShellLine(cursor: Cursor): void {
+  let wordStart = true;
+  while (cursor.at < cursor.line.length) wordStart = scanShellPart(cursor, wordStart);
+}
+
+/** Returns whether the next token begins a shell word. */
+function scanShellPart(cursor: Cursor, wordStart: boolean): boolean {
+  if (marked(cursor)) return false;
+  const current = char(cursor)!;
+  if (wordStart && current === '#') {
+    take(cursor, 'c', cursor.line.length);
+    return false;
+  }
+  if (shellBoundary.test(current)) {
+    take(cursor, '', cursor.at + 1);
+    return true;
+  }
+  if (current === '\\') {
+    take(cursor, '', Math.min(cursor.at + 2, cursor.line.length));
+    return false;
+  }
+  const word = shellWord.exec(cursor.line.slice(cursor.at))![0];
+  const next = char(cursor, word.length);
+  const keyword = wordStart && (next === undefined || shellBoundary.test(next)) && cursor.grammar.keywords.has(word);
+  take(cursor, keyword ? 'k' : '', cursor.at + word.length);
+  return false;
+}
+
+export function sourceTokenizer(path: string): (line: string) => Run[] {
+  const syntax = syntaxOf(path);
+  if (syntax === undefined && languageIdOf(path) === 'shell' && /\.(?:sh|bash)$/i.test(path)) {
+    return scanLines(shellGrammar, scanShellLine);
+  }
+  return tokenizer(syntax);
 }
 
 /** A line's runs as nodes: coloured spans and plain text. */
@@ -210,6 +266,6 @@ export function runNodes(lineRuns: readonly Run[]): Node[] {
 
 /** Highlights a file's lines, or a snippet of them, by the syntax of the file's language. */
 export function highlighter(path: string): (line: string) => Node[] {
-  const tokenize = tokenizer(syntaxOf(path));
+  const tokenize = sourceTokenizer(path);
   return line => runNodes(tokenize(line));
 }

@@ -438,26 +438,3 @@ Bad usage, such as an unknown option or a missing argument, exits with 1 on ever
 repometry report html=sites/app --store .repometry
 repometry projects sites
 ```
-
-## Upgrading from 0.12
-
-The configuration, the plugin contract and the plugin protocol differ from 0.12. Each old form is an error that says what to write. Saved reports and stores need no change.
-
-| Old form | Error | Write |
-| --- | --- | --- |
-| `"sources": "github"` | `sources is renamed. Write source.` | `"source": "github"` |
-| `--sources none` | `--sources is not an option of report. Did you mean --source?` | `--source none` |
-| `"pathGlobs": [...]` in a component | `components/0/pathGlobs is renamed. Write include.` | `"include": [...]` |
-| `"tool": "js-security"` in an `ignore` rule | `ignore/0/tool is renamed. Write plugin.` | `"plugin": "js-security"` |
-| `"rule": "weak-hash"` in an `ignore` rule | `ignore/0/rule is renamed. Write check.` | `"check": "weak-hash"` |
-| An `ignore` rule without `reason` | `ignore/0/reason is required` | Add a `reason`. |
-| A Docker plugin described inline in `plugins` | `plugins/0 describes a plugin inline. Move it into a manifest file and reference it with { "use": "./plugin.json" }.` | Move the description into a manifest file with an `image` field, or into the `repometry.plugin` label of the image, and write `{ "use": "./plugin.json" }` or `"docker:IMAGE"`. See [Docker plugins](process-plugins.md). |
-| `"providesLanguages"`, `"claims"`, `"extensions"` or `"globs"` in a Docker plugin | `plugins/0 describes a plugin inline. ...` | Write `languages`, with `include` globs for each language. |
-| `"settings"` on a Docker plugin | The same error. | Write `options`, and declare an `optionsSchema` in the manifest. |
-| A JavaScript plugin object with `api`, `kinds`, `claims`, `settings`, `rules`, `config` or `providesLanguages` | `plugins/0/manifest/api is retired. Write schema.` and the same for each other field: `kinds` to `category`, `claims` to `include`, `settings` to `options`, `rules` to `checks`, `config` to `optionsSchema`, `providesLanguages` to `languages`. | Export a manifest as the default export of a module, and reference the module. See [Write a plugin](plugins.md). |
-| A plugin object passed to `inspect`, `review` or `measureDiffCoverage` in `plugins` | `Config plugins/0/manifest/create must create the plugin operations` | Pass a manifest or a reference. |
-| `measures: ["structuralRules"]` in a language | `plugins/0/manifest/languages/0/measures/0 must be one of "functions", "cyclomaticComplexity", ..., "checks"` | `measures: ["checks"]` |
-| `import { pluginApi } from 'repometry/plugin'` | `SyntaxError: The requested module 'repometry/plugin' does not provide an export named 'pluginApi'` | Remove it, and write `schema: pluginManifestSchema`. `processPlugin`, `processPluginProtocol`, `DockerToolRunner`, `LocalOperationCache`, `plan` and `execute` are also not exported. |
-| A finding with `tool` and `rule` in the result of a plugin | The operation fails with the diagnostic `Invalid output for repometry.findings-and-measurements/v1`. | Write `check`, and `plugin` only when it is the plugin's own ID. |
-| A Docker plugin that reads `protocol` and `settings` from its input | None. The request has no such keys. | Read `schema` and `options`. See [the request](process-plugins.md#the-request). |
-| `$schema` pointing to `config-v1.schema.json` or `process-plugins-v1.schema.json` | None. Repometry ignores `$schema`. | Point it to `config-v2.schema.json`. |

@@ -5,7 +5,7 @@ import { python } from '@repometry/language-python';
 import { bundledLanguages } from './helpers/wasm-plugin.js';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { languageIdOf, syntaxOf, useLanguages } from '../../main/ts/report/html/app/viewer-languages.js';
-import { tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
+import { sourceTokenizer, tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
 import type { LanguageSyntax } from '../../main/ts/report/json/wire/file-metrics-model.js';
 
 const [goSyntax, pythonSyntax] = [go.language.syntax!, python.language.syntax!];
@@ -118,6 +118,45 @@ test('Dockerfile: uppercase instructions and stage names without colouring shell
   assert.deepEqual(kinds(scan('RUN npm run build'), 'k'), ['RUN']);
   assert.deepEqual(kinds(scan('ENV PATH_NAME="foo#bar"'), 's'), ['"foo#bar"']);
   assert.deepEqual(kinds(scan('RUN printf foo#bar'), 'c'), []);
+});
+
+function unmeasuredFile(path: string, language = 0) {
+  return { path, language, lines: null, functions: null, complexity: null, lineCoverage: null, diagnosticCount: 0 };
+}
+
+test('shell colours are selected by language and the .sh or .bash suffix', () => {
+  const paths = ['bin/run.sh', 'bin/setup.BASH', 'init.zsh', 'config.fish', '.bashrc', 'bin/run', 'plain.sh'];
+  useLanguages({ languages: [{ id: 'shell', analysed: false }, { id: 'text', analysed: false }],
+    files: paths.map(path => unmeasuredFile(path, path === 'plain.sh' ? 1 : 0)) });
+  const source = 'if test -f "setup #1"; then # setup';
+  for (const path of paths.slice(0, 2)) {
+    const result = sourceTokenizer(path)(source);
+    assert.deepEqual(kinds(result, 'k'), ['if', 'then']);
+    assert.deepEqual(kinds(result, 's'), ['"setup #1"']);
+    assert.deepEqual(kinds(result, 'c'), ['# setup']);
+    assert.equal(result.map(([, text]) => text).join(''), source);
+  }
+  for (const path of paths.slice(2)) assert.deepEqual(sourceTokenizer(path)(source), [['', source]]);
+});
+
+test('shell comments begin a word and quoted or escaped text keeps its characters', () => {
+  useLanguages({ languages: [{ id: 'shell', analysed: false }], files: [unmeasuredFile('sample.sh')] });
+  const scan = sourceTokenizer('sample.sh');
+  assert.deepEqual(kinds(scan('#!/bin/sh'), 'c'), ['#!/bin/sh']);
+  assert.deepEqual(kinds(scan('echo token#hash value${word#prefix};# note'), 'c'), ['# note']);
+  assert.deepEqual(kinds(scan(String.raw`printf '%s\n' item\ #suffix \#escaped 'quoted'#literal`), 'c'), []);
+  assert.deepEqual(kinds(scan("printf '%s' 'C:\\' # comment"), 'c'), ['# comment']);
+  assert.deepEqual(kinds(scan(String.raw`printf '%s' "a\"#b" $'c\'#d' # note`), 's'), ['\'%s\'', '"a\\"#b"', "$'c\\'#d'"]);
+  assert.deepEqual(kinds(scan('x=if echo fi.txt if-name if"suffix" "else"'), 'k'), []);
+  scan("a line with an unmatched '");
+  assert.deepEqual(kinds(scan('while :; do # next line'), 'k'), ['while', 'do']);
+});
+
+test('a shell language plugin can supply its own syntax for the viewer', () => {
+  const syntax = { keywords: ['function'] };
+  useLanguages({ languages: [{ id: 'shell', analysed: true, syntax }], files: [unmeasuredFile('main.bash')] });
+  assert.deepEqual(kinds(sourceTokenizer('main.bash')('if # note'), 'c'), []);
+  assert.deepEqual(kinds(sourceTokenizer('main.bash')('function helper'), 'k'), ['function']);
 });
 
 test('a language that exists only here gets colours with no viewer change', () => {

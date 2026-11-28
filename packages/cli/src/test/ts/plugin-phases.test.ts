@@ -18,7 +18,7 @@ const files = [['README.md', '# Notes\n'], ['a.ts', 'export const a = 1;\n'], ['
 const input = { excludedOutput: null, snapshot: { subject: { kind: 'commit', id: 'a'.repeat(40) } as const,
   files: files.map(([path, text]) => ({ path, bytes: encoder.encode(text) })) } };
 const coverage = { text: 'SF:a.ts\nDA:1,1\nend_of_record\n', sourceRoot: '/repo' };
-const coverageResult = lcov.operations.find(({ inputs }) => Object.values(inputs).includes(lcovInput))!.output;
+const coverageResult = lcov.create().operations.find(({ inputs }) => Object.values(inputs).includes(lcovInput))!.output;
 
 const contract = (id: string): DataContract<{ readonly path: string }> =>
   ({ id, accepts: (value): value is { readonly path: string } => typeof (value as { path?: unknown })?.path === 'string' });

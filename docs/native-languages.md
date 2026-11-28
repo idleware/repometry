@@ -220,12 +220,3 @@ The Go importer accepts `set`, `count` and `atomic` profiles. It maps module-qua
 The Cobertura importer reads the XML that coverage.py, c8, Istanbul, coverlet, PHPUnit and other tools write. It maps each class `filename` to a repository file. An absolute filename is the only candidate. A relative one is tried under each `<source>` in the file and under the repository root. When exactly one candidate is a file of the inspected revision, the importer uses it. When two or more are, the import fails with `Ambiguous Cobertura source`. When none is, the file is reported as a coverage gap, `LCOV source is outside the inspected file set`. `--import-root` does not apply. In the `imports` key of `repometry.config.json`, use the same `cobertura=PATH` form with a path relative to the repository root.
 
 Line hits come from each class's `<lines>`. Branches come from the `condition-coverage` counts on those lines. Functions come from `<methods>`, with a method's first line as its declaration. coverage.py writes no methods, so its Cobertura file gives no function coverage; its LCOV file does.
-
-## Upgrading from 0.12 or earlier
-
-- Profile. New inspections record the profile `repository/v4`. The first inspection made with this version starts a new profile for every repository, so Trends shows one "Inspection profile changed" mark. Saved reports keep their profiles.
-- Plugin IDs. The ID `tree-sitter` is replaced by `language-go` and `language-python`. The IDs `go-ast` and `python-ast` do not exist. A `parsers` or `ignore[].plugin` entry that names one of these fails with `parsers/go/0 names unknown plugin tree-sitter; go is provided by language-go`. Change `"go": ["tree-sitter"]` to `"go": ["language-go"]`, and `"python": ["tree-sitter"]` to `"python": ["language-python"]`. Remove the entry when no other plugin provides the language.
-- Profile. A Go or Python repository gets one more profile change, because the parser's ID changes.
-- Report values. Saved reports keep the old IDs `tree-sitter` and `tree-sitter/parse`, and they open as before. The language ID `c-sharp` in a saved report opens too. New reports write `csharp`.
-- Duplication anchors. Go and Python duplication findings have new anchors. Update every `ignore` rule that uses one.
-- Cache. `repometry cache clear` also removes the compiled Go parser that earlier versions left in the system cache.

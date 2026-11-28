@@ -13,6 +13,9 @@ import { secrets } from './security/secrets.js';
 import { githubSource, gitlabSource, localSource } from './source/forges.js';
 import { structure } from './structure/structure.js';
 
+// The review path uses the importer kind, which is also part of existing inspection profiles.
+const lcov: Plugin = { ...bundledPlugin(coverage), kinds: ['coverage', 'import'] };
+
 /** The built-in plugins in run order. The first language plugin is the default provider. */
-export const builtInPlugins: readonly Plugin[] = [babelProvider, bundledPlugin(structure), maintainability, duplication, coverage, bundledPlugin(diffCoverage),
+export const builtInPlugins: readonly Plugin[] = [babelProvider, bundledPlugin(structure), maintainability, duplication, lcov, bundledPlugin(diffCoverage),
   secrets, jsSecurity, actionsSecurity, npmSupplyChain, dockerfile, githubSource, gitlabSource, localSource];
