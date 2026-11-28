@@ -1,6 +1,6 @@
 # Languages
 
-Repometry parses Go, Python, Java, Ruby, PHP, Kotlin and HCL with tree-sitter grammars. Each grammar runs as a WebAssembly module inside Node.js. Analysis needs no compiler, interpreter, download or cache. JavaScript and TypeScript use the built-in `babel-syntax` plugin, which this page does not cover.
+Repometry parses Go, Python, Java, Ruby, PHP, Kotlin, HCL, Lua, Scala, Elixir, Rust, C#, C, C++ and Swift with tree-sitter grammars. Each grammar runs as a WebAssembly module inside Node.js. Analysis needs no compiler, interpreter, download or cache. JavaScript and TypeScript use the built-in `babel-syntax` plugin, which this page does not cover.
 
 Each language is one plugin in its own package. The plugin ID is `language-<id>`, its operation is `language-<id>/parse`, and the package is `@repometry/language-<id>`. A grammar loads when the first file of its language is parsed.
 
@@ -17,9 +17,14 @@ A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin]
 | PHP | `php` | `.php` | `language-php` | `repometry`, `@repometry/all` |
 | Kotlin | `kotlin` | `.kt`, `.kts` | `language-kotlin` | `@repometry/all` |
 | HCL | `hcl` | `.hcl`, `.tf`, `.tfvars` | `language-hcl` | `@repometry/all` |
-| Rust | | | | Not yet. The grammar rejects too many valid files. |
+| Lua | `lua` | `.lua` | `language-lua` | `@repometry/all` |
+| Scala | `scala` | `.scala` | `language-scala` | `@repometry/all` |
+| Elixir | `elixir` | `.ex`, `.exs` | `language-elixir` | `@repometry/all` |
+| Rust | `rust` | `.rs` | `language-rust` | `@repometry/all`. A file with code the grammar cannot read keeps its lines and every function outside that code; the report counts such files. |
 | C# | `csharp` | `.cs` | `language-csharp` | Separate install: `@repometry/language-csharp`. A file with code the grammar cannot read, mostly around preprocessor directives, keeps its lines and every function outside that code; the report counts such files. |
-| C, C++, Swift | | | | Not yet. |
+| C | `c` | `.c`, `.h` | `language-c` | Separate install: `@repometry/language-c`. Experimental: macros and conditional compilation hide part of the code. A file with code the grammar cannot read keeps its lines and every function outside that code; the report counts such files. |
+| C++ | `cpp` | `.cc`, `.cpp`, `.cxx`, `.hpp`, `.hh` | `language-cpp` | Separate install: `@repometry/language-cpp`. Experimental: macros and conditional compilation hide part of the code. A file with code the grammar cannot read keeps its lines and every function outside that code; the report counts such files. `.h` files go to C unless the config gives them to C++. |
+| Swift | `swift` | `.swift` | `language-swift` | Separate install: `@repometry/language-swift`. Experimental: the grammar cannot read some valid constructs. A file with code the grammar cannot read keeps its lines and every function outside that code; the report counts such files. |
 
 JavaScript and TypeScript ship in every package. A language in the package you run needs no setup; see [Packages](cli.md#packages). A file of a language without a plugin stays in the inventory as not analysed.
 

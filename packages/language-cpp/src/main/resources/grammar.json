@@ -1,0 +1,7 @@
+{
+  "package": "tree-sitter-cpp",
+  "version": "0.23.4",
+  "license": "MIT",
+  "source": "https://github.com/tree-sitter/tree-sitter-cpp/releases/download/v0.23.4/tree-sitter-cpp.wasm",
+  "sha256": "174eb0deb75b2ec7881bcacda9f995648d8e683956e5c2267e69ab6dc503fcbf"
+}

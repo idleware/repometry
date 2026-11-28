@@ -1,0 +1,7 @@
+{
+  "package": "tree-sitter-rust",
+  "version": "0.24.2",
+  "license": "MIT",
+  "source": "https://github.com/tree-sitter/tree-sitter-rust/releases/download/v0.24.2/tree-sitter-rust.wasm",
+  "sha256": "24c89bd9252255e4aebbcbd7d2d308bd92c86dd95a130fdc80efa49577b8d738"
+}

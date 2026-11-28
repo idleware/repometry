@@ -4,13 +4,15 @@ const root = new URL('../', import.meta.url);
 const read = async path => JSON.parse(await readFile(new URL(path, root), 'utf8'));
 const { workspaces } = await read('package.json');
 const catalog = [];
+const experimental = new Set(['@repometry/language-c', '@repometry/language-cpp', '@repometry/language-swift']);
 
 for (const workspace of workspaces.filter(path => path.startsWith('packages/language-'))) {
   const { name } = await read(workspace + '/package.json');
   const { default: manifest } = await import(name);
   for (const { id, label, include } of manifest.languages) {
     const extensions = include.filter(pattern => /^\*\*\/\*\.[a-z0-9]+$/i.test(pattern)).map(pattern => pattern.slice(4));
-    if (extensions.length > 0) catalog.push({ language: id, label, package: name, extensions });
+    if (extensions.length > 0) catalog.push({ language: id, label, package: name,
+      ...(experimental.has(name) ? { experimental: true } : {}), extensions });
   }
 }
 

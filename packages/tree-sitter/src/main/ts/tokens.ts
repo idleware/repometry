@@ -62,9 +62,9 @@ class TokenScanner {
     return { ...lines, clones: this.cloneSource(path, lines.codeLines) };
   }
 
-  private advance(): boolean {
-    while (!this.cursor.gotoNextSibling()) {
-      if (!this.cursor.gotoParent()) return false;
+  private advance(cursor = this.cursor): boolean {
+    while (!cursor.gotoNextSibling()) {
+      if (!cursor.gotoParent()) return false;
     }
     return true;
   }
@@ -78,11 +78,27 @@ class TokenScanner {
     if (this.collect && this.grammar.tokens.candidates.has(type)) this.candidate();
     const kind = this.collect ? this.grammar.tokens.kinds.get(type) : undefined;
     if (!kind && this.cursor.gotoFirstChild()) return true;
+    if (kind && this.grammar.tokens.literalsWithComments?.has(type)) this.literalComments();
     if (this.candidateEnd) {
       const start = this.cursor.startIndex;
       if (start < this.candidateEnd) this.record(start, type, kind);
     }
     return false;
+  }
+
+  private literalComments(): void {
+    const cursor = this.cursor.currentNode.walk();
+    try {
+      if (!cursor.gotoFirstChild()) return;
+      do {
+        const type = cursor.nodeType;
+        if (this.grammar.comments.has(type)) this.comments.push(span(cursor));
+        else if (!this.grammar.extras.has(type) && cursor.gotoFirstChild()) continue;
+        if (!this.advance(cursor)) break;
+      } while (true);
+    } finally {
+      cursor.delete();
+    }
   }
 
   private candidate(): void {

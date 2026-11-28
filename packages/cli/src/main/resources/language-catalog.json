@@ -1,10 +1,42 @@
 [
   {
+    "language": "c",
+    "label": "C",
+    "package": "@repometry/language-c",
+    "experimental": true,
+    "extensions": [
+      ".c",
+      ".h"
+    ]
+  },
+  {
+    "language": "cpp",
+    "label": "C++",
+    "package": "@repometry/language-cpp",
+    "experimental": true,
+    "extensions": [
+      ".cc",
+      ".cpp",
+      ".cxx",
+      ".hpp",
+      ".hh"
+    ]
+  },
+  {
     "language": "csharp",
     "label": "C#",
     "package": "@repometry/language-csharp",
     "extensions": [
       ".cs"
+    ]
+  },
+  {
+    "language": "elixir",
+    "label": "Elixir",
+    "package": "@repometry/language-elixir",
+    "extensions": [
+      ".ex",
+      ".exs"
     ]
   },
   {
@@ -72,6 +104,31 @@
     "package": "@repometry/language-ruby",
     "extensions": [
       ".rb"
+    ]
+  },
+  {
+    "language": "rust",
+    "label": "Rust",
+    "package": "@repometry/language-rust",
+    "extensions": [
+      ".rs"
+    ]
+  },
+  {
+    "language": "scala",
+    "label": "Scala",
+    "package": "@repometry/language-scala",
+    "extensions": [
+      ".scala"
+    ]
+  },
+  {
+    "language": "swift",
+    "label": "Swift",
+    "package": "@repometry/language-swift",
+    "experimental": true,
+    "extensions": [
+      ".swift"
     ]
   }
 ]

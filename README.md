@@ -22,7 +22,7 @@ Git can serve as a project’s single source of truth for code, tests, docs, and
 
 Node.js >=24
 
-Repometry analyses JavaScript, TypeScript, Go, Python, Java and PHP with no extra tools. Ruby, Kotlin and HCL (Terraform) come with `@repometry/all` or as plugins. See [Languages](docs/native-languages.md). Generating coverage uses your project's own test tools.
+Repometry analyses JavaScript, TypeScript, Go, Python, Java and PHP with no extra tools. Ruby, Kotlin, HCL (Terraform), Lua, Scala, Elixir and Rust come with `@repometry/all` or as plugins. C#, C, C++ and Swift are separate plugins. See [Languages](docs/native-languages.md). Generating coverage uses your project's own test tools.
 
 ## Install
 
@@ -40,7 +40,7 @@ npm install --global repometry
 | --- | --- | --- | --- |
 | `@repometry/cli` | `repometry-cli` | JavaScript, TypeScript | about 8 MB |
 | `repometry` | `repometry` | The above, Go, Python, Java, PHP | about 15 MB |
-| `@repometry/all` | `repometry-all` | The above, Ruby, Kotlin, HCL | about 20 MB |
+| `@repometry/all` | `repometry-all` | The above, Ruby, Kotlin, HCL, Lua, Scala, Elixir, Rust | about 28 MB |
 
 To add a language to `@repometry/cli`, install its `@repometry/language-*` package with your package manager and list it in `plugins`. Repometry never installs a plugin. See [Packages](docs/cli.md#packages).
 

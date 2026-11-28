@@ -17,10 +17,14 @@ declare global {
 export interface TokenRules {
   readonly candidates: ReadonlySet<string>;
   readonly kinds: ReadonlyMap<string, string>;
+  /** Opaque literal tokens whose descendants may contain source comments. */
+  readonly literalsWithComments?: ReadonlySet<string>;
   readonly normalize?: (type: string, text: string, kind: string | undefined) => readonly [string, string | undefined];
 }
 
 export interface NodeRule {
+  /** Resolve a semantic rule when multiple constructs share a syntax node type. */
+  readonly select?: (node: Node) => NodeRule | undefined;
   readonly flow?: 'function' | 'class' | 'decorated' | 'if' | 'elif' | 'else' | 'nest' | 'sequence' | 'clause' | 'filter';
   readonly decision?: true | ((node: Node) => number);
   readonly exit?: 'return' | 'label';
@@ -31,6 +35,8 @@ export interface NodeRule {
   readonly requiresBody?: boolean;
   /** Lexical parameter count when the grammar does not expose a list of formal parameters. */
   readonly parameters?: (node: Node) => number | undefined;
+  /** Conditional members in source order when an ordinary child wraps both branches. */
+  readonly conditionalChildren?: (node: Node) => readonly Node[];
   /** Alternate branch when the grammar does not expose an alternative field. */
   readonly alternative?: (node: Node) => Node | null;
   /** Authored alternatives stored in one transparent conditional child. */
@@ -61,6 +67,8 @@ export interface Grammar {
   readonly extras: ReadonlySet<string>;
   readonly logicalTypes: ReadonlySet<string>;
   readonly logicalOperators: ReadonlySet<string>;
+  /** Match named operator tokens by source spelling. */
+  readonly logicalOperatorSpelling?: true;
   readonly logicalCognitive: 'parent' | 'sequence';
   /** A parameters field with one of these node types is a single parameter. */
   readonly singleParameterTypes?: ReadonlySet<string>;
@@ -76,3 +84,8 @@ export interface Grammar {
 
 export const measures = ['functions', 'cyclomaticComplexity', 'cognitiveComplexity', 'commentLines', 'codeLines',
   'structuralRules', 'duplication'] as const;
+
+export function ruleFor(grammar: Grammar, node: Node): NodeRule | undefined {
+  const rule = grammar.rules[node.type];
+  return rule?.select ? rule.select(node) : rule;
+}

@@ -1,3 +1,4 @@
+import { ruleFor } from './language.js';
 import type { Node, TreeCursor } from 'web-tree-sitter';
 import type { Grammar, NodeRule } from './language.js';
 import type { SourceLines } from './source-lines.js';
@@ -76,9 +77,9 @@ export class Traversal {
   }
 
   children(node: Node, flow: Flow, depth: number, parent?: NodeRule['flow'], logical?: string): void {
-    const ordered = this.grammar.rules[node.type]?.order;
+    const ordered = ruleFor(this.grammar, node)?.order;
     const prepare = (child: Node): Work => {
-      if (this.grammar.rules[child.type]?.flow !== 'filter') return { node: child, flow, depth, parent, logical };
+      if (ruleFor(this.grammar, child)?.flow !== 'filter') return { node: child, flow, depth, parent, logical };
       const at = depth++;
       return () => {
         flow.block(this.condition(child), at);

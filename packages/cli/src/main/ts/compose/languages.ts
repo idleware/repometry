@@ -1,3 +1,4 @@
+import { extname } from 'node:path';
 import { plan } from '@repometry/core/internal/engine/plan.js';
 import type { Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
 import { fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
@@ -10,6 +11,7 @@ import { languageMeasures, restrictStructureMeasures, structureImplementation } 
 import { builtInPluginIds, builtInPlugins, registeredPlugins } from './built-ins.js';
 import { pluginRegistration } from './registered-plugin.js';
 import { languageFileSelection } from './file-selection.js';
+import { pluginScope } from './plugin-scope.js';
 
 export { claimMatcher } from './file-selection.js';
 
@@ -36,6 +38,8 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
   const bindings = new Map<Plugin, Plugin>();
   const entries = registered.filter(plugin => plugin.kinds.includes('language')).flatMap(plugin =>
     languageEntry(plugin, byProvider.get(plugin.id) ?? [], bindings));
+  // The official C++ package accepts .h only through a configured include.
+  const cpp = entries.find(entry => entry.id === 'language-cpp' && entry.requiresSource && entry.explicitInclude);
   const active = entries.flatMap(({ provider }) => provider ?? []);
   const { extensions, globs, catalog } = languageSelection(entries);
   const syntaxById = selectedSyntax(selection);
@@ -55,7 +59,9 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
 
   function match(path: string) {
     let matched: (typeof entries)[number] | undefined;
+    const cppHeader = cpp !== undefined && extname(path) === '.h' && cpp.matches(path);
     for (const entry of entries) {
+      if (cppHeader && entry.id === 'language-c' && entry.requiresSource) continue;
       if (!entry.matches(path)) continue;
       if (matched) throw new Error(`Parsers ${matched.id} and ${entry.id} both include ${path}`);
       if (path.split('/').slice(0, -1).some(isExcludedDirectory)) return undefined;
@@ -85,7 +91,8 @@ function languageEntry(plugin: ParserPlugin, chosen: readonly ProvidedLanguage[]
   const provider = available && operation ? bindParser(plugin, operation, declared, identify) : undefined;
   if (provider) bindings.set(plugin, provider.plugin);
 
-  return [{ id: plugin.id, provider, declared, claims, matches, identify, requiresSource: plugin.languageProvenanceRequiresSource }];
+  return [{ id: plugin.id, provider, declared, claims, matches, identify,
+    requiresSource: plugin.languageProvenanceRequiresSource, explicitInclude: pluginScope(plugin)?.include !== undefined }];
 }
 
 function languageSelection(entries: ReadonlyArray<ReturnType<typeof languageEntry>[number]>) {

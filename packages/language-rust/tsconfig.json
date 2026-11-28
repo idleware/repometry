@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "rootDir": "src/main",
+    "outDir": "target/main",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noEmitOnError": true,
+    "resolveJsonModule": true,
+    "declaration": true
+  },
+  "include": ["src/main/ts"]
+}

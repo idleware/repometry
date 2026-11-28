@@ -46,6 +46,9 @@
     "@repometry/language-ruby": "0.0.0",
     "@repometry/language-kotlin": "0.0.0",
     "@repometry/language-hcl": "0.0.0",
-    "@repometry/language-lua": "0.0.0"
+    "@repometry/language-lua": "0.0.0",
+    "@repometry/language-scala": "0.0.0",
+    "@repometry/language-elixir": "0.0.0",
+    "@repometry/language-rust": "0.0.0"
   }
 }

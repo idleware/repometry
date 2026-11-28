@@ -38,6 +38,7 @@ export const fileTypes: readonly FileType[] = [
   { id: 'cpp', label: 'C++', color: '#f34b7d', extensions: ['.cc', '.cpp', '.cxx', '.hpp', '.hh'], syntax: cppSyntax },
   { id: 'swift', label: 'Swift', color: '#f05138', extensions: ['.swift'] },
   { id: 'scala', label: 'Scala', color: '#c22d40', extensions: ['.scala'] },
+  { id: 'elixir', label: 'Elixir', color: '#6e4a7e', extensions: ['.ex', '.exs'] },
   { id: 'vue', label: 'Vue', color: '#41b883', extensions: ['.vue'] },
   { id: 'svelte', label: 'Svelte', color: '#ff3e00', extensions: ['.svelte'] },
   { id: 'text', label: 'Plain text', color: '#7b8794', extensions: ['.txt'] },

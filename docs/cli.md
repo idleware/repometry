@@ -8,7 +8,7 @@ This page covers the options that every command shares, the configuration file, 
 | --- | --- | --- | --- |
 | `@repometry/cli` | `repometry-cli` | JavaScript, TypeScript | about 8 MB |
 | `repometry` | `repometry` | The above, Go, Python, Java, PHP | about 15 MB |
-| `@repometry/all` | `repometry-all` | The above, Ruby, Kotlin, HCL | about 20 MB |
+| `@repometry/all` | `repometry-all` | The above, Ruby, Kotlin, HCL, Lua, Scala, Elixir, Rust | about 28 MB |
 
 `repometry` and `@repometry/all` are `@repometry/cli` with language plugins already built in, so those languages need no `plugins` entry. To add a language to `@repometry/cli`, install its plugin package next to it and reference it:
 

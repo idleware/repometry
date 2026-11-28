@@ -401,3 +401,25 @@ test('working-tree discovery counts only unconfigured official languages in scop
   assert.equal(configured.stderr, '');
   assert.deepEqual(JSON.parse(configured.stdout).scope, { files: 3, parsed: 3 });
 });
+
+test('working-tree discovery marks only experimental parser hints', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'repometry-experimental-hints-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await Promise.all([
+    writeFile(join(dir, 'example.c'), 'int x = 1;\n'),
+    writeFile(join(dir, 'example.cpp'), 'constexpr int x = 1;\n'),
+    writeFile(join(dir, 'Example.cs'), 'class Example {}\n'),
+    writeFile(join(dir, 'Example.swift'), 'let x = 1\n'),
+    writeFile(join(dir, 'index.js'), 'const x = 1;\n'),
+  ]);
+  const scan = invoke(dir, ['analyze', '--working-tree']);
+  assert.equal(scan.status, 0, scan.stderr);
+  assert.deepEqual(scan.stderr.trim().split('\n'), [
+    ['C', '@repometry/language-c', ' (experimental)'],
+    ['C++', '@repometry/language-cpp', ' (experimental)'],
+    ['C#', '@repometry/language-csharp', ''],
+    ['Swift', '@repometry/language-swift', ' (experimental)'],
+  ].map(([label, name, status]) => `${label}: 1 file has no configured parser. Install ${name}${status} next to Repometry ` +
+    `(npm install -D ${name}) and add it to plugins in repometry.config.json.`));
+  assert.deepEqual(JSON.parse(scan.stdout).scope, { files: 1, parsed: 1 });
+});

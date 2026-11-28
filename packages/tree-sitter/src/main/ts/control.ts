@@ -1,3 +1,4 @@
+import { ruleFor } from './language.js';
 import type { Node } from 'web-tree-sitter';
 import type { StructuralCheck } from '@repometry/core/internal/model/code-structure.js';
 import type { Flow, Traversal, Visit, Work } from './flow.js';
@@ -47,8 +48,13 @@ export class Control {
   private conditional(node: Node, flow: Flow, depth: number, chained?: boolean): void {
     flow.block(node, depth, chained);
     const work: Work[] = [];
-    const rule = this.walk.grammar.rules[node.type];
+    const rule = ruleFor(this.walk.grammar, node);
     const alternate = rule?.alternative?.(node);
+    const children = rule?.conditionalChildren?.(node);
+    if (children) {
+      return this.walk.next(children.filter(child => !this.walk.ignored(child.type)).map(child =>
+        child.id === alternate?.id ? this.alternative(child, flow, depth) : { node: child, flow, depth: depth + 1 }));
+    }
     for (let index = 0; index < node.childCount; index++) {
       const child = node.child(index)!;
       const explicitAlternative = child.id === alternate?.id;
@@ -65,7 +71,7 @@ export class Control {
   }
 
   private alternative(node: Node, flow: Flow, depth: number): Work {
-    const rule = this.walk.grammar.rules[node.type];
+    const rule = ruleFor(this.walk.grammar, node);
     const chained = rule?.chainedAlternative ? this.chainedChild(node) : undefined;
     if (chained) return { node: chained, flow, depth, chained: true };
     switch (rule?.flow) {
@@ -81,14 +87,14 @@ export class Control {
 
   private chainedChild(node: Node): Node | undefined {
     const [child, sibling] = this.walk.named(node);
-    return child && sibling === undefined && this.walk.grammar.rules[child.type]?.flow === 'if' ? child : undefined;
+    return child && sibling === undefined && ruleFor(this.walk.grammar, child)?.flow === 'if' ? child : undefined;
   }
 
   private sequence(node: Node, flow: Flow, depth: number): void {
     const work: Work[] = [];
     const values: Node[] = [];
     for (const child of this.walk.named(node)) {
-      const kind = this.walk.grammar.rules[child.type]?.flow;
+      const kind = ruleFor(this.walk.grammar, child)?.flow;
       if (kind === 'clause' || kind === 'filter') {
         const at = depth++;
         work.push(() => {

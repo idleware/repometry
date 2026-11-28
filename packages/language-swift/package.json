@@ -1,0 +1,45 @@
+{
+  "name": "@repometry/language-swift",
+  "version": "0.0.0",
+  "description": "Standalone experimental Swift support for Repometry, with its tree-sitter grammar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idleware/repometry.git"
+  },
+  "homepage": "https://github.com/idleware/repometry#readme",
+  "bugs": {
+    "url": "https://github.com/idleware/repometry/issues"
+  },
+  "keywords": [
+    "repometry",
+    "tree-sitter",
+    "swift",
+    "experimental"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./target/main/ts/index.d.ts",
+      "default": "./target/main/ts/index.js"
+    }
+  },
+  "files": [
+    "target/main",
+    "!target/main/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && node -e \"const fs = require('node:fs'); fs.cpSync('src/main/resources', 'target/main/resources', { recursive: true }); fs.cpSync('../../LICENSE', 'LICENSE')\"",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@repometry/core": "0.1.0",
+    "@repometry/tree-sitter": "0.1.0"
+  }
+}

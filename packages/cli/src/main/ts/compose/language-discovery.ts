@@ -9,6 +9,7 @@ const fileTypesByExtension = new Map(fileTypes.flatMap(type =>
   (type.extensions ?? []).map(extension => [extension, type.id] as const)));
 const officialByExtension = new Map<string, string>();
 const packagesByLanguage = new Map<string, Set<string>>();
+const experimentalPackages = new Set(catalog.filter(entry => entry.experimental).map(entry => entry.package));
 const labels = new Map(catalog.map(({ language, label }) => [language, label]));
 for (const entry of catalog) {
   const packages = packagesByLanguage.get(entry.language) ?? new Set<string>();
@@ -54,7 +55,7 @@ export function detectMissingLanguages(plugins: readonly Plugin[]) {
 
 export function missingLanguageNotice({ language, files, packages }: MissingLanguagePlugin): string {
   const label = labels.get(language) ?? language;
-  const choices = packages.join(' or ');
+  const choices = packages.map(name => experimentalPackages.has(name) ? name + ' (experimental)' : name).join(' or ');
   const install = packages.map(name => 'npm install -D ' + name).join(' or ');
   const noun = files === 1 ? 'file has' : 'files have';
   return `${label}: ${files} ${noun} no configured parser. Install ${choices} next to Repometry (${install}) and add it to plugins in repometry.config.json.`;

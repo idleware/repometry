@@ -1,3 +1,4 @@
+import { ruleFor } from './language.js';
 import type { Node } from 'web-tree-sitter';
 import type { Grammar } from './language.js';
 import { lowerBound } from './source-lines.js';
@@ -35,7 +36,7 @@ export function damagedSyntax(root: Node): (span: Span) => boolean {
 }
 
 function isDeclaration(node: Node, grammar: Grammar): boolean {
-  const rule = grammar.rules[node.type];
+  const rule = ruleFor(grammar, node);
   if (rule?.flow !== 'function' && rule?.flow !== 'class') return false;
   return !rule.requiresBody || (rule.body?.(node).length ?? Number(node.childForFieldName('body') !== null)) > 0;
 }

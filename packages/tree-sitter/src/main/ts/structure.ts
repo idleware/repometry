@@ -1,3 +1,4 @@
+import { ruleFor } from './language.js';
 import type { Node } from 'web-tree-sitter';
 import type { FunctionComplexity, StructuralCheck, StructuralObservation } from '@repometry/core/internal/model/code-structure.js';
 import { Control } from './control.js';
@@ -53,7 +54,7 @@ export class Structure {
   }
 
   private visit(task: Visit): void {
-    const rule = this.grammar.rules[task.node.type];
+    const rule = ruleFor(this.grammar, task.node);
     if (rule?.flow === 'function') this.scope(task, false);
     else if (rule?.flow === 'class') this.scope(task, true);
     else if (rule?.flow === 'decorated') this.decorated(task);
@@ -64,11 +65,11 @@ export class Structure {
     const definition = task.node.childForFieldName('definition');
     if (!definition) return;
     const decorators = this.walk.named(task.node).filter(child => child.id !== definition.id);
-    this.scope({ ...task, node: definition }, this.grammar.rules[definition.type]?.flow === 'class', decorators);
+    this.scope({ ...task, node: definition }, ruleFor(this.grammar, definition)?.flow === 'class', decorators);
   }
 
   private scope({ node, flow, depth }: Visit, isClass: boolean, decorators: readonly Node[] = []): void {
-    const rule = this.grammar.rules[node.type];
+    const rule = ruleFor(this.grammar, node);
     const body = rule?.body?.(node) ?? fieldBody(node);
     if (rule?.requiresBody && body.length === 0) {
       this.walk.children(node, flow, depth);
@@ -116,7 +117,7 @@ export class Structure {
   }
 
   private parameters(node: Node): number {
-    const specified = this.grammar.rules[node.type]?.parameters?.(node);
+    const specified = ruleFor(this.grammar, node)?.parameters?.(node);
     if (specified !== undefined) return specified;
     const list = node.childForFieldName('parameters');
     if (!list) return 0;

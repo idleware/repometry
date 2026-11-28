@@ -1,0 +1,7 @@
+{
+  "package": "tree-sitter-scala",
+  "version": "0.26.14",
+  "license": "MIT",
+  "source": "https://github.com/tree-sitter/tree-sitter-scala/releases/download/v0.26.14/tree-sitter-scala.wasm",
+  "sha256": "ad2a586a7f8d0ef83b4d2d51bbb06ab1e79e509bc2c81c8accb78f25fa295f3b"
+}

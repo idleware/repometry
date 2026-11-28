@@ -4,7 +4,9 @@ import type { Grammar } from './language.js';
 export function logicalOperator(node: Node, grammar: Grammar): string | undefined {
   if (!grammar.logicalTypes.has(node.type)) return undefined;
   const operator = node.childForFieldName('operator') ?? node.children.find(child => !child.isNamed);
-  return operator && grammar.logicalOperators.has(operator.type) ? operator.type : undefined;
+  if (!operator) return undefined;
+  const spelling = grammar.logicalOperatorSpelling ? operator.text : operator.type;
+  return grammar.logicalOperators.has(spelling) ? spelling : undefined;
 }
 
 export function expressionOperators(root: Node, grammar: Grammar): string[] {
