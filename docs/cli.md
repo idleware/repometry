@@ -2,6 +2,26 @@
 
 This page covers the options that every command shares, the configuration file, the `plugins` and `projects` commands, exit codes and the environment variables that the [README](../README.md#usage) leaves out. [Reading inspections](store.md#reading-inspections) describes `history` and `show`. [Write a plugin](plugins.md) describes how to write a plugin, and [Docker plugins](process-plugins.md) describes plugins that run in a container.
 
+## Packages
+
+| Package | Command | Languages | Install size |
+| --- | --- | --- | --- |
+| `@repometry/cli` | `repometry-cli` | JavaScript, TypeScript | about 8 MB |
+| `repometry` | `repometry` | The above, Go, Python, Java, PHP | about 15 MB |
+| `@repometry/all` | `repometry-all` | The above, Ruby, Kotlin, HCL | about 20 MB |
+
+`repometry` and `@repometry/all` are `@repometry/cli` with language plugins already built in, so those languages need no `plugins` entry. To add a language to `@repometry/cli`, install its plugin package next to it and reference it:
+
+```sh
+npm install --save-dev @repometry/cli @repometry/language-ruby
+```
+
+```json
+{ "plugins": ["@repometry/language-ruby"] }
+```
+
+Then run `npx repometry-cli analyze`. A plugin that is listed but not installed is an error; Repometry never downloads or installs one. See [Plugins](#plugins) and [Languages](native-languages.md).
+
 ## Analysis options
 
 - `analyze` with no revision analyses `HEAD`. Use `analyze REVISION` to analyse another commit, or `--working-tree` for the working directory.
@@ -54,7 +74,7 @@ This page covers the options that every command shares, the configuration file, 
 
 | Key | Value | Meaning |
 | --- | --- | --- |
-| `$schema` | string | A hint for editors: the path or URL of the [configuration schema](../packages/repometry/src/main/resources/report/json/config-v2.schema.json), whose ID is `urn:repometry:schema:config:2`. Repometry ignores the value. |
+| `$schema` | string | A hint for editors: the path or URL of the [configuration schema](../packages/cli/src/main/resources/report/json/config-v2.schema.json), whose ID is `urn:repometry:schema:config:2`. Repometry ignores the value. |
 | `exclude` | list of globs | Files that no inspection contains. See [Scope](#scope). |
 | `ignore` | list of rules | Findings, and coverage of files, that an inspection does not count. See [Ignore rules](#ignore-rules). |
 | `imports` | list of `FORMAT=PATH` | Coverage and scanner reports to import. `--import` replaces it. See [Analysis options](#analysis-options). |
@@ -106,7 +126,7 @@ Repometry reads `use` with the first row of this table that fits.
 | Starts with `./`, `../` or `/` | A local file, resolved against the folder of the config file. A `.js`, `.mjs` or `.cjs` file is a JavaScript module. A `.json` file is a [Docker manifest](process-plugins.md#the-manifest-file). Any other file is an error. |
 | `npm:<package>` | An installed npm package. |
 | A built-in plugin ID | That built-in plugin. |
-| Anything else | An installed npm package, such as `@repometry/language-kotlin`, the optional [Kotlin plugin](native-languages.md#add-an-optional-language). |
+| Anything else | An installed npm package, such as `@repometry/language-kotlin`, the [Kotlin plugin](native-languages.md#add-a-language-to-a-smaller-package). |
 
 A package resolves from Repometry's own installation only, including an installation that `npm exec` assembles. Repometry downloads nothing during a run. Install a package next to Repometry, or use `npm:` to choose a package whose name is also a built-in plugin ID.
 

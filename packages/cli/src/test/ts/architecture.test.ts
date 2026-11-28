@@ -1,0 +1,362 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, posix, resolve } from 'node:path';
+import { test } from 'node:test';
+import { parse } from '@babel/parser';
+import { traverseFast } from '@babel/types';
+import type { Node } from '@babel/types';
+import { analysisPhases, diffCoveragePhases } from '../../main/ts/compose/phases.js';
+import { structureMeasures } from '@repometry/core/internal/model/code-structure.js';
+import { fileTypes } from '@repometry/core/internal/model/file-types.js';
+import { findingCategories } from '@repometry/core/internal/model/finding.js';
+import { builtInPlugins } from '../../main/ts/plugins/built-in.js';
+import summarySchema from '../../main/resources/report/json/repository-summary-v1.schema.json' with { type: 'json' };
+
+/**
+ * Every package's sources under the module path they had in one tree, so the layer rules below read the same. The rank is
+ * the package direction: a package imports only packages of a lower rank, by name, and declares each in its dependencies.
+ */
+const languageProviders = languagePackages();
+const treeSitterEngine = '@repometry/tree-sitter';
+const languageProviderNames = languageProviders.map(({ name }) => name);
+const engineOwners = new Map<string, readonly string[]>([
+  [treeSitterEngine, languageProviderNames],
+  ['web-tree-sitter', [treeSitterEngine, ...languageProviderNames]],
+]);
+const dependencyFields = ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'] as const;
+type DependencyField = (typeof dependencyFields)[number];
+
+const packages = [
+  { name: '@repometry/core', dir: '../core', prefix: 'core/', rank: 0 },
+  { name: treeSitterEngine, dir: '../tree-sitter', prefix: 'plugins/language-treesitter/', rank: 1 },
+  ...languageProviders,
+  { name: '@repometry/cli', dir: '.', prefix: '', rank: 3 },
+  { name: 'repometry', dir: '../repometry', prefix: 'distributions/default/', rank: 4 },
+  { name: '@repometry/all', dir: '../all', prefix: 'distributions/all/', rank: 4 },
+].map(entry => {
+  const manifest = JSON.parse(readFileSync(resolve(entry.dir, 'package.json'), 'utf8')) as
+    Partial<Record<DependencyField, Record<string, string>>> & { exports?: Record<string, unknown> };
+  return { ...entry, source: resolve(entry.dir, 'src/main/ts'), manifest,
+    dependencies: Object.keys(manifest.dependencies ?? {}), exports: manifest.exports ?? {} };
+});
+type Package = (typeof packages)[number];
+
+/** The package a module path belongs to: the one with the longest matching prefix. */
+function packageOf(file: string): Package {
+  return packages.filter(({ prefix }) => file.startsWith(prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0]!;
+}
+
+const sourceFiles = packages.flatMap(({ source, prefix }) => readdirSync(source, { recursive: true, encoding: 'utf8' })
+  .filter(file => file.endsWith('.ts')).map(file => prefix + file.split('\\').join('/')));
+const readSource = (file: string) => { const owner = packageOf(file); return readFileSync(join(owner.source, file.slice(owner.prefix.length)), 'utf8'); };
+const exceptions = resolve('src/test/resources/architecture/legacy-edges.txt');
+
+test('the CLI keeps the built-in Babel provider and leaves other language packages to distributions', () => {
+  const cli = packages.find(entry => entry.name === '@repometry/cli')!;
+  assert.deepEqual(cli.dependencies.filter(name => /^@repometry\/(?:tree-sitter|language-)/.test(name)), []);
+  assert.deepEqual(builtInPlugins.filter(plugin => plugin.kinds.includes('language')).map(plugin => plugin.id), ['babel-syntax']);
+});
+
+function assertEngineOwner(owner: Package, specifier: string, context: string): void {
+  const name = /^(@[^/]+\/[^/@]+|[^/@]+)(?:[/@]|$)/.exec(specifier)?.[1];
+  const allowed = name === undefined ? undefined : engineOwners.get(name);
+  assert.ok(allowed === undefined || allowed.includes(owner.name),
+    `${context} uses language engine ${specifier}, which belongs to language plugins`);
+}
+
+test('language engines are declared only by their owning packages', () => {
+  for (const owner of packages) {
+    for (const field of dependencyFields) {
+      for (const [name, version] of Object.entries(owner.manifest[field] ?? {})) {
+        assertEngineOwner(owner, name, `${owner.name} ${field}`);
+        if (version.startsWith('npm:')) assertEngineOwner(owner, version.slice(4), `${owner.name} ${field} alias ${name}`);
+      }
+    }
+  }
+});
+
+const dependencies: Readonly<Record<string, readonly string[]>> = {
+  core: [],
+  plugins: ['core'],
+  'api/cache': [],
+  'api/git': ['api/cache', 'core', 'report/json'],
+  'api/gh': ['core'],
+  'api/import': ['core'],
+  'api/process': ['api/cache', 'core'],
+  'report/json/wire': [],
+  'report/json': ['core', 'report/json/wire'],
+  'report/html/app': ['report/json/wire'],
+  'report/html/site': ['core', 'report/json', 'report/json/wire'],
+  'report/markdown': ['core'],
+  compose: ['core', 'api/git', 'api/gh', 'api/import', 'api/process', 'report/json', 'report/json/wire'],
+  cli: ['compose', 'core', 'api/cache', 'api/git', 'api/gh', 'api/import', 'report/json', 'report/json/wire', 'report/html/site',
+    'report/markdown'],
+  distributions: ['entry', 'compose', 'cli', 'plugins'],
+};
+
+type Edge = { readonly from: string; readonly to: string; readonly kind: 'runtime' | 'type' };
+
+function moduleOf(file: string): string {
+  if (!file.includes('/')) return 'entry';
+  const parts = file.split('/');
+  const prefix = Object.keys(dependencies).find(name => file.startsWith(name + '/'));
+  return prefix ?? parts[0]!;
+}
+
+function imports(files: readonly string[]): Edge[] {
+  const paths = new Set(files);
+  const edges: Edge[] = [];
+  for (const from of files) {
+    const code = readSource(from);
+    const owner = packageOf(from);
+    const tree = parse(code, { sourceType: 'module', plugins: ['typescript', 'importAttributes'], createImportExpressions: true });
+
+    function add(specifier: string | undefined, kind: Edge['kind']): void {
+      if (specifier === undefined) return;
+      assertEngineOwner(owner, specifier, from);
+      if (from.startsWith('core/')) {
+        assert.ok(!/^(?:node:)?(?:fs|child_process|http|https|net|tls|dgram|dns|worker_threads)(?:\/|$)/.test(specifier),
+          `Platform I/O in ${from}: ${specifier}`);
+      }
+      if (from.startsWith('plugins/') && !from.startsWith('plugins/language-js/')) {
+        assert.ok(!specifier.startsWith('@babel/'), `Babel dependency outside the language provider: ${from}`);
+      }
+      const named = /^(@repometry\/[^/]+|repometry)(\/.*)?$/.exec(specifier);
+      if (named) {
+        const to = packageTarget(from, owner, named[1]!, named[2] ?? '');
+        if (to !== undefined) {
+          assert.ok(paths.has(to), `Unresolved package import from ${from} to ${specifier}`);
+          edges.push({ from, to, kind });
+        }
+        return;
+      }
+      if (!specifier.startsWith('.') || !specifier.endsWith('.js')) return;
+      const to = posix.normalize(posix.join(dirname(from), specifier.slice(0, -3) + '.ts'));
+      assert.equal(packageOf(to).name, owner.name, `A relative import leaves ${owner.name}: ${from} to ${specifier}`);
+      assert.ok(paths.has(to), `Unresolved internal import from ${from} to ${specifier}`);
+      edges.push({ from, to, kind });
+    }
+
+    for (const statement of tree.program.body) {
+      if (statement.type !== 'ImportDeclaration' && statement.type !== 'ExportNamedDeclaration'
+        && statement.type !== 'ExportAllDeclaration') continue;
+      const typeOnly = statement.type === 'ImportDeclaration'
+        ? statement.importKind === 'type' || (statement.specifiers.length > 0
+          && statement.specifiers.every(item => item.type === 'ImportSpecifier' && item.importKind === 'type'))
+        : statement.exportKind === 'type' || (statement.type === 'ExportNamedDeclaration' && statement.specifiers.length > 0
+          && statement.specifiers.every(item => item.type === 'ExportSpecifier' && item.exportKind === 'type'));
+      add(statement.source?.value, typeOnly ? 'type' : 'runtime');
+    }
+    traverseFast(tree, node => {
+      if (node.type === 'ImportExpression' && node.source.type === 'StringLiteral') add(node.source.value, 'runtime');
+      if (node.type === 'TSImportType' && node.argument.type === 'StringLiteral') assertEngineOwner(owner, node.argument.value, from);
+      if (node.type === 'TSExternalModuleReference') assertEngineOwner(owner, node.expression.value, from);
+      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'require') return;
+      const [argument] = node.arguments;
+      if (argument?.type === 'StringLiteral') assertEngineOwner(owner, argument.value, from);
+    });
+  }
+  return edges;
+}
+
+function packageTarget(from: string, owner: Package, name: string, subpath: string): string | undefined {
+  const target = packages.find(entry => entry.name === name);
+  assert.ok(target && target.rank < owner.rank, `${from} imports ${name} against the package direction`);
+  assert.ok(owner.dependencies.includes(target.name), `${from} imports ${target.name}, which ${owner.name} does not declare`);
+  if (subpath === '') return target.prefix + 'index.ts';
+  if (/^\/internal\/.+\.js$/.test(subpath)) return target.prefix + subpath.slice('/internal/'.length, -3) + '.ts';
+  const resource = target.exports['.' + subpath];
+  if (resource && typeof resource === 'object' && 'default' in resource && typeof resource.default === 'string') {
+    const moduleName = /^\.\/target\/main\/ts\/(.+)\.js$/.exec(resource.default)?.[1];
+    if (moduleName !== undefined) return target.prefix + moduleName + '.ts';
+  }
+  assert.ok(subpath.endsWith('.json') && typeof resource === 'string' && resource.startsWith('./target/main/resources/'),
+    `Unresolved package import from ${from} to ${name}${subpath}`);
+  const source = resource.replace('./target/main/resources/', 'src/main/resources/');
+  assert.ok(existsSync(resolve(target.dir, source)), `Exported resource has no source: ${name}${subpath}`);
+  return undefined;
+}
+
+function allowed({ from, to, kind }: Edge): boolean {
+  const origin = moduleOf(from);
+  const target = moduleOf(to);
+  const sharedModelType = kind === 'type' && origin === 'report/json/wire' && to.startsWith('core/model/');
+  const summaryType = kind === 'type' && origin === 'api/git' && to === 'report/json/wire/summary-model.ts';
+  // The one edge from compose to plugins: compose reads the built-ins from the composition root only.
+  const compositionRoot = from === 'compose/built-ins.ts' && to === 'plugins/built-in.ts';
+  return origin === target || (origin === 'entry' && target !== 'plugins') || sharedModelType || summaryType || compositionRoot
+    || (dependencies[origin]?.includes(target) ?? false);
+}
+
+function assertAcyclic(files: readonly string[], edges: readonly Edge[]): void {
+  const outgoing = new Map(files.map(file => [file, [] as string[]]));
+  for (const { from, to, kind } of edges) {
+    if (kind === 'runtime') outgoing.get(from)!.push(to);
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  function visit(file: string): void {
+    if (visited.has(file)) return;
+    assert.ok(!visiting.has(file), `Runtime import cycle: ${[...visiting, file].join(' → ')}`);
+    visiting.add(file);
+    for (const target of outgoing.get(file)!) visit(target);
+    visiting.delete(file);
+    visited.add(file);
+  }
+  for (const file of files) visit(file);
+}
+
+test('module imports match their declared boundaries and runtime imports are acyclic', () => {
+  const files = sourceFiles;
+  assert.ok(packages.every(({ prefix }) => files.some(file => packageOf(file).prefix === prefix)), 'a package has no sources');
+  const edges = imports(files);
+  const actual = [...new Set(edges.filter(edge => !allowed(edge))
+    .map(({ from, to, kind }) => `${kind} ${from} → ${to}`))].sort();
+  const baseline = readFileSync(exceptions, 'utf8').split('\n').filter(Boolean).sort();
+  assert.deepEqual(actual, baseline);
+  assertAcyclic(files, edges);
+});
+
+// Core and compose name no plugin: ids come from the composition root, never from a list kept here.
+const pluginIds = new Set(builtInPlugins.map(({ id }) => id));
+const compositionRoot = { from: 'compose/built-ins.ts', to: 'plugins/built-in.ts' };
+
+// Core's own words that happen to equal a plugin id. Each is allowed everywhere in core and compose, for its reason.
+const vocabulary = new Map<string, string>([
+  ...findingCategories.map(word => [word, 'a finding category'] as const),
+  ...structureMeasures.map(word => [word, 'a structure measure a language provider declares'] as const),
+  ...fileTypes.map(({ id }) => [id, 'a file type id'] as const),
+  ...[analysisPhases(true), diffCoveragePhases].flatMap(phases => Object.values(phases).flatMap(({ offers }) => Object.keys(offers)))
+    .map(word => [word, 'a host port name, which stored operation records contain'] as const),
+].filter(([word]) => pluginIds.has(word)));
+// A section of the stored repository summary, named by its schema, may name a field: an object key or a type member.
+const fieldNames = new Set(propertyNames(summarySchema).filter(word => pluginIds.has(word)));
+
+function propertyNames(schema: unknown): string[] {
+  if (typeof schema !== 'object' || schema === null) return [];
+  const own = 'properties' in schema && typeof schema.properties === 'object' && schema.properties ? Object.keys(schema.properties) : [];
+  return [...own, ...Object.values(schema).flatMap(propertyNames)];
+}
+
+/** The text of a `+` chain of string literals, so an id split in two is still one literal. */
+function constantText(node: Node): string | undefined {
+  if (node.type === 'StringLiteral') return node.value;
+  if (node.type !== 'BinaryExpression' || node.operator !== '+' || node.left.type === 'PrivateName') return undefined;
+  const [left, right] = [constantText(node.left), constantText(node.right)];
+  return left === undefined || right === undefined ? undefined : left + right;
+}
+
+/** The node that names a field: an object or class key, a type member, or the literal of an indexed access type. */
+function fieldKey(node: Node): Node | undefined {
+  const member = node.type === 'ObjectProperty' || node.type === 'ObjectMethod' || node.type === 'ClassProperty' || node.type === 'TSPropertySignature';
+  if (member && !node.computed) return node.key;
+  return node.type === 'TSIndexedAccessType' && node.indexType.type === 'TSLiteralType' ? node.indexType.literal : undefined;
+}
+
+interface Violation { readonly file: string; readonly line: number; readonly what: string }
+
+/**
+ * The violations of the plugin boundary in one source file of `src/main/ts`, given by its path there and its text. Core,
+ * compose and the entry points refer to no file in `plugins/` but through the composition root; core and compose name no
+ * built-in plugin, and compose writes no contract id.
+ */
+function pluginBoundaryViolations(file: string, text: string): Violation[] {
+  const inCompose = file.startsWith('compose/');
+  const namesChecked = inCompose || file.startsWith('core/');
+  if (!namesChecked && file.includes('/')) return [];
+  const found: Violation[] = [];
+  const report = (node: Node, what: string) => found.push({ file, line: node.loc?.start.line ?? 0, what });
+  // Any literal path counts: an import, a re-export, `import()`, `require`, `import x = require`, `new URL` or `import.meta.resolve`.
+  const path = (node: Node, value: string) => {
+    const target = value.startsWith('.') ? posix.normalize(posix.join(dirname(file), value)).replace(/\.js$/, '.ts') : '';
+    const allowed = file === compositionRoot.from && target === compositionRoot.to;
+    if (/^plugins(\/|$)/.test(target) && !allowed) report(node, `refers to ${target}`);
+  };
+  const keys = new Set<Node>();
+  const literal = (node: Node, value: string) => {
+    path(node, value);
+    if (!namesChecked) return;
+    const allowed = (name: string) => vocabulary.has(name) || (keys.has(node) && fieldNames.has(name))
+      || (name === 'maintainability' && file === 'core/model/inspection-category.ts');
+    const id = [...pluginIds].find(name => value.startsWith(`${name}/`) || (value === name && !allowed(name)));
+    if (id) report(node, `names the built-in plugin ${id} in '${value}'`);
+    else if (inCompose && /^repometry\.[a-z0-9-]+\/v\d+$/.test(value)) report(node, `writes the contract id '${value}'`);
+  };
+  traverseFast(parse(text, { sourceType: 'module', plugins: ['typescript', 'importAttributes'], createImportExpressions: true }), node => {
+    const key = fieldKey(node);
+    if (key) keys.add(key);
+    if (key?.type === 'Identifier') literal(key, key.name);
+    const value = node.type === 'TemplateLiteral' ? node.quasis[0]?.value.cooked : constantText(node);
+    if (value !== undefined) literal(node, value);
+  });
+  return found;
+}
+
+const mustReport: readonly (readonly [file: string, snippet: string])[] = [
+  ['compose/review.ts', "import { structure } from '../plugins/structure/structure.js';"],
+  ['core/engine/plan.ts', "import type { Plugin } from '../../plugins/built-in.js';"],
+  ['compose/inspect.ts', "export { coverage } from '../plugins/coverage/coverage.js';"],
+  ['core/model/report.ts', "export * from '../../plugins/security/secrets.js';"],
+  ['compose/review.ts', "const plugin = await import('../plugins/duplication/duplication.js');"],
+  ['core/usecases/review.ts', "const scanner = require('../../plugins/security/secrets.js');"],
+  ['compose/sources.ts', "import forges = require('../plugins/source/forges.js');"],
+  ['compose/inspect.ts', "import { builtInPlugins } from '../plugins/built-in.js';"],
+  ['core/model/quality-summary.ts', "const plugin = 'maintainability';"],
+  ['compose/analysis-files.ts', 'const plugin = `js-security`;'],
+  ['core/model/report.ts', 'const skips = { secrets: 1 };'],
+  ['core/model/report.ts', "const plugins = { maintainability: 'maintainability' };"],
+  ['compose/languages.ts', "const skips = { 'diff-coverage': true };"],
+  ['core/usecases/review.ts', "const ignored = 'lcov/import';"],
+  ['compose/phases.ts', 'const key = `maintainability/${operation}`;'],
+  ['compose/sources.ts', "const fallback = 'local';"],
+  ['core/model/report.ts', "const plugin = 'maintain' + 'ability';"],
+  ['compose/diff-coverage.ts', "const result = 'repometry.diff-coverage-result/v1';"],
+  ['plugin.ts', "export { structure } from './plugins/structure/structure.js';"],
+  ['index.ts', "import type { Plugin } from './plugins/built-in.js';"],
+  ['compose/languages.ts', "const script = new URL('../plugins/language-js/syntax.js', import.meta.url);"],
+  ['core/engine/execute.ts', "const module = import.meta.resolve('../../plugins/coverage/coverage.js');"],
+  ['core/model/language.ts', "interface Seen { readonly 'babel-syntax': number }"],
+];
+
+const mustPass: readonly (readonly [file: string, snippet: string])[] = [
+  ['core/model/report.ts', "// the maintainability plugin and lcov/import are named in comments only\n/* 'structure/size' */ const a = 1;"],
+  ['core/model/quality-summary.ts', "const smell = (category: string) => category === 'duplication' || category === 'structure';"],
+  ['compose/phases.ts', 'const offers = { sources: cloneSources, lcov: lcovInput };'],
+  ['core/model/file-types.ts', "const type = { id: 'dockerfile', label: 'Dockerfile' };"],
+  ['core/model/code-structure.ts', "const measures = { duplication: 'duplication' };"],
+  ['core/model/quality-summary.ts', "type Section = QualitySummary['maintainability']; const summary = { maintainability: grade };"],
+  ['compose/sources.ts', "const words = ['localhost', 'structured', 'github-actions', 'my-maintainability'];"],
+  ['cli/main.ts', "import { structure } from '../plugins/structure/structure.js'; const id = 'maintainability';"],
+  ['report/json/projections/inspection-context.ts', "export const legacySyntaxPlugin = 'babel-syntax';"],
+  ['compose/built-ins.ts', "import { builtInPlugins } from '../plugins/built-in.js';"],
+  ['core/model/coverage-input.ts', "export const lcovInput = { id: 'repometry.lcov-input/v1' };"],
+  ['compose/analysis-files.ts', "import { plan } from '../core/engine/plan.js'; import { extname } from 'node:path';"],
+  ['plugin.ts', "export { pluginApi } from './core/engine/plugin.js'; const name = 'maintainability';"],
+  ['compose/phases.ts', 'const key = `${plugin.id}/${operation.id}`;'],
+];
+
+test('the plugin boundary checker reports each way of naming a plugin from core or compose', () => {
+  for (const [file, snippet] of mustReport) {
+    assert.equal(pluginBoundaryViolations(file, snippet).length, 1, `${file}: ${snippet}`);
+  }
+});
+
+test('the plugin boundary checker passes comments, core vocabulary, longer words and files outside core and compose', () => {
+  for (const [file, snippet] of mustPass) assert.deepEqual(pluginBoundaryViolations(file, snippet), [], `${file}: ${snippet}`);
+  assert.ok(vocabulary.size > 0 && [...vocabulary.values()].every(Boolean));
+});
+
+test('core and compose name no built-in plugin and import no plugin module but the composition root', () => {
+  const found = sourceFiles.flatMap(file => pluginBoundaryViolations(file, readSource(file)));
+  assert.deepEqual(found.map(({ file, line, what }) => `${file}:${line}: ${what}`), []);
+});
+
+function languagePackages() {
+  const { workspaces } = JSON.parse(readFileSync('../../package.json', 'utf8')) as { workspaces: string[] };
+  const languagePaths = workspaces.filter(workspace => workspace.startsWith('packages/language-'));
+  return languagePaths.map(workspace => {
+    const name = workspace.slice('packages/'.length);
+    const id = name.slice('language-'.length);
+    return { name: '@repometry/' + name, dir: '../' + name, prefix: 'plugins/language-treesitter/languages/' + id + '/', rank: 2 };
+  });
+}

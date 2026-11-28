@@ -40,6 +40,8 @@ export interface CodeStructure {
   readonly lines: number;
   readonly functions?: number;
   readonly classes?: number;
+  /** Named or unnamed declarations counted by the language provider. */
+  readonly declarations?: number;
   readonly cognitiveComplexity?: number;
   readonly commentLines?: number;
   readonly cyclomaticFunctions?: readonly FunctionComplexity[];
@@ -83,7 +85,7 @@ export const codeStructure: DataContract<CodeStructure> = {
   id: 'repometry.code-structure/v1',
   accepts: (value): value is CodeStructure => isRecord(value)
     && typeof value.path === 'string' && isCount(value.lines)
-    && [value.functions, value.classes, value.cognitiveComplexity, value.commentLines].every(count => count === undefined || isCount(count))
+    && [value.functions, value.classes, value.declarations, value.cognitiveComplexity, value.commentLines].every(count => count === undefined || isCount(count))
     && (value.cyclomaticFunctions === undefined || Array.isArray(value.cyclomaticFunctions) && value.cyclomaticFunctions.every(isFunctionComplexity))
     && (value.cognitiveFunctions === undefined || Array.isArray(value.cognitiveFunctions) && value.cognitiveFunctions.every(isFunctionComplexity))
     && (value.functionBodies === undefined || isMergedLineRanges(value.functionBodies) && (value.functionBodies.at(-1)?.[1] ?? 0) <= value.lines)

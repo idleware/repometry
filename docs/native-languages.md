@@ -1,6 +1,6 @@
 # Languages
 
-Repometry parses Go, Python, Java, Ruby, PHP and Kotlin with tree-sitter grammars. Each grammar runs as a WebAssembly module inside Node.js. Analysis needs no compiler, interpreter, download or cache. JavaScript and TypeScript use the built-in `babel-syntax` plugin, which this page does not cover.
+Repometry parses Go, Python, Java, Ruby, PHP, Kotlin and HCL with tree-sitter grammars. Each grammar runs as a WebAssembly module inside Node.js. Analysis needs no compiler, interpreter, download or cache. JavaScript and TypeScript use the built-in `babel-syntax` plugin, which this page does not cover.
 
 Each language is one plugin in its own package. The plugin ID is `language-<id>`, its operation is `language-<id>/parse`, and the package is `@repometry/language-<id>`. A grammar loads when the first file of its language is parsed.
 
@@ -8,21 +8,22 @@ A [Docker language plugin](process-plugins.md) or a [JavaScript language plugin]
 
 ## Supported languages
 
-| Language | ID | Files | Plugin | Status |
+| Language | ID | Files | Plugin | Ships in |
 | --- | --- | --- | --- | --- |
-| Go | `go` | `.go` | `language-go` | Bundled |
-| Python | `python` | `.py` | `language-python` | Bundled |
-| Java | `java` | `.java` | `language-java` | Bundled |
-| Ruby | `ruby` | `.rb` | `language-ruby` | Optional |
-| PHP | `php` | `.php` | `language-php` | Bundled |
-| Kotlin | `kotlin` | `.kt`, `.kts` | `language-kotlin` | Optional |
+| Go | `go` | `.go` | `language-go` | `repometry`, `@repometry/all` |
+| Python | `python` | `.py` | `language-python` | `repometry`, `@repometry/all` |
+| Java | `java` | `.java` | `language-java` | `repometry`, `@repometry/all` |
+| Ruby | `ruby` | `.rb` | `language-ruby` | `@repometry/all` |
+| PHP | `php` | `.php` | `language-php` | `repometry`, `@repometry/all` |
+| Kotlin | `kotlin` | `.kt`, `.kts` | `language-kotlin` | `@repometry/all` |
+| HCL | `hcl` | `.hcl`, `.tf`, `.tfvars` | `language-hcl` | `@repometry/all` |
 | Rust | | | | Not yet. The grammar rejects too many valid files. |
 | C# | `csharp` | `.cs` | | Not yet. The grammar rejects valid preprocessor code. The files stay in the inventory. |
 | C, C++, Swift | | | | Not yet. |
 
-A bundled language needs no setup. A file of a language without a plugin stays in the inventory as not analysed.
+JavaScript and TypeScript ship in every package. A language in the package you run needs no setup; see [Packages](cli.md#packages). A file of a language without a plugin stays in the inventory as not analysed.
 
-### Add an optional language
+### Add a language to a smaller package
 
 Install the package next to Repometry, then reference it in `repometry.config.json`:
 
@@ -34,7 +35,7 @@ npm install @repometry/language-kotlin
 { "plugins": ["@repometry/language-kotlin"] }
 ```
 
-[Plugins](cli.md#plugins) lists the reference forms. A bundled language needs no entry, but `"plugins": ["language-java"]` configures it by ID.
+[Plugins](cli.md#plugins) lists the reference forms. A language that the package includes needs no entry, but `"plugins": ["language-java"]` configures it by ID.
 
 ## Measurements
 
@@ -55,6 +56,16 @@ All languages measure functions, complexity, comment and code lines, structural 
 
 - Go counts one plus each `if`, loop, non-default switch or select clause, `&&`, and `||`. Functions include function literals.
 - Python counts one plus decisions in conditions, loops, exception handlers, conditional expressions, boolean operands after the first, comprehensions, and refutable pattern cases and guards. Functions include async functions and lambdas.
+
+### HCL rules
+
+HCL is declarative, so a file has no functions, classes or complexity. Repometry measures:
+
+- lines, code lines and comment lines;
+- blocks: every block declaration, nested and unlabelled ones included. Attributes and object literals are not blocks. The metric is `repometry.hcl-blocks/v1`, a file metric under Size;
+- duplication, with the `hcl-tokens/v1` scheme and the common thresholds. The similar sequence keeps block kinds, keys and operators, and replaces literal spellings.
+
+`.tf.json` and other JSON variants stay JSON. A template that is not valid HCL until it is expanded, such as a Go format string with `%q`, is rejected with a diagnostic. In test corpora the grammar rejected 0% of Terraform module files and about 1.8% of Packer files, all of them such templates. The grammar file keeps its upstream Apache-2.0 licence next to it in the package.
 
 ### Java, Ruby, PHP and Kotlin rules
 

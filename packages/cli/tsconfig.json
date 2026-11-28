@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "exclude": ["src/main/ts/report/html/app/**/*.ts"]
+}

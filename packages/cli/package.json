@@ -1,0 +1,77 @@
+{
+  "name": "@repometry/cli",
+  "version": "0.0.0",
+  "description": "Track repository metrics without SaaS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idleware/repometry.git"
+  },
+  "homepage": "https://github.com/idleware/repometry#readme",
+  "bugs": {
+    "url": "https://github.com/idleware/repometry/issues"
+  },
+  "keywords": [
+    "repository",
+    "metrics",
+    "coverage",
+    "maintainability",
+    "static-analysis"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "repometry-cli": "target/main/ts/cli/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./target/main/ts/index.d.ts",
+      "default": "./target/main/ts/index.js"
+    },
+    "./plugin": {
+      "types": "./target/main/ts/plugin.d.ts",
+      "default": "./target/main/ts/plugin.js"
+    },
+    "./report": {
+      "types": "./target/main/ts/report.d.ts",
+      "default": "./target/main/ts/report.js"
+    },
+    "./internal/api": {
+      "types": "./target/main/ts/runtime.d.ts",
+      "default": "./target/main/ts/runtime.js"
+    },
+    "./internal/cli": {
+      "types": "./target/main/ts/cli/run.d.ts",
+      "default": "./target/main/ts/cli/run.js"
+    },
+    "./internal/distribution": {
+      "types": "./target/main/ts/compose/distribution.d.ts",
+      "default": "./target/main/ts/compose/distribution.js"
+    }
+  },
+  "files": [
+    "target/main",
+    "!target/main/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && tsc -p tsconfig.browser.json && node -e \"const fs = require('node:fs'); fs.chmodSync('target/main/ts/cli/main.js', 0o755); fs.cpSync('src/main/resources', 'target/main/resources', { recursive: true }); for (const file of ['README.md', 'LICENSE']) fs.cpSync('../../' + file, file)\"",
+    "build:test": "npm run build && node -e \"require('node:fs').rmSync('target/verification', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node -e \"require('node:fs').cpSync('src/main/resources', 'target/verification/main/resources', { recursive: true })\"",
+    "test": "npm run build:test && node --test 'target/verification/test/ts/*.test.js'",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.15",
+    "@babel/types": "7.29.15",
+    "@repometry/core": "0.1.0",
+    "ajv": "8.20.0",
+    "semver": "7.8.6"
+  },
+  "devDependencies": {
+    "@types/semver": "7.8.0"
+  }
+}

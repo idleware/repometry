@@ -32,6 +32,7 @@ export const fileTypes: readonly FileType[] = [
   { id: 'kotlin', label: 'Kotlin', color: '#a97bff', extensions: ['.kt', '.kts'] },
   { id: 'ruby', label: 'Ruby', color: '#701516', extensions: ['.rb'] },
   { id: 'php', label: 'PHP', color: '#4f5d95', extensions: ['.php'] },
+  { id: 'hcl', label: 'HCL', color: '#844fba', extensions: ['.hcl', '.tf', '.tfvars'] },
   { id: 'csharp', label: 'C#', color: '#178600', extensions: ['.cs'] },
   { id: 'c', label: 'C', color: '#555555', extensions: ['.c', '.h'], syntax: cSyntax },
   { id: 'cpp', label: 'C++', color: '#f34b7d', extensions: ['.cc', '.cpp', '.cxx', '.hpp', '.hh'], syntax: cppSyntax },

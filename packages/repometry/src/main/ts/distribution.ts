@@ -1,0 +1,21 @@
+import { findPackageJSON } from 'node:module';
+import { bundleLanguage } from '@repometry/cli/internal/distribution';
+import type { Distribution } from '@repometry/cli/internal/distribution';
+import goManifest, { go } from '@repometry/language-go';
+import pythonManifest, { python } from '@repometry/language-python';
+import javaManifest, { java } from '@repometry/language-java';
+import phpManifest, { php } from '@repometry/language-php';
+
+const distribution: Distribution = {
+  bundled: [
+    bundleLanguage(goManifest, go.language),
+    bundleLanguage(pythonManifest, python.language),
+    bundleLanguage(javaManifest, java.language, true),
+    bundleLanguage(phpManifest, php.language, true),
+  ],
+  moduleUrl: import.meta.url,
+  packageUrl: new URL('../../../package.json', import.meta.url).href,
+  resolvePackage: name => ({ url: import.meta.resolve(name), manifest: findPackageJSON(name, import.meta.url) }),
+};
+
+export default distribution;

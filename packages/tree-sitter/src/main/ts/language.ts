@@ -49,6 +49,7 @@ export interface Grammar {
   readonly lineBreaks?: RegExp;
   readonly columns: 'bytes' | 'codepoints';
   readonly name: (node: Node) => string | undefined;
+  readonly countDeclarations?: (root: Node) => number;
   readonly rules: Readonly<Record<string, NodeRule>>;
   readonly parens: ReadonlySet<string>;
   readonly comments: ReadonlySet<string>;

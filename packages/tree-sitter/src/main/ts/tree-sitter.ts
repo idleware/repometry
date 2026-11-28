@@ -4,7 +4,7 @@ import type { Node, Parser, Tree } from 'web-tree-sitter';
 import { codeStructure, pluginManifestSchema } from '@repometry/core';
 import type { Operation, PluginManifest } from '@repometry/core';
 import { readStructure } from '@repometry/core/internal/engine/author-contracts.js';
-import type { CodeStructure } from '@repometry/core/internal/model/code-structure.js';
+import type { CodeStructure, StructureMeasure } from '@repometry/core/internal/model/code-structure.js';
 import type { SourceFile } from '@repometry/core/internal/model/source.js';
 import { sourceFile } from '@repometry/core/internal/model/snapshot.js';
 import type { Grammar } from './language.js';
@@ -15,6 +15,9 @@ import { scanClones } from './tokens.js';
 
 const parsers = new Map<Grammar, Promise<Parser>>();
 let initialized: Promise<void> | undefined;
+const structureMeasures = new Set<StructureMeasure>([
+  'functions', 'cyclomaticComplexity', 'cognitiveComplexity', 'classes', 'structuralRules',
+]);
 
 type NativeManifest = PluginManifest & { readonly version: string; create(): Awaited<ReturnType<PluginManifest['create']>> };
 
@@ -71,7 +74,10 @@ function extract(path: string, grammar: Grammar, source: SourceLines, tree: Tree
       ' at ' + source.location(header ? header.startIndex : 0, grammar.columns));
   }
   const facts = scanClones(path, tree, source, grammar);
-  return { path, ...new Structure(grammar, source, facts.codeLines).measure(root), ...facts };
+  const structure = grammar.language.measures?.some(measure => structureMeasures.has(measure)) !== false
+    ? new Structure(grammar, source, facts.codeLines).measure(root) : { lines: source.count };
+  const declarations = grammar.countDeclarations?.(root);
+  return { path, ...structure, ...facts, ...(declarations === undefined ? {} : { declarations }) };
 }
 
 function firstHeader(root: Node, grammar: Grammar): Node | null {

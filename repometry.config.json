@@ -1,5 +1,5 @@
 {
-  "$schema": "./packages/repometry/src/main/resources/report/json/config-v2.schema.json",
+  "$schema": "./packages/cli/src/main/resources/report/json/config-v2.schema.json",
   "ignore": [
     {
       "path": "packages/*/src/test/**",

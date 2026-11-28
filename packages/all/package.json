@@ -1,0 +1,50 @@
+{
+  "name": "@repometry/all",
+  "version": "0.0.0",
+  "description": "Repometry CLI with all released language plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idleware/repometry.git"
+  },
+  "homepage": "https://github.com/idleware/repometry#readme",
+  "bugs": {
+    "url": "https://github.com/idleware/repometry/issues"
+  },
+  "keywords": [
+    "repository",
+    "metrics",
+    "coverage",
+    "maintainability",
+    "static-analysis"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "repometry-all": "target/main/ts/cli/main.js"
+  },
+  "files": [
+    "target/main",
+    "!target/main/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('target/main', { recursive: true, force: true })\" && tsc -p tsconfig.json && node -e \"const fs = require('node:fs'); fs.chmodSync('target/main/ts/cli/main.js', 0o755); for (const file of ['README.md', 'LICENSE']) fs.cpSync('../../' + file, file)\"",
+    "prepack": "npm run build"
+  },
+  "exports": {},
+  "dependencies": {
+    "@repometry/cli": "0.0.0",
+    "@repometry/language-go": "0.1.0",
+    "@repometry/language-python": "0.1.0",
+    "@repometry/language-java": "0.0.0",
+    "@repometry/language-php": "0.0.0",
+    "@repometry/language-ruby": "0.0.0",
+    "@repometry/language-kotlin": "0.0.0",
+    "@repometry/language-hcl": "0.0.0"
+  }
+}

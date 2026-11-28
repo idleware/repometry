@@ -1,0 +1,61 @@
+[
+  {
+    "language": "go",
+    "label": "Go",
+    "package": "@repometry/language-go",
+    "extensions": [
+      ".go"
+    ]
+  },
+  {
+    "language": "hcl",
+    "label": "HCL",
+    "package": "@repometry/language-hcl",
+    "extensions": [
+      ".tf",
+      ".tfvars",
+      ".hcl"
+    ]
+  },
+  {
+    "language": "java",
+    "label": "Java",
+    "package": "@repometry/language-java",
+    "extensions": [
+      ".java"
+    ]
+  },
+  {
+    "language": "kotlin",
+    "label": "Kotlin",
+    "package": "@repometry/language-kotlin",
+    "extensions": [
+      ".kt",
+      ".kts"
+    ]
+  },
+  {
+    "language": "php",
+    "label": "PHP",
+    "package": "@repometry/language-php",
+    "extensions": [
+      ".php"
+    ]
+  },
+  {
+    "language": "python",
+    "label": "Python",
+    "package": "@repometry/language-python",
+    "extensions": [
+      ".py"
+    ]
+  },
+  {
+    "language": "ruby",
+    "label": "Ruby",
+    "package": "@repometry/language-ruby",
+    "extensions": [
+      ".rb"
+    ]
+  }
+]
