@@ -1,4 +1,4 @@
-import { manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
+import { manifestOperations, manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { readFile } from 'node:fs/promises';
 import { findPackageJSON } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -6,7 +6,6 @@ import { isRecord } from '@repometry/core/internal/engine/plugin.js';
 import type { PluginManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { checkManifest, dockerFields, manifestScope } from './plugin-manifest.js';
 import type { PluginReference } from './plugin-reference.js';
-import { authorOperation } from '@repometry/core/internal/engine/author-operation.js';
 import { validatePluginOptions } from './plugin-options.js';
 import { readRequirements, unmetRequirement } from './plugin-requirements.js';
 import type { Distribution } from './distribution.js';
@@ -91,7 +90,7 @@ export async function javaScriptManifest(value: unknown, entry: PluginReference,
   return { plugin, versionSource, requires: manifest.requires, ...manifestScope(manifest, base) };
 }
 
-async function createPlugin({ id, category }: Pick<PluginManifest, 'id' | 'category'>,
+async function createPlugin(manifest: Pick<PluginManifest, 'id' | 'category'>,
   create: PluginManifest['create'], options: PluginReference['options'], { root, base }: PluginContext) {
   const created = await create(structuredClone(options), { root });
   if (!isRecord(created) || !Array.isArray(created.operations) || !Array.isArray(created.produces)
@@ -99,9 +98,7 @@ async function createPlugin({ id, category }: Pick<PluginManifest, 'id' | 'categ
     || created.operations.some(operation => !isRecord(operation) || typeof operation.execute !== 'function')) {
     throw new Error(base + '/manifest/create must return executable operations and declared products');
   }
-  const { operations, produces } = created;
-  return { operations: operations.map(operation => authorOperation(id, category, operation)),
-    produces: produces.map(({ valueSchema, ...product }) => valueSchema === undefined ? product : { ...product, schema: valueSchema }) };
+  return manifestOperations(manifest, created);
 }
 
 async function packageVersion(path: string, base: string): Promise<string> {

@@ -21,6 +21,7 @@ import type { ToolRunner } from '@repometry/core/internal/ports/tool-runner.js';
 import { maintainability } from '../../main/ts/plugins/maintainability/maintainability.js';
 import { findingResult } from '@repometry/core/internal/model/finding.js';
 import { structure } from '../../main/ts/plugins/structure/structure.js';
+import { bundledPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 import { unmeasuredStructure } from '../../main/ts/compose/structure-measures.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 import { inspectionDetails } from '../../main/ts/report/json/projections/inspection-details.js';
@@ -46,7 +47,7 @@ test('structure and maintainability consume facts from a language provider witho
     produces: [{ contract: codeStructure.id, persistence: 'transient' }],
     operations: [{ id: 'read', role: 'provider', inputs: { source: sourceFile }, output: codeStructure, execute: () => facts }],
   };
-  const tasks = plan({ plugins: [provider, structure, maintainability],
+  const tasks = plan({ plugins: [provider, bundledPlugin(structure), maintainability],
     select: ['structure/size', 'structure/complexity', 'maintainability/file'], inputs: new Map([['file', sourceFile.id]]) });
   const results = await execute(tasks, new Map([['file', { contract: sourceFile.id, value: { path: facts.path, bytes: new Uint8Array() } }]]));
   const complexity = results.get('structure/complexity');

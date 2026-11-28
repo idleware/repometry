@@ -11,6 +11,7 @@ import { lcovInput } from '@repometry/core/internal/model/coverage-input.js';
 import type { CoverageInput } from '@repometry/core/internal/model/coverage-input.js';
 import { diffCoverageResult } from '@repometry/core/internal/model/diff-coverage.js';
 import { diffCoverage } from '../../main/ts/plugins/coverage/diff-coverage.js';
+import { bundledPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
 
 test('Git changes preserve paths and use only the added side of hunks', () => {
   const old = 'a'.repeat(40);
@@ -50,7 +51,7 @@ test('diff coverage counts distinct LCOV lines within added ranges and reports m
 
 async function measure(changes: GitChanges, coverage: CoverageInput) {
   const operation = 'diff-coverage/measure';
-  const tasks = plan({ plugins: [diffCoverage], select: [operation],
+  const tasks = plan({ plugins: [bundledPlugin(diffCoverage)], select: [operation],
     inputs: new Map([['changes', changesInput.id], ['lcov', lcovInput.id]]) });
   const result = await execute(tasks, new Map<string, Product>([
     ['changes', { contract: changesInput.id, value: changes }],

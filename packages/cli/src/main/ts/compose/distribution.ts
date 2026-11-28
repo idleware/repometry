@@ -1,6 +1,5 @@
-import { authorOperation } from '@repometry/core/internal/engine/author-operation.js';
-import { manifestPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
-import type { PluginManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
+import { bundledPlugin } from '@repometry/core/internal/engine/plugin-manifest.js';
+import type { BundledManifest } from '@repometry/core/internal/engine/plugin-manifest.js';
 import type { Plugin } from '@repometry/core/internal/engine/plugin.js';
 import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
 import { duplicationSettings } from '@repometry/core/internal/profile/maintainability.js';
@@ -20,16 +19,9 @@ export function distributionParsers(distribution?: Distribution, user?: ParserOr
   return distribution?.parsers === undefined ? user : { ...distribution.parsers, ...user };
 }
 
-type NativeManifest = PluginManifest & {
-  readonly version: string;
-  create(): Awaited<ReturnType<PluginManifest['create']>>;
-};
-
-export function bundleLanguage(manifest: NativeManifest, language: ProvidedLanguage, requiresSource?: true): Plugin {
-  const { operations, produces } = manifest.create();
-  return { ...manifestPlugin(manifest, manifest.version),
+export function bundleLanguage(manifest: BundledManifest, language: ProvidedLanguage, requiresSource?: true): Plugin {
+  return { ...bundledPlugin(manifest),
     providesLanguages: [language],
     ...(requiresSource === undefined ? {} : { languageProvenanceRequiresSource: requiresSource }),
-    settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } },
-    produces, operations: operations.map(operation => authorOperation(manifest.id, manifest.category, operation)) };
+    settings: { duplication: { ...duplicationSettings, minTokens: duplicationSettings.minNodes } } };
 }

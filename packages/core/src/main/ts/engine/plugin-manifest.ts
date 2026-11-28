@@ -4,6 +4,7 @@ import { category } from '../model/inspection-category.js';
 import type { PluginCategory } from '../model/inspection-category.js';
 import type { JsonValue } from '../model/plugin-data.js';
 import { findingCategory } from './author-contracts.js';
+import { authorOperation } from './author-operation.js';
 import { pluginApi } from './plugin.js';
 import type { Operation, Plugin, PluginKind, ProductDeclaration, RuleDescriptor } from './plugin.js';
 
@@ -44,6 +45,20 @@ export interface PluginManifest<Options = JsonValue> {
 interface PluginOperations {
   readonly operations: readonly Operation[];
   readonly produces: readonly ProductOutput[];
+}
+
+export function manifestOperations({ id, category }: Pick<PluginManifest, 'id' | 'category'>, { operations, produces }: PluginOperations) {
+  return { operations: operations.map(operation => authorOperation(id, category, operation)),
+    produces: produces.map(({ valueSchema, ...product }) => valueSchema === undefined ? product : { ...product, schema: valueSchema }) };
+}
+
+export type BundledManifest = PluginManifest & {
+  readonly version: string;
+  create(): PluginOperations;
+};
+
+export function bundledPlugin(manifest: BundledManifest): Plugin {
+  return { ...manifestPlugin(manifest, manifest.version), ...manifestOperations(manifest, manifest.create()) };
 }
 
 export function pluginCategory(plugin: Plugin): PluginCategory {
