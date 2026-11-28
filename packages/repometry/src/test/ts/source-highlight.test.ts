@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { go } from '@repometry/language-go';
 import { python } from '@repometry/language-python';
+import { defaultLanguages } from '../../main/ts/compose/languages.js';
 import { jsSyntax } from '../../main/ts/plugins/language-js/syntax.js';
 import { languageIdOf, syntaxOf, useLanguages } from '../../main/ts/report/html/app/viewer-languages.js';
 import { tokenizer } from '../../main/ts/report/html/app/viewer-tokenizer.js';
@@ -68,6 +69,55 @@ test('Python: comments, prefixed and triple-quoted strings, and keywords', () =>
   assert.deepEqual(kinds(tokenize('two " still"""'), 's'), ['two " still"""']);
   assert.deepEqual(kinds(tokenize(`a = rb'x' + F"{a}"`), 's'), ["rb'x'", 'F"{a}"']);
   assert.deepEqual(kinds(tokenize('def f(match): return None'), 'k'), ['def', 'return', 'None']);
+});
+
+test('Java: reserved words, text blocks and block comments', () => {
+  const scan = tokenizer(defaultLanguages.syntax('java'));
+  assert.deepEqual(kinds(scan('String text = """'), 's'), ['"""']);
+  assert.deepEqual(kinds(scan('/* string content */'), 's'), ['/* string content */']);
+  assert.deepEqual(kinds(scan('"""; /* note'), 'c'), ['/*', ' note']);
+  assert.deepEqual(kinds(scan('*/ public record Item(int size) {}'), 'k'), ['public', 'int']);
+});
+
+test('C: standard keywords and line comments recover after a line splice', () => {
+  const scan = tokenizer(defaultLanguages.syntax('c'));
+  assert.deepEqual(kinds(scan('constexpr char const *s = u8"/*"; // note'), 's'), ['u8"/*"']);
+  assert.deepEqual(kinds(scan('// continuing \\'), 'c'), ['// continuing \\']);
+  scan('/* This continues the line comment after splicing.');
+  assert.deepEqual(kinds(scan('typeof_unqual(0) value;'), 'k'), ['typeof_unqual']);
+});
+
+test('C++: a multiline raw string cannot leave a block-comment state open', () => {
+  const scan = tokenizer(defaultLanguages.syntax('cpp'));
+  scan('constexpr auto raw = R"tag(');
+  scan('/* this is a string');
+  scan(')tag";');
+  assert.deepEqual(kinds(scan('bool keep = true and not false; // result'), 'k'), ['bool', 'true', 'and', 'not', 'false']);
+  assert.deepEqual(kinds(scan('auto word = u8"//";'), 's'), ['u8"//"']);
+});
+
+test('JSON: strings and lowercase literals without comments', () => {
+  const scan = tokenizer(defaultLanguages.syntax('json'));
+  const runs = scan('{"uri": "https://example.org/*", "value": [true, false, null, -2.5]}');
+  assert.deepEqual(kinds(runs, 's'), ['"uri"', '"https://example.org/*"', '"value"']);
+  assert.deepEqual(kinds(runs, 'k'), ['true', 'false', 'null']);
+  assert.deepEqual(kinds(runs, 'c'), []);
+});
+
+test('CSS: an unquoted URL does not change the next line and property names stay intact', () => {
+  const scan = tokenizer(defaultLanguages.syntax('css'));
+  scan('.item { background: url(assets/image/*); }');
+  const runs = scan('.font-family { --font: "Mono"; }');
+  assert.deepEqual(kinds(runs, 'k'), []);
+  assert.deepEqual(kinds(runs, 's'), ['"Mono"']);
+});
+
+test('Dockerfile: uppercase instructions and stage names without colouring shell words', () => {
+  const scan = tokenizer(defaultLanguages.syntax('dockerfile'));
+  assert.deepEqual(kinds(scan('FROM alpine AS build'), 'k'), ['FROM', 'AS']);
+  assert.deepEqual(kinds(scan('RUN npm run build'), 'k'), ['RUN']);
+  assert.deepEqual(kinds(scan('ENV PATH_NAME="foo#bar"'), 's'), ['"foo#bar"']);
+  assert.deepEqual(kinds(scan('RUN printf foo#bar'), 'c'), []);
 });
 
 test('a language that exists only here gets colours with no viewer change', () => {

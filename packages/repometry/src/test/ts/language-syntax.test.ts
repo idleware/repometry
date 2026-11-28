@@ -75,6 +75,28 @@ test('rendering old reports attaches built-in syntax and falls back by language 
   }
 });
 
+test('display syntax reaches view assets without recording a parser or syntax in saved data', async () => {
+  const displayOnly = ['main.c', 'main.cpp', 'settings.json', 'site.css', 'Dockerfile'];
+  const report = await analyzeSnapshot({
+    snapshot: { subject: { kind: 'commit', id: 'c'.repeat(40) },
+      files: [...displayOnly, 'plain.rb'].map(path => ({ path, bytes: Buffer.from('\n') })) },
+    excludedOutput: null,
+  });
+  const metrics = inspectionAsset(report, { languages: defaultLanguages }).inspection.metrics;
+  for (const id of ['c', 'cpp', 'json', 'css', 'dockerfile']) {
+    assert.ok(isLanguageSyntax(metrics.languages?.find(entry => entry.id === id)?.syntax), id);
+  }
+  assert.ok(metrics.files.filter(file => displayOnly.includes(file.path)).every(file => file.provider === undefined));
+  assert.equal(metrics.languages?.find(entry => entry.id === 'ruby')?.syntax, undefined);
+  assert.ok(report.pluginData?.languages?.every(language => !Object.hasOwn(language, 'syntax')));
+});
+
+test('a language provider controls the display syntax for its language', () => {
+  assert.ok(defaultLanguages.syntax('c'));
+  assert.equal(languageRegistry([provider('c', '.c', fixtureSyntax)]).syntax('c'), fixtureSyntax);
+  assert.equal(languageRegistry([provider('c', '.c')]).syntax('c'), undefined);
+});
+
 test('registered syntax goes to the inspection asset, validates on the wire, and stays out of saved data and show', async t => {
   const root = await mkdtemp(join(tmpdir(), 'repometry-language-syntax-'));
   t.after(() => rm(root, { recursive: true, force: true }));

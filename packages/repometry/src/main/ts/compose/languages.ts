@@ -1,6 +1,6 @@
 import { plan } from '@repometry/core/internal/engine/plan.js';
 import type { Operation, Plugin } from '@repometry/core/internal/engine/plugin.js';
-import { fileTypeId } from '@repometry/core/internal/model/file-types.js';
+import { fileTypeId, fileTypes } from '@repometry/core/internal/model/file-types.js';
 import { codeStructure, codeStructures } from '@repometry/core/internal/model/code-structure.js';
 import type { ProvidedLanguage } from '@repometry/core/internal/model/language.js';
 import { isExcludedDirectory } from '@repometry/core/internal/model/snapshot.js';
@@ -21,6 +21,8 @@ export interface LanguageProvider {
   readonly language: (path: string) => string | undefined;
   readonly implementationFor: (present: ReadonlySet<string>) => string | undefined;
 }
+
+const fileTypeSyntax = new Map(fileTypes.flatMap(({ id, syntax }) => syntax === undefined ? [] : [[id, syntax] as const]));
 
 export const defaultLanguages = languageRegistry([]);
 export type LanguageRegistry = ReturnType<typeof languageRegistry>;
@@ -44,7 +46,7 @@ export function languageRegistry(plugins: readonly Plugin[], parsers?: ParserOrd
     reportSelection: (present: ReadonlySet<string>) => languageSelection(
       entries.filter(entry => !entry.requiresSource || present.has(entry.id))),
     describe: (plugin: ParserPlugin) => describeProvider(plugin, byProvider, competing),
-    syntax: (id: string) => syntaxById.get(id), skipped };
+    syntax: (id: string) => selection.has(id) ? syntaxById.get(id) : fileTypeSyntax.get(id), skipped };
 
   function skipped(path: string): boolean {
     const entry = match(path);

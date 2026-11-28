@@ -1,5 +1,6 @@
 import { posix } from 'node:path';
 import type { ProvidedLanguage } from './language.js';
+import { cppSyntax, cssSyntax, cSyntax, dockerfileSyntax, jsonSyntax } from './file-type-syntax.js';
 
 interface FileType extends ProvidedLanguage {
   readonly names?: readonly string[];
@@ -13,14 +14,15 @@ export const fileTypes: readonly FileType[] = [
   javascriptType, typescriptType,
   { id: 'markdown', label: 'Markdown', color: '#768390', extensions: ['.md', '.mdx', '.markdown'] },
   { id: 'yaml', label: 'YAML', color: '#c47d84', extensions: ['.yaml', '.yml'] },
-  { id: 'json', label: 'JSON', color: '#9b86b5', extensions: ['.json'] },
-  { id: 'css', label: 'CSS', color: '#663399', extensions: ['.css'] },
+  { id: 'json', label: 'JSON', color: '#9b86b5', extensions: ['.json'], syntax: jsonSyntax },
+  { id: 'css', label: 'CSS', color: '#663399', extensions: ['.css'], syntax: cssSyntax },
   { id: 'scss', label: 'SCSS', color: '#c6538c', extensions: ['.scss'] },
   { id: 'less', label: 'Less', color: '#1d365d', extensions: ['.less'] },
   { id: 'html', label: 'HTML', color: '#e34c26', extensions: ['.html', '.htm'] },
   { id: 'shell', label: 'Shell', color: '#89e051', extensions: ['.sh', '.bash', '.zsh', '.fish'], names: ['.bashrc', '.bash_profile'] },
   { id: 'batch', label: 'Batch', color: '#788f32', extensions: ['.bat'] },
-  { id: 'dockerfile', label: 'Dockerfile', color: '#4f9a94', names: ['dockerfile', 'containerfile'], extensions: ['.dockerfile'] },
+  { id: 'dockerfile', label: 'Dockerfile', color: '#4f9a94', names: ['dockerfile', 'containerfile'],
+    extensions: ['.dockerfile'], syntax: dockerfileSyntax },
   { id: 'python', label: 'Python', color: '#3572a5', extensions: ['.py'] },
   { id: 'go', label: 'Go', color: '#00add8', extensions: ['.go'] },
   { id: 'go-module', label: 'Go module', color: '#008ba8', exactNames: ['go.mod'] },
@@ -31,8 +33,8 @@ export const fileTypes: readonly FileType[] = [
   { id: 'ruby', label: 'Ruby', color: '#701516', extensions: ['.rb'] },
   { id: 'php', label: 'PHP', color: '#4f5d95', extensions: ['.php'] },
   { id: 'csharp', label: 'C#', color: '#178600', extensions: ['.cs'] },
-  { id: 'c', label: 'C', color: '#555555', extensions: ['.c', '.h'] },
-  { id: 'cpp', label: 'C++', color: '#f34b7d', extensions: ['.cc', '.cpp', '.cxx', '.hpp', '.hh'] },
+  { id: 'c', label: 'C', color: '#555555', extensions: ['.c', '.h'], syntax: cSyntax },
+  { id: 'cpp', label: 'C++', color: '#f34b7d', extensions: ['.cc', '.cpp', '.cxx', '.hpp', '.hh'], syntax: cppSyntax },
   { id: 'swift', label: 'Swift', color: '#f05138', extensions: ['.swift'] },
   { id: 'scala', label: 'Scala', color: '#c22d40', extensions: ['.scala'] },
   { id: 'vue', label: 'Vue', color: '#41b883', extensions: ['.vue'] },
