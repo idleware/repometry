@@ -4,7 +4,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
 import { comparePaths, isExcludedDirectory, utf8 } from '@repometry/core/internal/model/snapshot.js';
 import type { SourceSnapshot } from '@repometry/core/internal/model/snapshot.js';
-import { isClaimedText, maxClaimedFileBytes } from '@repometry/core/internal/model/source.js';
+import { binaryProbeBytes, isClaimedText, maxClaimedFileBytes } from '@repometry/core/internal/model/source.js';
 import { isGeneratedSource } from '@repometry/core/internal/profile/exclusions.js';
 import { gitExecutable } from './git-executable.js';
 import { GitBlobHistory, gitBlobBatchBytes } from './blob-history.js';
@@ -216,10 +216,14 @@ export async function readGitCommit(directory: string, revision: string,
     !path.split('/').slice(0, -1).some(isExcludedDirectory) && !excludes(path));
   const entries = tracked.filter(({ path }) => isSource(path));
   const claimed = tracked.filter(({ path }) => !isSource(path) && claims?.(path));
-  const oversized = new Set(claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes).map(({ path }) => path));
-  const requested = claimed.filter(({ path }) => !oversized.has(path));
+  const large = claimed.filter(({ size }) => size !== undefined && size > maxClaimedFileBytes);
+  const binary = new Set<string>();
+  for (const { path, oid } of large) if (await isBinaryBlob(directory, oid)) binary.add(path);
+  const oversized = new Set(large.filter(({ path }) => !binary.has(path)).map(({ path }) => path));
+  const skipped = new Set(large.map(({ path }) => path));
+  const requested = claimed.filter(({ path }) => !skipped.has(path));
   const blobs = await (history ?? new GitBlobHistory()).read(
-    blobRequests(tracked.filter(({ path }) => !oversized.has(path)), entries, requested), ids => readBlobs(directory, ids));
+    blobRequests(tracked.filter(({ path }) => !skipped.has(path)), entries, requested), ids => readBlobs(directory, ids));
   const generated = new Set<string>();
   const files = entries.flatMap(({ path, oid }) => {
     const bytes = blobs.get(oid)?.bytes;
@@ -237,6 +241,21 @@ export async function readGitCommit(directory: string, revision: string,
   const blobIds = new Map(tracked.map(({ path, oid }) => [path, oid]));
   return { subject: { kind: 'commit', id }, files, blobIds, inventory, generatedExcluded: [...generated].sort(comparePaths),
     ...(oversized.size ? { oversizedClaims: [...oversized].sort(comparePaths) } : {}) };
+}
+
+/** Whether the start of a blob holds a NUL byte; git is stopped once it has sent enough to tell. */
+function isBinaryBlob(directory: string, oid: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(gitExecutable(), ['--no-replace-objects', 'cat-file', 'blob', oid], { cwd: directory, env: gitEnvironment(), stdio: ['ignore', 'pipe', 'ignore'] });
+    let head = Buffer.alloc(0);
+    child.on('error', reject);
+    child.stdout.on('error', () => {});
+    child.stdout.on('data', (chunk: Buffer) => {
+      head = Buffer.concat([head, chunk]);
+      if (head.length >= binaryProbeBytes) child.kill();
+    });
+    child.on('close', () => resolve(head.subarray(0, binaryProbeBytes).includes(0)));
+  });
 }
 
 function snapshotBytes(bytes: Buffer, history: GitBlobHistory | undefined): Buffer {

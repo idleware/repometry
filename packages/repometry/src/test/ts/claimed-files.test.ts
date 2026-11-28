@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { gitText } from '../../main/ts/api/git/git.js';
 import { inspect } from '../../main/ts/compose/inspect.js';
+import type { InspectRequest } from '../../main/ts/compose/inspect.js';
 import { commitSummary } from '../../main/ts/report/json/projections/commit-summary.js';
 
 test('claimed text reaches the matching inspections without attempting language analysis', async t => {
@@ -68,3 +69,35 @@ test('working trees include tracked and unignored files and skip symlinks', asyn
   assert.deepEqual(report.pluginData?.inventory?.map(file => file.path), ['.gitignore', 'new.js', 'new.txt', 'tracked.ignored.js']);
   assert.deepEqual(report.scope, { files: 2, parsed: 2 });
 });
+
+for (const mode of ['working tree', 'commit']) {
+  test(`a binary file over 1 MiB is no text source, a text file over 1 MiB is skipped (${mode})`, async t => {
+    const directory = await mkdtemp(join(tmpdir(), 'repometry-binary-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const repo = join(directory, 'repo');
+    await mkdir(repo);
+    await gitText(repo, ['init', '--quiet']);
+    const binary = Buffer.alloc(2 * 1024 * 1024);
+    for (let index = 0; index < binary.length; index++) binary[index] = (index * 2654435761) >>> 24;
+    binary[0] = 0;
+    await Promise.all([writeFile(join(repo, 'grammar.wasm'), binary), writeFile(join(repo, 'source.js'), 'export const value = 1;\n'),
+      writeFile(join(repo, 'dump.sql'), Buffer.alloc(2 * 1024 * 1024, 'x'))]);
+    await gitText(repo, ['add', '.']);
+    const source: InspectRequest['source'] = mode === 'commit' ? { revision: 'HEAD' } : { workingTree: true };
+    const request: InspectRequest = { directory: repo, output: join(directory, 'out'), source };
+    if (mode === 'commit') await gitText(repo, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '--quiet', '-m', 'test']);
+
+    const report = await inspect(request);
+    assert.deepEqual(report.diagnostics.map(({ path, operation }) => [path, operation]), [['dump.sql', 'source/claims']]);
+    assert.equal(report.status, 'partial');
+    if (mode === 'commit') assert.ok(report.pluginData?.inventory?.some(file => file.path === 'grammar.wasm'));
+
+    await rm(join(repo, 'dump.sql'), { force: true });
+    await gitText(repo, ['rm', '--cached', '--quiet', 'dump.sql']);
+    if (mode === 'commit') await gitText(repo, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '--quiet', '-m', 'drop']);
+    const clean = await inspect({ ...request, output: join(directory, 'out2') });
+    assert.deepEqual(clean.diagnostics, []);
+    assert.equal(clean.status, 'complete');
+    if (mode === 'commit') assert.ok(clean.pluginData?.inventory?.some(file => file.path === 'grammar.wasm'));
+  });
+}

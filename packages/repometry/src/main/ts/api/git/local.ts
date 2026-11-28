@@ -1,8 +1,8 @@
-import { lstat, readdir, realpath, readFile } from 'node:fs/promises';
+import { lstat, open, readdir, realpath, readFile } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, sep } from 'node:path';
 import { comparePaths, isExcludedDirectory, workingSnapshot } from '@repometry/core/internal/model/snapshot.js';
 import type { SourceFile, SourceSnapshot } from '@repometry/core/internal/model/snapshot.js';
-import { isClaimedText, maxClaimedFileBytes } from '@repometry/core/internal/model/source.js';
+import { binaryProbeBytes, isClaimedText, maxClaimedFileBytes } from '@repometry/core/internal/model/source.js';
 import { isGeneratedSource } from '@repometry/core/internal/profile/exclusions.js';
 
 export function containsPath(parent: string, path: string): boolean {
@@ -38,11 +38,13 @@ export async function readWorkingTree(directory: string, output: string, exclude
     }
     if (!claims?.(path)) return;
     if ((size ?? (await lstat(absolute)).size) > maxClaimedFileBytes) {
-      oversizedClaims.push(path);
+      if (!await isBinaryHead(absolute)) oversizedClaims.push(path);
       return;
     }
     const bytes = await readFile(absolute);
-    if (bytes.length > maxClaimedFileBytes) oversizedClaims.push(path);
+    if (bytes.length > maxClaimedFileBytes) {
+      if (!bytes.subarray(0, binaryProbeBytes).includes(0)) oversizedClaims.push(path);
+    }
     else if (isClaimedText(bytes)) files.push({ path, bytes });
   }
 
@@ -78,5 +80,17 @@ async function statIfPresent(path: string) {
   } catch (error) {
     if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return undefined;
     throw error;
+  }
+}
+
+/** Whether the start of a file holds a NUL byte, without reading the rest. */
+async function isBinaryHead(path: string): Promise<boolean> {
+  const handle = await open(path, 'r');
+  try {
+    const head = Buffer.alloc(binaryProbeBytes);
+    const { bytesRead } = await handle.read(head, 0, binaryProbeBytes, 0);
+    return head.subarray(0, bytesRead).includes(0);
+  } finally {
+    await handle.close();
   }
 }

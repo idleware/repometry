@@ -25,8 +25,11 @@ export function isMergedLineRanges(value: unknown): value is readonly SourceLine
 
 export const maxClaimedFileBytes = 1024 * 1024;
 
+/** How much of a file's start is searched for the NUL byte that marks it as binary. */
+export const binaryProbeBytes = 8192;
+
 export function isClaimedText(bytes: Uint8Array): boolean {
-  return bytes.byteLength <= maxClaimedFileBytes && !bytes.subarray(0, 8192).includes(0);
+  return bytes.byteLength <= maxClaimedFileBytes && !bytes.subarray(0, binaryProbeBytes).includes(0);
 }
 
 export interface InventoryFile {
